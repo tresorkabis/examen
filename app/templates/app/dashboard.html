@@ -1,0 +1,56 @@
+{% extends 'app/base.html' %}
+
+{% block content %}
+    <div class="mb-4">
+        <h2 class="mb-1">Tableau de Bord</h2>
+        <p class="text-muted mb-0">Vue d'ensemble de la gestion des examens.</p>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-3 col-sm-6">
+            <a class="stat-card bg-students p-4" href="{% url 'etudiant_list' %}" aria-label="Voir les étudiants">
+                <div class="stat-icon"><i class="bi bi-people-fill"></i></div>
+                <div class="stat-value">{{ total_etudiants }}</div>
+                <div class="stat-label">Étudiants</div>
+            </a>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <a class="stat-card bg-courses p-4" href="{% url 'cours_list' %}" aria-label="Voir les cours">
+                <div class="stat-icon"><i class="bi bi-book"></i></div>
+                <div class="stat-value">{{ total_cours }}</div>
+                <div class="stat-label">Cours</div>
+            </a>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <a class="stat-card bg-sessions p-4" href="{% url 'session_list' %}" aria-label="Voir les sessions">
+                <div class="stat-icon"><i class="bi bi-calendar-event"></i></div>
+                <div class="stat-value">{{ total_sessions }}</div>
+                <div class="stat-label">Sessions</div>
+            </a>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <a class="stat-card bg-teachers p-4" href="{% url 'enseignant_list' %}" aria-label="Voir les enseignants">
+                <div class="stat-icon"><i class="bi bi-person-vcard"></i></div>
+                <div class="stat-value">{{ total_enseignants }}</div>
+                <div class="stat-label">Enseignants</div>
+            </a>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h4 class="mb-3">Actions Rapides</h4>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a href="{% url 'etudiant_create' %}" class="btn btn-primary"><i class="bi bi-person-plus me-1"></i>Ajouter un Étudiant</a>
+                        <a href="{% url 'cours_create' %}" class="btn btn-primary"><i class="bi bi-journal-plus me-1"></i>Créer un Cours</a>
+                        <a href="{% url 'session_create' %}" class="btn btn-primary"><i class="bi bi-calendar-plus me-1"></i>Organiser une Session</a>
+                        <a href="{% url 'promotion_create' %}" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i>Nouvelle Promotion</a>
+                        <a href="{% url 'enseignant_create' %}" class="btn btn-primary"><i class="bi bi-person-plus-fill me-1"></i>Ajouter un Enseignant</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

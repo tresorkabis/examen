@@ -1,0 +1,26 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Supprimer un Examen{% endblock %}
+
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow-sm border-danger" style="max-width: 500px; margin: 0 auto;">
+                <div class="card-body text-center p-4">
+                    <h4 class="mb-3 text-danger">Confirmer la suppression</h4>
+                    <p>Êtes-vous sûr de vouloir supprimer l'examen :</p>
+                    <p class="fw-bold">{{ examen }}</p>
+                    <p class="text-muted small">
+                        Les inscriptions et notes saisies sur la fiche de cote seront
+                        également supprimées. Cette action est irréversible.
+                    </p>
+                    <form method="post" class="d-flex justify-content-center gap-2 mt-3">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger">Oui, supprimer</button>
+                        <a href="{% url 'examen_list' %}" class="btn btn-outline-secondary">Annuler</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

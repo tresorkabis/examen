@@ -1,0 +1,22 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Supprimer un Étudiant{% endblock %}
+
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-5">
+            <div class="card shadow-sm border-danger">
+                <div class="card-body text-center py-5">
+                    <div class="display-6 mb-3">🗑️</div>
+                    <h3 class="mb-3">Supprimer l'étudiant « {{ object }} » ?</h3>
+                    <p class="text-muted">Cette action est irréversible.</p>
+                    <form method="post">
+                        {% csrf_token %}
+                        <a href="{% url 'etudiant_list' %}" class="btn btn-outline-secondary">Annuler</a>
+                        <button type="submit" class="btn btn-danger">Confirmer la suppression</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

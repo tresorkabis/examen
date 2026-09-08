@@ -1,0 +1,25 @@
+{% extends 'app/base.html' %}
+
+{% block title %}{% if object %}Modifier{% else %}Ajouter{% endif %} un Cours{% endblock %}
+
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-5">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h3 class="mb-0">{% if object %}Modifier{% else %}Ajouter{% endif %} un Cours</h3>
+                </div>
+                <div class="card-body">
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        {% include 'app/_form_fields.html' %}
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{% url 'cours_list' %}" class="btn btn-outline-secondary">Annuler</a>
+                            <button type="submit" class="btn btn-primary">Enregistrer</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

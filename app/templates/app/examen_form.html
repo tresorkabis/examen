@@ -1,0 +1,269 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Examen{% endblock %}
+
+{% block content %}
+    <div class="row g-4 {% if not view.object %}justify-content-center{% endif %}">
+        <div class="{% if view.object %}col-lg-6{% else %}col-md-8 col-lg-6{% endif %}">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        {% if view.object %}Modifier un Examen{% else %}Nouvel Examen{% endif %}
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        {% include 'app/_form_fields.html' with skip_cours=1 %}
+                        <!-- Champ Cours : combobox avec recherche (compatible Safari,
+                             qui ignore option[hidden] des selects natifs) -->
+                        {% if form.cours.errors %}
+                            <div class="text-danger small mb-2">{{ form.cours.errors.0 }}</div>
+                        {% endif %}
+                        <div class="mb-3 position-relative" id="cours-select-block">
+                            <label class="form-label fw-semibold">Cours <span class="text-danger">*</span></label>
+                            <input type="hidden" name="cours" id="id_cours"
+                                   value="{{ form.cours.value|default:'' }}">
+                            <div class="input-group">
+                                <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                                <input type="search" class="form-control" id="cours-search"
+                                       placeholder="Rechercher un cours (nom, promotion, enseignant)…"
+                                       autocomplete="off" aria-label="Rechercher un cours">
+                            </div>
+                            <div id="cours-results" class="list-group position-absolute w-100 shadow-sm"
+                                 style="z-index: 1050; max-height: 300px; overflow-y: auto; display: none;"></div>
+                            <div class="form-text" id="cours-count"></div>
+                            <div class="text-danger small" id="cours-error" hidden>
+                                Veuillez sélectionner un cours.
+                            </div>
+                        </div>
+                        {{ cours_data|json_script:"cours-data" }}
+
+                        <div class="d-flex gap-2 mt-3">
+                            <button type="submit" class="btn btn-primary">Enregistrer</button>
+                            <a href="{% url 'examen_list' %}" class="btn btn-outline-secondary">Annuler</a>
+                        </div>
+                    </form>
+                </div>
+                {% if not view.object %}
+                <div class="card-footer text-muted small">
+                    La fiche de cote sera vierge : vous ajouterez les étudiants
+                    au fur et à mesure depuis la fiche.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if view.object %}
+        <!-- Gestion des étudiants de la fiche de cote -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">
+                        <i class="bi bi-people me-1"></i>Étudiants de la fiche
+                    </h4>
+                    <span class="badge text-bg-secondary">{{ inscriptions|length }}</span>
+                </div>
+                <div class="card-body">
+                    <div class="list-group mb-3">
+                        {% for ins in inscriptions %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center py-2">
+                            <div>
+                                {{ ins.etudiant.nom }} {{ ins.etudiant.prenom }}
+                                <span class="badge text-bg-light text-monospace ms-1">{{ ins.etudiant.numero_etudiant }}</span>
+                                {% if ins.note is not None %}
+                                    <span class="badge text-bg-success ms-1">{{ ins.note|floatformat:2 }}/20</span>
+                                {% else %}
+                                    <span class="badge text-bg-light text-muted ms-1">non noté</span>
+                                {% endif %}
+                            </div>
+                            <form method="post" action="{% url 'examen_desinscrire' view.object.pk ins.pk %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{% url 'examen_update' view.object.pk %}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Retirer de la fiche"
+                                        onclick="return confirm('Retirer {{ ins.etudiant }} de la fiche ? Ses notes seront perdues.')">
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                            </form>
+                        </div>
+                        {% empty %}
+                        <div class="list-group-item text-muted py-4 text-center">
+                            Aucun étudiant inscrit. Ajoutez-les ci-dessous, un par un.
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    {% if inscriptibles %}
+                    <form method="post" action="{% url 'examen_inscrire' view.object.pk %}"
+                          id="form-inscrire-multi">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{% url 'examen_update' view.object.pk %}">
+
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="small fw-semibold text-muted mb-0">
+                                Étudiants de {{ view.object.cours.promotion.nom }} ({{ inscriptibles|length }})
+                            </label>
+                            <label class="small text-primary mb-0" style="cursor:pointer;">
+                                <input type="checkbox" id="check-tous" class="form-check-input mt-0 me-1">
+                                Tout cocher
+                            </label>
+                        </div>
+
+                        <div class="list-group liste-choix mb-2" style="max-height: 240px; overflow-y: auto;">
+                            {% for e in inscriptibles %}
+                            <label class="list-group-item py-1 px-2 d-flex align-items-center gap-2">
+                                <input type="checkbox" class="form-check-input mt-0 choix-etudiant"
+                                       name="etudiants" value="{{ e.pk }}">
+                                <span>{{ e.nom }} {{ e.prenom }}</span>
+                                <small class="text-muted font-monospace ms-auto">{{ e.numero_etudiant }}</small>
+                            </label>
+                            {% endfor %}
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100" id="btn-inscrire-multi" disabled>
+                            <i class="bi bi-person-plus me-1"></i>Ajouter la sélection (<span id="compte-selection">0</span>)
+                        </button>
+                    </form>
+
+                    <form method="post" action="{% url 'examen_inscrire_tous' view.object.pk %}" class="mt-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{% url 'examen_update' view.object.pk %}">
+                        <button type="submit" class="btn btn-outline-primary w-100"
+                                onclick="return confirm('Inscrire les {{ inscriptibles|length }} étudiants restants de la promotion ?')">
+                            <i class="bi bi-people-fill me-1"></i>Ajouter tous les étudiants ({{ inscriptibles|length }})
+                        </button>
+                    </form>
+
+                    <script>
+                    (function () {
+                        var cases = document.querySelectorAll('.choix-etudiant'),
+                            tous = document.getElementById('check-tous'),
+                            compte = document.getElementById('compte-selection'),
+                            bouton = document.getElementById('btn-inscrire-multi');
+                        function maj() {
+                            var n = document.querySelectorAll('.choix-etudiant:checked').length;
+                            compte.textContent = n;
+                            bouton.disabled = n === 0;
+                            tous.checked = n === cases.length && cases.length > 0;
+                        }
+                        cases.forEach(function (c) { c.addEventListener('change', maj); });
+                        tous.addEventListener('change', function () {
+                            cases.forEach(function (c) { c.checked = tous.checked; });
+                            maj();
+                        });
+                        maj();
+                    })();
+                    </script>
+                    {% elif inscriptions %}
+                    <p class="text-muted small mb-0">
+                        <i class="bi bi-check-circle me-1"></i>Tous les étudiants de la promotion sont inscrits.
+                    </p>
+                    {% else %}
+                    <p class="text-muted small mb-0">Aucun étudiant disponible dans cette promotion.</p>
+                    {% endif %}
+                </div>
+                <div class="card-footer text-center">
+                    <a href="{% url 'examen_fiche' view.object.pk %}" class="btn btn-sm btn-outline-secondary w-100">
+                        <i class="bi bi-table me-1"></i>Ouvrir la fiche de cote (saisie des notes)
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+(function () {
+    var dataEl = document.getElementById('cours-data');
+    var search = document.getElementById('cours-search');
+    var hidden = document.getElementById('id_cours');
+    var results = document.getElementById('cours-results');
+    var count = document.getElementById('cours-count');
+    var error = document.getElementById('cours-error');
+    if (!dataEl || !search || !hidden || !results) return;
+
+    var cours = JSON.parse(dataEl.textContent);
+    var total = cours.length;
+    var MAX = 25;
+
+    function label(c) {
+        var l = c[1] + ' (' + c[2] + ')';
+        if (c[3]) l += ' — ' + c[3] + (c[4] ? ' ' + c[4] : '');
+        return l;
+    }
+
+    function hideResults() {
+        results.style.display = 'none';
+        results.innerHTML = '';
+    }
+
+    function select(c) {
+        hidden.value = c[0];
+        search.value = label(c);
+        error.hidden = true;
+        hideResults();
+    }
+
+    function render(q) {
+        var filtered = cours.filter(function (c) {
+            return !q || label(c).toLowerCase().indexOf(q) !== -1;
+        });
+        count.textContent = q ? filtered.length + ' cours sur ' + total
+                              : total + ' cours — tapez pour filtrer';
+        results.innerHTML = '';
+        if (!q) { hideResults(); return; }
+        filtered.slice(0, MAX).forEach(function (c) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'list-group-item list-group-item-action py-2';
+            btn.textContent = label(c);
+            btn.addEventListener('mousedown', function (e) {
+                e.preventDefault();   // avant le blur de l'input
+                select(c);
+            });
+            results.appendChild(btn);
+        });
+        if (!filtered.length) {
+            var empty = document.createElement('div');
+            empty.className = 'list-group-item text-muted';
+            empty.textContent = 'Aucun cours ne correspond.';
+            results.appendChild(empty);
+        } else if (filtered.length > MAX) {
+            var more = document.createElement('div');
+            more.className = 'list-group-item text-muted small';
+            more.textContent = '… affinez la recherche (' + (filtered.length - MAX) + ' autres)';
+            results.appendChild(more);
+        }
+        results.style.display = 'block';
+    }
+
+    search.addEventListener('focus', function () {
+        if (search.value && !hidden.value) render(search.value.trim().toLowerCase());
+    });
+    search.addEventListener('input', function () {
+        hidden.value = '';           // la saisie invalide la sélection courante
+        render(search.value.trim().toLowerCase());
+    });
+    search.addEventListener('blur', function () { setTimeout(hideResults, 150); });
+
+    // Pré-remplissage (édition ou retour après erreur de validation).
+    if (hidden.value) {
+        var current = cours.find(function (c) { return String(c[0]) === String(hidden.value); });
+        if (current) search.value = label(current);
+    }
+
+    // Garde-fou à la soumission : cours obligatoire.
+    search.closest('form').addEventListener('submit', function (e) {
+        if (!hidden.value) {
+            e.preventDefault();
+            error.hidden = false;
+            search.focus();
+        }
+    });
+
+    count.textContent = total + ' cours — tapez pour filtrer';
+})();
+</script>
+{% endblock %}

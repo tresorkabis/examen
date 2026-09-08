@@ -1,0 +1,96 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Liste des Cours{% endblock %}
+
+{% block content %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Liste des Cours</h2>
+        <a href="{% url 'cours_create' %}" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>Ajouter un Cours
+        </a>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-body py-2">
+            <form method="get" class="row g-2 align-items-center">
+                <div class="col-md-4">
+                    <input type="search" name="q" value="{{ filters.q|default:'' }}" class="form-control"
+                           placeholder="Rechercher un cours…" aria-label="Rechercher un cours">
+                </div>
+                <div class="col-md-3">
+                    <select name="promotion" class="form-select" aria-label="Filtrer par promotion"
+                            onchange="this.form.submit()">
+                        <option value="">Toutes les promotions</option>
+                        {% for p in filter_promotions %}
+                            <option value="{{ p.pk }}" {% if filters.promotion == p.pk %}selected{% endif %}>{{ p.nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select name="enseignant" class="form-select" aria-label="Filtrer par enseignant"
+                            onchange="this.form.submit()">
+                        <option value="">Tous les enseignants</option>
+                        {% for e in filter_enseignants %}
+                            <option value="{{ e.pk }}" {% if filters.enseignant == e.pk %}selected{% endif %}>{{ e.nom }} {{ e.prenom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary" title="Rechercher">
+                        <i class="bi bi-search"></i>
+                    </button>
+                    {% if filters %}
+                        <a href="{% url 'cours_list' %}" class="btn btn-outline-secondary" title="Réinitialiser les filtres">
+                            <i class="bi bi-x-lg"></i>
+                        </a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if filters %}
+        <p class="text-muted">
+            {{ paginator.count }} cours sur {{ total_cours }} correspondent aux filtres.
+        </p>
+    {% endif %}
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Nom du Cours</th>
+                            <th>Coefficient</th>
+                            <th>Enseignant</th>
+                            <th>Promotion</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in cours_list %}
+                        <tr>
+                            <td>{{ c.nom }}</td>
+                            <td>{{ c.coefficient }}</td>
+                            <td>{{ c.enseignant|default:"—" }}</td>
+                            <td>{{ c.promotion }}</td>
+                            <td class="text-end">
+                                <a href="{% url 'cours_update' c.pk %}" class="btn btn-sm btn-outline-secondary">Modifier</a>
+                                <a href="{% url 'cours_delete' c.pk %}" class="btn btn-sm btn-outline-danger">Supprimer</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">
+                                {% if filters %}Aucun cours ne correspond aux filtres.{% else %}Aucun cours enregistré.{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% include 'app/_pagination.html' %}
+{% endblock %}

@@ -1,0 +1,107 @@
+{% extends 'app/base.html' %}
+{% load i18n %}
+
+{% block title %}Étudiants par Promotion{% endblock %}
+
+{% block content %}
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <h2 class="mb-0">Étudiants par Promotion</h2>
+        <div class="d-flex gap-2">
+            <form method="get" class="d-flex gap-2">
+                <input type="search" name="q" value="{{ q }}" class="form-control"
+                       placeholder="Rechercher un étudiant…" aria-label="Rechercher un étudiant">
+                {% if q %}
+                    <a href="{% url 'etudiant_list' %}" class="btn btn-outline-secondary" title="Effacer la recherche">&times;</a>
+                {% endif %}
+            </form>
+            <a href="{% url 'etudiant_create' %}" class="btn btn-primary">
+                <i class="bi bi-person-plus me-1"></i>Ajouter
+            </a>
+        </div>
+    </div>
+
+    {% if q %}
+        <p class="text-muted">
+            {% blocktranslate count total=groups|length %}{{ total }} promotion correspond à « {{ q }} ».{% plural %}{{ total }} promotions correspondent à « {{ q }} ».{% endblocktranslate %}
+        </p>
+    {% endif %}
+
+    {% if not q %}
+        <p class="text-muted">
+            <i class="bi bi-info-circle me-1"></i>
+            Les promotions sans étudiant ne sont pas affichées.
+            <a href="?toutes=1">Afficher toutes les promotions</a>
+        </p>
+    {% endif %}
+
+    <div class="accordion" id="promoAccordion">
+        {% for promotion in groups %}
+            {% with forloop.first as is_first %}
+            <div class="accordion-item shadow-sm mb-3 border-0 rounded-3 overflow-hidden">
+                <h3 class="accordion-header">
+                    <button class="accordion-button {% if not open_all and not is_first %}collapsed{% endif %} bg-light fw-semibold"
+                            type="button" data-bs-toggle="collapse"
+                            data-bs-target="#promo-{{ promotion.pk }}"
+                            aria-expanded="{% if open_all or is_first %}true{% else %}false{% endif %}"
+                            aria-controls="promo-{{ promotion.pk }}">
+                        <i class="bi bi-people-fill me-2 text-secondary"></i>
+                        {{ promotion.nom }}
+                        <span class="badge text-bg-primary ms-2">{{ promotion.filtered_etudiants|length }}
+                            étudiant{{ promotion.filtered_etudiants|length|pluralize }}</span>
+                    </button>
+                </h3>
+                <div id="promo-{{ promotion.pk }}"
+                     class="accordion-collapse collapse {% if open_all or is_first %}show{% endif %}"
+                     data-bs-parent="#promoAccordion">
+                    <div class="accordion-body p-0">
+                        <div class="list-group list-group-flush">
+                            {% for e in promotion.filtered_etudiants %}
+                                <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div>
+                                        <span class="fw-semibold">{{ e.nom }} {{ e.prenom }}</span>
+                                        <span class="badge text-bg-light border ms-2 font-monospace">{{ e.numero_etudiant }}</span>
+                                        <div class="small text-muted">
+                                            <i class="bi bi-envelope me-1"></i>{{ e.email }}
+                                        </div>
+                                    </div>
+                                    <div class="text-nowrap">
+                                        <a href="{% url 'etudiant_update' e.pk %}" class="btn btn-sm btn-outline-secondary" title="Modifier {{ e }}">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <a href="{% url 'etudiant_delete' e.pk %}" class="btn btn-sm btn-outline-danger" title="Supprimer {{ e }}">
+                                            <i class="bi bi-trash"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            {% empty %}
+                                <div class="list-group-item text-center text-muted py-4">
+                                    Aucun étudiant dans cette promotion.
+                                    <a href="{% url 'etudiant_create' %}?promotion={{ promotion.pk }}" class="d-block mt-1">
+                                        <i class="bi bi-plus-circle me-1"></i>Ajouter un étudiant ici
+                                    </a>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div class="p-2 border-top bg-light text-end">
+                            <a href="{% url 'etudiant_create' %}?promotion={{ promotion.pk }}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-plus-lg me-1"></i>Ajouter dans {{ promotion.nom }}
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endwith %}
+        {% empty %}
+            <div class="card shadow-sm">
+                <div class="card-body text-center text-muted py-5">
+                    {% if q %}
+                        Aucun étudiant ne correspond à « {{ q }} ».
+                    {% else %}
+                        Aucune promotion enregistrée. Créez d'abord une promotion, puis ajoutez des étudiants.
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% endblock %}
+

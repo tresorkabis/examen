@@ -1,0 +1,58 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Liste des Examens{% endblock %}
+
+{% block content %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Liste des Examens</h2>
+        <a href="{% url 'examen_create' %}" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>Ajouter un Examen
+        </a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Cours</th>
+                            <th>Promotion</th>
+                            <th>Session</th>
+                            <th>Date</th>
+                            <th>Salle</th>
+                            <th class="text-center">Notés</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for e in examens %}
+                        <tr>
+                            <td class="fw-semibold">{{ e.cours.nom }}</td>
+                            <td>{{ e.cours.promotion }}</td>
+                            <td>{{ e.session }}</td>
+                            <td>{{ e.date_examen|date:"d/m/Y H:i" }}</td>
+                            <td>{{ e.salle|default:"—" }}</td>
+                            <td class="text-center"><span class="badge text-bg-secondary">{{ e.nb_notes|default:0 }}</span></td>
+                            <td class="text-end">
+                                <a href="{% url 'examen_fiche' e.pk %}" class="btn btn-sm btn-outline-primary" title="Fiche de cote">
+                                    <i class="bi bi-journal-text me-1"></i>Fiche
+                                </a>
+                                <a href="{% url 'examen_update' e.pk %}" class="btn btn-sm btn-outline-secondary">Modifier</a>
+                                <a href="{% url 'examen_delete' e.pk %}" class="btn btn-sm btn-outline-danger">Supprimer</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">
+                                Aucun examen enregistré. Créez-en un pour établir une fiche de cote.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% include 'app/_pagination.html' %}
+{% endblock %}

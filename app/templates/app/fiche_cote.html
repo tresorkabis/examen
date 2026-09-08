@@ -1,0 +1,182 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Fiche de cote — {{ examen.cours.nom }}{% endblock %}
+
+{% block extra_style %}
+<style>
+    /* ===== Fiche de cote ===== */
+    .fiche-header { border-bottom: 3px double #212529; padding-bottom: .75rem; }
+    .fiche-title { font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+    .fiche-table th, .fiche-table td { vertical-align: middle; }
+    .fiche-table thead th { background-color: #f1f3f5; text-align: center; white-space: nowrap; }
+    .fiche-table td.num { text-align: center; color: #6c757d; }
+    .fiche-note { max-width: 90px; text-align: center; }
+    .fiche-table td.moyenne-cell { font-weight: 700; text-align: center; }
+    .fiche-total td { background-color: #f1f3f5; font-weight: 700; }
+
+    /* ===== Bandes de couleur alternées dans le tableau ===== */
+    .fiche-table tbody tr:nth-of-type(odd) td { background-color: #ffffff; }
+    .fiche-table tbody tr:nth-of-type(even) td { background-color: #f3f6f9; }
+
+        /* ===== Impression : uniquement la fiche ===== */
+    @media print {
+        #sidebar, .no-print, .breadcrumb, .alert { display: none !important; }
+        body { background: #fff !important; -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
+        .main-content { margin-left: 0 !important; }
+        .fiche-sheet { box-shadow: none !important; border: none !important; padding: 0 !important; }
+        .fiche-note { border: none !important; text-align: center !important; }
+        .fiche-table { font-size: 11pt; }
+        /* Forcer les bandes de couleur à l'impression */
+        .fiche-table tbody tr:nth-of-type(odd) td { background-color: #ffffff !important; }
+        .fiche-table tbody tr:nth-of-type(even) td { background-color: #f3f6f9 !important; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 no-print">
+    <h2 class="mb-0">Fiche de cote</h2>
+    <div class="d-flex gap-2">
+        <a href="{% url 'examen_update' examen.pk %}" class="btn btn-outline-secondary">
+            <i class="bi bi-pencil me-1"></i>Modifier l'examen
+        </a>
+        <a href="{% url 'examen_list' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Retour
+        </a>
+    </div>
+</div>
+
+<div class="card shadow-sm fiche-sheet">
+    <div class="card-body p-4">
+
+        <!-- En-tête, calqué sur le PDF -->
+        <div class="fiche-header text-center mb-3">
+            <div class="small text-muted">ESFORCA</div>
+            <div class="fiche-title fs-4">Fiche de cote</div>
+            <div class="fiche-title fs-5">{{ examen.session.nom }}</div>
+        </div>
+
+<div class="row mb-1">
+<div class="col-12 d-flex justify-content-between">
+<span><span class="fw-semibold">Titulaire :</span> {{ titulaire|default:"—" }}</span>
+<span class="text-end"><span class="fw-semibold">Promotion :</span> {{ examen.cours.promotion.nom }}</span>
+</div>
+</div>
+<div class="row mb-4">
+<div class="col-12">
+<span class="fw-semibold">Intitulé du Cours :</span>
+{{ examen.cours.nom }}
+</div>
+</div>
+
+        <!-- Tableau des notes (lecture seule, remplissage manuscrit) -->
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover fiche-table">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">N°</th>
+                        <th>NOMS</th>
+                        <th>INTERRO/5</th>
+                        <th>TP/5</th>
+                        <th>EXAMEN/10</th>
+                        <th>MOYENNE/20</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ins in inscriptions %}
+                    <tr>
+                        <td class="num">{{ forloop.counter }}</td>
+                        <td>
+                            {{ ins.etudiant.nom }} {{ ins.etudiant.prenom }}
+                            <button type="submit"
+                                    form="form-desinscrire-{{ ins.pk }}"
+                                    class="btn btn-sm btn-link text-danger p-0 ms-1 no-print"
+                                    title="Retirer de la fiche"
+                                    onclick="return confirm('Retirer {{ ins.etudiant }} de la fiche ?')">
+                                <i class="bi bi-x-circle"></i>
+                            </button>
+                            <form id="form-desinscrire-{{ ins.pk }}" method="post"
+                                  action="{% url 'examen_desinscrire' examen.pk ins.pk %}" class="d-none">
+                                {% csrf_token %}
+                            </form>
+                        </td>
+                        <td class="cell-vide">&nbsp;</td>
+                        <td class="cell-vide">&nbsp;</td>
+                        <td class="cell-vide">&nbsp;</td>
+                        <td class="moyenne-cell">&nbsp;</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            Aucun étudiant inscrit. Ajoutez les étudiants au fur et à mesure
+                            avec le sélecteur ci-dessous.
+                        </td>
+                    </tr>
+                                        {% endfor %}
+                </tbody>
+                    </table>
+        </div>
+
+        {% if inscriptions %}
+        <div class="mt-3">
+            <p class="mb-0"><strong>Nombre total d'étudiants :</strong> {{ inscriptions|length }}</p>
+        </div>
+        {% endif %}
+
+        <div class="mt-3 no-print">
+            <button type="button" class="btn btn-primary" onclick="window.print()">
+                <i class="bi bi-printer me-1"></i>Imprimer la fiche
+            </button>
+        </div>
+
+        <!-- Ajout d'étudiants au fur et à mesure -->
+        {% if inscriptibles %}
+        <div class="card mt-3 no-print">
+            <div class="card-body py-2">
+                <form method="post" action="{% url 'examen_inscrire' examen.pk %}"
+                      class="row g-2 align-items-center" id="form-inscrire">
+                    {% csrf_token %}
+                    <div class="col-md-8">
+                        <select class="form-select" name="etudiant"
+                                aria-label="Ajouter un étudiant à la fiche">
+                            <option value="">Ajouter un étudiant de {{ examen.cours.promotion.nom }}…</option>
+                            {% for e in inscriptibles %}
+                                <option value="{{ e.pk }}">{{ e.nom }} {{ e.prenom }} ({{ e.numero_etudiant }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-outline-primary w-100">
+                            <i class="bi bi-person-plus me-1"></i>Ajouter à la fiche
+                        </button>
+                    </div>
+                </form>
+                <form method="post" action="{% url 'examen_inscrire_tous' examen.pk %}" class="mt-2">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary w-100"
+                            onclick="return confirm('Inscrire les {{ inscriptibles|length }} étudiants restants de la promotion ?')">
+                        <i class="bi bi-people-fill me-1"></i>Ajouter tous les étudiants de la promotion ({{ inscriptibles|length }})
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% elif inscriptions %}
+        <p class="text-muted small mt-2 no-print">
+            <i class="bi bi-check-circle me-1"></i>Tous les étudiants de la promotion sont inscrits.
+        </p>
+        {% endif %}
+
+        <!-- Signatures, comme sur le PDF -->
+        {% if inscriptions %}
+        <div class="row mt-5 no-print">
+            <div class="col-6 text-center">
+                <div class="border-top d-inline-block px-5 pt-1">L'Enseignant</div>
+            </div>
+            <div class="col-6 text-center">
+                <div class="border-top d-inline-block px-5 pt-1">Le Président du Jury</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

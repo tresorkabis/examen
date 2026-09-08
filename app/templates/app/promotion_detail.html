@@ -1,0 +1,114 @@
+{% extends 'app/base.html' %}
+
+{% block title %}{{ promotion.nom }}{% endblock %}
+
+{% block content %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>{{ promotion.nom }}</h2>
+        <div class="d-flex gap-2">
+            <a href="{% url 'promotion_update' promotion.pk %}" class="btn btn-outline-secondary">
+                <i class="bi bi-pencil me-1"></i>Modifier
+            </a>
+            <a href="{% url 'etudiant_list' %}?toutes=1" class="btn btn-primary">
+                <i class="bi bi-people me-1"></i>Gérer les étudiants
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100 text-center">
+                <div class="card-body">
+                    <div class="display-6 fw-bold text-primary">{{ etudiants|length }}</div>
+                    <div class="text-muted"><i class="bi bi-people-fill me-1"></i>Étudiants</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100 text-center">
+                <div class="card-body">
+                    <div class="display-6 fw-bold text-secondary">{{ cours|length }}</div>
+                    <div class="text-muted"><i class="bi bi-book-fill me-1"></i>Cours</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100 text-center">
+                <div class="card-body">
+                    <div class="display-6 fw-bold text-info">{{ enseignants|length }}</div>
+                    <div class="text-muted"><i class="bi bi-person-badge-fill me-1"></i>Enseignants</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header fw-semibold"><i class="bi bi-people me-1"></i>Étudiants ({{ etudiants|length }})</div>
+                <div class="card-body p-0" style="max-height: 480px; overflow-y: auto;">
+                    <div class="list-group list-group-flush">
+                        {% for e in etudiants %}
+                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="fw-semibold">{{ e.nom }} {{ e.prenom }}</span>
+                                    <div class="small text-muted">{{ e.email }}</div>
+                                </div>
+                                <span class="badge text-bg-light font-monospace">{{ e.numero_etudiant }}</span>
+                            </div>
+                        {% empty %}
+                            <div class="list-group-item text-center text-muted py-4">
+                                Aucun étudiant dans cette promotion.
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header fw-semibold"><i class="bi bi-book me-1"></i>Cours ({{ cours|length }})</div>
+                <div class="card-body p-0" style="max-height: 480px; overflow-y: auto;">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Cours</th>
+                                    <th>Enseignant</th>
+                                    <th class="text-center">Coef.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for c in cours %}
+                                <tr>
+                                    <td>{{ c.nom }}</td>
+                                    <td>{{ c.enseignant|default:"—" }}</td>
+                                    <td class="text-center">{{ c.coefficient }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted py-4">
+                                        Aucun cours rattaché à cette promotion.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if enseignants %}
+    <div class="card shadow-sm mt-3">
+        <div class="card-header fw-semibold"><i class="bi bi-person-badge me-1"></i>Enseignants intervenant dans cette promotion</div>
+        <div class="card-body">
+            {% for ens in enseignants %}
+                <span class="badge text-bg-info-subtle text-emphasis me-1 mb-1 p-2">{{ ens }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+{% endblock %}

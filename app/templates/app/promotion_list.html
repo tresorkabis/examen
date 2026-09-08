@@ -1,0 +1,67 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Liste des Promotions{% endblock %}
+
+{% block content %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Liste des Promotions</h2>
+        <a href="{% url 'promotion_create' %}" class="btn btn-primary">Ajouter une Promotion</a>
+    </div>
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Nom de la Promotion</th>
+                            <th class="text-center">Étudiants</th>
+                            <th class="text-center">Cours</th>
+                            <th class="text-center">Enseignants</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in promotions %}
+                        <tr>
+                            <td class="fw-semibold">{{ p.nom }}</td>
+                            <td class="text-center">
+                                {% if p.nb_etudiants %}
+                                    <a href="{% url 'etudiant_list' %}" class="badge text-bg-primary text-decoration-none"
+                                       title="Voir les étudiants">{{ p.nb_etudiants }}</a>
+                                {% else %}
+                                    <span class="badge text-bg-light">0</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if p.nb_cours %}
+                                    <a href="{% url 'cours_list' %}?promotion={{ p.pk }}" class="badge text-bg-secondary text-decoration-none"
+                                       title="Voir les cours de cette promotion">{{ p.nb_cours }}</a>
+                                {% else %}
+                                    <span class="badge text-bg-light">0</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if p.nb_enseignants %}
+                                    <span class="badge text-bg-info">{{ p.nb_enseignants }}</span>
+                                {% else %}
+                                    <span class="badge text-bg-light">0</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <a href="{% url 'promotion_detail' p.pk %}" class="btn btn-sm btn-outline-primary">Détail</a>
+                                <a href="{% url 'promotion_update' p.pk %}" class="btn btn-sm btn-outline-secondary">Modifier</a>
+                                <a href="{% url 'promotion_delete' p.pk %}" class="btn btn-sm btn-outline-danger">Supprimer</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">Aucune promotion enregistrée.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% include 'app/_pagination.html' %}
+{% endblock %}
