@@ -1,56 +1,142 @@
 {% extends 'app/base.html' %}
-
+{% block title %}Tableau de Bord — Gestion des Examens{% endblock %}
 {% block content %}
-    <div class="mb-4">
-        <h2 class="mb-1">Tableau de Bord</h2>
-        <p class="text-muted mb-0">Vue d'ensemble de la gestion des examens.</p>
-    </div>
-
-    <div class="row g-4">
-        <div class="col-md-3 col-sm-6">
-            <a class="stat-card bg-students p-4" href="{% url 'etudiant_list' %}" aria-label="Voir les étudiants">
-                <div class="stat-icon"><i class="bi bi-people-fill"></i></div>
-                <div class="stat-value">{{ total_etudiants }}</div>
-                <div class="stat-label">Étudiants</div>
-            </a>
-        </div>
-        <div class="col-md-3 col-sm-6">
-            <a class="stat-card bg-courses p-4" href="{% url 'cours_list' %}" aria-label="Voir les cours">
-                <div class="stat-icon"><i class="bi bi-book"></i></div>
-                <div class="stat-value">{{ total_cours }}</div>
-                <div class="stat-label">Cours</div>
-            </a>
-        </div>
-        <div class="col-md-3 col-sm-6">
-            <a class="stat-card bg-sessions p-4" href="{% url 'session_list' %}" aria-label="Voir les sessions">
-                <div class="stat-icon"><i class="bi bi-calendar-event"></i></div>
-                <div class="stat-value">{{ total_sessions }}</div>
-                <div class="stat-label">Sessions</div>
-            </a>
-        </div>
-        <div class="col-md-3 col-sm-6">
-            <a class="stat-card bg-teachers p-4" href="{% url 'enseignant_list' %}" aria-label="Voir les enseignants">
-                <div class="stat-icon"><i class="bi bi-person-vcard"></i></div>
-                <div class="stat-value">{{ total_enseignants }}</div>
-                <div class="stat-label">Enseignants</div>
-            </a>
-        </div>
-    </div>
-
-    <div class="row mt-4">
-        <div class="col-md-12">
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <h4 class="mb-3">Actions Rapides</h4>
-                    <div class="d-flex flex-wrap gap-2">
-                        <a href="{% url 'etudiant_create' %}" class="btn btn-primary"><i class="bi bi-person-plus me-1"></i>Ajouter un Étudiant</a>
-                        <a href="{% url 'cours_create' %}" class="btn btn-primary"><i class="bi bi-journal-plus me-1"></i>Créer un Cours</a>
-                        <a href="{% url 'session_create' %}" class="btn btn-primary"><i class="bi bi-calendar-plus me-1"></i>Organiser une Session</a>
-                        <a href="{% url 'promotion_create' %}" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i>Nouvelle Promotion</a>
-                        <a href="{% url 'enseignant_create' %}" class="btn btn-primary"><i class="bi bi-person-plus-fill me-1"></i>Ajouter un Enseignant</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+<div class="hero-header p-4 p-md-5 mb-4">
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+<div>
+<p class="hero-kicker mb-1"><i class="bi bi-mortarboard-fill me-1"></i>Gestion des examens</p>
+<h2 class="mb-1 fw-bold">Tableau de Bord</h2>
+<p class="mb-0 hero-sub">Vue d'ensemble — {% now 'l j F Y' %}.</p>
+</div>
+<div class="d-flex flex-wrap gap-2">
+<a href="{% url 'examen_create' %}" class="btn btn-hero"><i class="bi bi-plus-circle me-1"></i>Programmer un examen</a>
+<a href="{% url 'session_create' %}" class="btn btn-hero-outline"><i class="bi bi-calendar-plus me-1"></i>Nouvelle session</a>
+</div>
+</div>
+</div>
+<div class="row g-3 g-md-4 mb-4">
+<div class="col-6 col-xl-3">
+<a class="stat-card bg-students p-3 p-md-4" href="{% url 'etudiant_list' %}" aria-label="Voir les étudiants">
+<div class="stat-icon"><i class="bi bi-people-fill"></i></div>
+<div class="stat-value">{{ total_etudiants }}</div>
+<div class="stat-label">Étudiants</div>
+<div class="stat-foot">Voir la liste<i class="bi bi-arrow-right ms-1"></i></div>
+</a>
+</div>
+<div class="col-6 col-xl-3">
+<a class="stat-card bg-courses p-3 p-md-4" href="{% url 'cours_list' %}" aria-label="Voir les cours">
+<div class="stat-icon"><i class="bi bi-book"></i></div>
+<div class="stat-value">{{ total_cours }}</div>
+<div class="stat-label">Cours</div>
+<div class="stat-foot">Voir la liste<i class="bi bi-arrow-right ms-1"></i></div>
+</a>
+</div>
+<div class="col-6 col-xl-3">
+<a class="stat-card bg-sessions p-3 p-md-4" href="{% url 'session_list' %}" aria-label="Voir les sessions">
+<div class="stat-icon"><i class="bi bi-calendar-event"></i></div>
+<div class="stat-value">{{ total_sessions }}</div>
+<div class="stat-label">Sessions</div>
+<div class="stat-foot">Voir la liste<i class="bi bi-arrow-right ms-1"></i></div>
+</a>
+</div>
+<div class="col-6 col-xl-3">
+<a class="stat-card bg-teachers p-3 p-md-4" href="{% url 'enseignant_list' %}" aria-label="Voir les enseignants">
+<div class="stat-icon"><i class="bi bi-person-vcard"></i></div>
+<div class="stat-value">{{ total_enseignants }}</div>
+<div class="stat-label">Enseignants</div>
+<div class="stat-foot">Voir la liste<i class="bi bi-arrow-right ms-1"></i></div>
+</a>
+</div>
+</div>
+<div class="row g-3 g-md-4 mb-4">
+<div class="col-6">
+<div class="mini-stat">
+<span class="mini-stat-icon bg-primary-subtle text-primary"><i class="bi bi-diagram-3"></i></span>
+<div>
+<div class="mini-stat-value">{{ total_promotions }}</div>
+<div class="mini-stat-label">Promotions</div>
+</div>
+<a href="{% url 'promotion_list' %}" class="stretched-link" aria-label="Voir les promotions"></a>
+</div>
+</div>
+<div class="col-6">
+<div class="mini-stat">
+<span class="mini-stat-icon bg-success-subtle text-success"><i class="bi bi-file-earmark-text"></i></span>
+<div>
+<div class="mini-stat-value">{{ total_examens }}</div>
+<div class="mini-stat-label">Examens programmés</div>
+</div>
+<a href="{% url 'examen_list' %}" class="stretched-link" aria-label="Voir les examens"></a>
+</div>
+</div>
+</div>
+<div class="row g-3 g-md-4">
+<div class="col-lg-7">
+<div class="card shadow-sm h-100">
+<div class="card-header bg-white d-flex justify-content-between align-items-center">
+<h5 class="mb-0"><i class="bi bi-clock-history me-2 text-primary"></i>Prochains examens</h5>
+<a href="{% url 'examen_list' %}" class="btn btn-sm btn-outline-primary">Tous les examens</a>
+</div>
+{% if prochains_examens %}
+<div class="list-group list-group-flush">
+{% for examen in prochains_examens %}
+<div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+<div class="d-flex align-items-center gap-3">
+<span class="date-chip">
+<span class="date-chip-day">{{ examen.date_examen|date:'d' }}</span>
+<span class="date-chip-month">{{ examen.date_examen|date:'M' }}</span>
+</span>
+<div>
+<div class="fw-semibold">{{ examen.cours.nom }}</div>
+<div class="small text-muted">{{ examen.cours.promotion.nom }} · {{ examen.session.nom }}{% if examen.salle %} · Salle {{ examen.salle }}{% endif %}</div>
+</div>
+</div>
+<div class="text-end">
+<div class="fw-semibold">{{ examen.date_examen|date:'H:i' }}</div>
+<a href="{% url 'examen_fiche' examen.pk %}" class="small">Fiche de cote<i class="bi bi-arrow-right-short"></i></a>
+</div>
+</div>
+{% endfor %}
+</div>
+{% else %}
+<div class="card-body text-center text-muted py-4">
+<i class="bi bi-calendar-check fs-3 d-block mb-2"></i>
+Aucun examen à venir.
+<a href="{% url 'examen_create' %}" class="d-block mt-1">Programmer un examen</a>
+</div>
+{% endif %}
+</div>
+</div>
+<div class="col-lg-5">
+<div class="card shadow-sm mb-3 mb-md-4">
+<div class="card-header bg-white d-flex justify-content-between align-items-center">
+<h5 class="mb-0"><i class="bi bi-calendar-event me-2 text-primary"></i>Sessions récentes</h5>
+<a href="{% url 'session_list' %}" class="btn btn-sm btn-outline-primary">Toutes</a>
+</div>
+{% if dernieres_sessions %}
+<div class="list-group list-group-flush">
+{% for session in dernieres_sessions %}
+<a href="{% url 'session_detail' session.pk %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+<span class="fw-semibold">{{ session.nom }}</span>
+<span class="badge text-bg-light border">{{ session.get_type_session_display }}</span>
+</a>
+{% endfor %}
+</div>
+{% else %}
+<div class="card-body text-center text-muted py-4">
+Aucune session.
+<a href="{% url 'session_create' %}" class="d-block mt-1">Organiser une session</a>
+</div>
+{% endif %}
+</div>
+<div class="card shadow-sm">
+<div class="card-body">
+<h5 class="mb-3"><i class="bi bi-lightning-charge me-2 text-warning"></i>Actions rapides</h5>
+<div class="d-grid gap-2">
+<a href="{% url 'etudiant_create' %}" class="btn btn-outline-primary text-start"><i class="bi bi-person-plus me-2"></i>Ajouter un étudiant</a>
+<a href="{% url 'cours_create' %}" class="btn btn-outline-primary text-start"><i class="bi bi-journal-plus me-2"></i>Créer un cours</a>
+<a href="{% url 'session_create' %}" class="btn btn-outline-primary text-start"><i class="bi bi-calendar-plus me-2"></i>Organiser une session</a>
+</div>
+</div>
+</div>
 {% endblock %}

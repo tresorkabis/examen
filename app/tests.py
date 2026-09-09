@@ -234,6 +234,22 @@ class AuthAccessTests(TestCase):
                     reverse('examen_list')]:
             self.assertEqual(self.client.get(url).status_code, 200)
 
+    def test_dashboard_affiche_nouveaux_blocs(self):
+        """Le dashboard enrichi affiche héros, compteurs, prochains examens et sessions."""
+        from datetime import timedelta
+        self.examen.date_examen = timezone.now() + timedelta(days=7)
+        self.examen.save(update_fields=['date_examen'])
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Tableau de Bord')
+        self.assertContains(response, 'Prochains examens')
+        self.assertContains(response, 'Sessions récentes')
+        self.assertContains(response, 'Actions rapides')
+        self.assertContains(response, 'Promotions')
+        self.assertContains(response, 'Examens programmés')
+        # L'examen repoussé dans le futur apparaît dans « Prochains examens »
+        self.assertContains(response, 'Algorithmique')
+
     def test_pages_en_ecriture_anonymes_redirigent(self):
         urls = [
             reverse('etudiant_create'),

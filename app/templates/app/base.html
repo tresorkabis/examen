@@ -74,6 +74,8 @@
         /* Cartes statistiques du tableau de bord */
         .stat-card {
             display: block;
+            position: relative;
+            overflow: hidden;
             text-decoration: none;
             border-radius: 1rem;
             color: #fff;
@@ -83,7 +85,20 @@
         .stat-card:hover {
             transform: translateY(-4px);
             box-shadow: 0 .75rem 1.5rem rgba(0, 0, 0, .25);
+            color: #fff;
         }
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            right: -2.2rem;
+            top: -2.2rem;
+            width: 7rem;
+            height: 7rem;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .14);
+        }
+        .stat-icon { font-size: 1.6rem; opacity: .9; }
+        .stat-foot { font-size: .82rem; opacity: .85; margin-top: .35rem; }
         .bg-students { background: linear-gradient(135deg, #0d6efd, #0a58ca); }
         .bg-courses  { background: linear-gradient(135deg, #198754, #146c43); }
         .bg-sessions { background: linear-gradient(135deg, #6f42c1, #59359d); }
@@ -91,6 +106,46 @@
         .stat-value { font-size: 2.4rem; font-weight: 700; line-height: 1; }
         .stat-label { font-size: 1rem; font-weight: 500; opacity: .92; }
         .stat-icon  { font-size: 1.4rem; }
+
+        /* ===== Tableau de bord enrichi ===== */
+        .hero-header {
+            border-radius: 1.25rem;
+            color: #fff;
+            background: linear-gradient(120deg, #0b3d91 0%, #0d6efd 55%, #20c997 130%);
+            box-shadow: 0 .75rem 1.5rem rgba(13, 110, 253, .25);
+        }
+        .hero-kicker { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; opacity: .85; }
+        .hero-sub { opacity: .9; }
+        .btn-hero {
+            background: #fff; color: #0b3d91; font-weight: 600; border: none;
+            box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .2);
+        }
+        .btn-hero:hover { background: #f1f5ff; color: #0b3d91; }
+        .btn-hero-outline {
+            border: 1px solid rgba(255, 255, 255, .7); color: #fff; font-weight: 600;
+        }
+        .btn-hero-outline:hover { background: rgba(255, 255, 255, .15); color: #fff; }
+        .mini-stat {
+            position: relative;
+            display: flex; align-items: center; gap: 1rem;
+            background: #fff; border-radius: 1rem; padding: 1rem 1.25rem;
+            box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .07);
+            transition: transform .15s ease-in-out, box-shadow .15s ease-in-out;
+        }
+        .mini-stat:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1.25rem rgba(0, 0, 0, .12); }
+        .mini-stat-icon {
+            width: 2.75rem; height: 2.75rem; border-radius: .9rem;
+            display: inline-flex; align-items: center; justify-content: center; font-size: 1.35rem;
+        }
+        .mini-stat-value { font-size: 1.5rem; font-weight: 700; line-height: 1; }
+        .mini-stat-label { color: #6c757d; font-size: .9rem; }
+        .date-chip {
+            display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+            width: 3rem; height: 3rem; border-radius: .75rem; flex-shrink: 0;
+            background: #eef4ff; border: 1px solid #d7e3ff; color: #0b3d91;
+        }
+        .date-chip-day { font-size: 1.1rem; font-weight: 700; line-height: 1; }
+        .date-chip-month { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; }
     </style>
     {% block extra_style %}{% endblock %}
 </head>

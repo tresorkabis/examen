@@ -11,6 +11,7 @@ from django.db.models import Count, Prefetch, Q
 from django.http import FileResponse, Http404, HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse_lazy
+from django.utils import timezone
 from django.utils.text import slugify
 from django.views.generic import (ListView, CreateView, UpdateView, DeleteView,
                                   DetailView)
@@ -35,8 +36,20 @@ def _compteurs_tableau_de_bord():
 
 
 def dashboard(request):
-    return render(request, 'app/dashboard.html',
-                  _compteurs_tableau_de_bord())
+    compteurs = _compteurs_tableau_de_bord()
+    prochains = (Examen.objects
+                 .select_related('cours__promotion', 'cours__enseignant', 'session')
+                 .filter(date_examen__gte=timezone.now())
+                 .order_by('date_examen')[:5])
+    dernieres_sessions = (Session.objects.order_by('-date_debut')[:3])
+    context = {
+        **compteurs,
+        'prochains_examens': prochains,
+        'dernieres_sessions': dernieres_sessions,
+        'total_promotions': Promotion.objects.count(),
+        'total_examens': Examen.objects.count(),
+    }
+    return render(request, 'app/dashboard.html', context)
 
 
 class SafePaginationMixin:
