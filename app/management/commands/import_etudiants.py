@@ -34,7 +34,7 @@ PROMO_MAP = {
     'L2 TS_LMD A 2025_2026.xlsx': 'L2 SDA',  # = « L2 SD A » de la charge horaire
     'L3 INFO LMD 2025_2026.xlsx': 'L3 INFO',
     'L3 SCF_LMD 2025_2026.xlsx': 'L3 SCF LMD',
-    'L3 TS_LMD A 2025_2026.xlsx': 'L3 TS A',
+    'L3 TS_LMD A 2025_2026.xlsx': 'L3 SDA',  # = « L3 SD A » de la charge horaire
 }
 
 NUM_RE = re.compile(r'^\d{1,3}$')
