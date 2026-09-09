@@ -101,14 +101,24 @@
         </div>
     </div>
 
-    {% if enseignants %}
     <div class="card shadow-sm mt-3">
-        <div class="card-header fw-semibold"><i class="bi bi-person-badge me-1"></i>Enseignants intervenant dans cette promotion</div>
-        <div class="card-body">
-            {% for ens in enseignants %}
-                <span class="badge text-bg-info-subtle text-emphasis me-1 mb-1 p-2">{{ ens }}</span>
-            {% endfor %}
+        <div class="card-header fw-semibold"><i class="bi bi-person-badge me-1"></i>Enseignants intervenant dans cette promotion ({{ enseignants|length }})</div>
+        <div class="card-body p-0" style="max-height: 320px; overflow-y: auto;">
+            <div class="list-group list-group-flush">
+                {% for ens in enseignants %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="fw-semibold">{{ ens.nom }} {{ ens.prenom }}</span>
+                            <div class="small text-muted">{{ ens.email }}</div>
+                        </div>
+                        <a href="{% url 'enseignant_detail' ens.pk %}" class="badge text-bg-primary rounded-pill text-decoration-none" title="Voir sa fiche">{{ ens.nb_cours }} cours</a>
+                    </div>
+                {% empty %}
+                    <div class="list-group-item text-center text-muted py-4">
+                        Aucun enseignant n'intervient dans cette promotion.
+                    </div>
+                {% endfor %}
+            </div>
         </div>
     </div>
-    {% endif %}
 {% endblock %}

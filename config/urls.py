@@ -22,7 +22,7 @@ from app.views import (
     dashboard, 
     EtudiantListView, EtudiantCreateView, EtudiantUpdateView, EtudiantDeleteView,
     PromotionListView, PromotionCreateView, PromotionDetailView, PromotionUpdateView, PromotionDeleteView,
-    EnseignantListView, EnseignantCreateView, EnseignantUpdateView, EnseignantDeleteView,
+    EnseignantListView, EnseignantDetailView, EnseignantCreateView, EnseignantUpdateView, EnseignantDeleteView,
     SessionListView, SessionDetailView, SessionCreateView, SessionUpdateView, SessionDeleteView,
     session_participants_pdf,
     CoursListView, CoursCreateView, CoursUpdateView, CoursDeleteView,
@@ -54,6 +54,7 @@ urlpatterns = [
     # URLs Enseignant
     path('enseignants/', EnseignantListView.as_view(), name='enseignant_list'),
     path('enseignants/add/', EnseignantCreateView.as_view(), name='enseignant_create'),
+    path('enseignants/<int:pk>/', EnseignantDetailView.as_view(), name='enseignant_detail'),
     path('enseignants/<int:pk>/edit/', EnseignantUpdateView.as_view(), name='enseignant_update'),
     path('enseignants/<int:pk>/delete/', EnseignantDeleteView.as_view(), name='enseignant_delete'),
 

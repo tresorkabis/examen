@@ -589,3 +589,49 @@ class SessionDetailViewTest(BaseDataMixin, TestCase):
         self.assertEqual(reponse['Content-Type'], 'application/pdf')
         octets = b''.join(reponse.streaming_content)
         self.assertTrue(octets.startswith(b'%PDF'))
+
+
+class EnseignantDetailViewTest(BaseDataMixin, TestCase):
+    """Fiche détaillée d'un enseignant : cours, promotions et examens."""
+
+    def test_detail_affiche_cours_promotions_et_examens(self):
+        self._creer_etudiants(1)
+        self._inscriptions(1)
+        reponse = self.client.get(reverse(
+            'enseignant_detail', args=[self.enseignant.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        contenu = reponse.content.decode()
+        self.assertIn('KABISAYI', contenu)
+        self.assertIn('Langage de programmation mobile', contenu)
+        self.assertIn('L3 INFO A', contenu)
+        self.assertIn('SESSION 1, SEMESTRE 1 2025 - 2026', contenu)
+
+    def test_detail_enseignant_sans_cours(self):
+        enseignant = Enseignant.objects.create(
+            nom='SANS', prenom='COURS', email='sans.cours@example.com')
+        reponse = self.client.get(reverse(
+            'enseignant_detail', args=[enseignant.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        contenu = reponse.content.decode()
+        self.assertIn('Aucun cours attribué à cet enseignant.', contenu)
+        self.assertIn('Aucune promotion concernée.', contenu)
+        self.assertIn('Aucun examen programmé pour cet enseignant.', contenu)
+
+    def test_detail_inexistant_renvoie_404(self):
+        reponse = self.client.get(reverse('enseignant_detail', args=[9999]))
+        self.assertEqual(reponse.status_code, 404)
+
+    def test_liste_lien_vers_detail(self):
+        reponse = self.client.get(reverse('enseignant_list'))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(
+            reponse, reverse('enseignant_detail',
+                             args=[self.enseignant.pk]))
+
+    def test_promotion_detail_lien_vers_enseignant(self):
+        reponse = self.client.get(reverse(
+            'promotion_detail', args=[self.promotion.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(
+            reponse, reverse('enseignant_detail',
+                             args=[self.enseignant.pk]))

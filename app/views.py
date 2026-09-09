@@ -230,14 +230,20 @@ class PromotionDetailView(DetailView):
                  .order_by('nom'))
         etudiants = (promotion.etudiants
                      .order_by('nom', 'prenom'))
-        # Enseignants distincts qui interviennent dans cette promotion
-        enseignants = ({c.enseignant for c in cours if c.enseignant})
+        # Enseignants intervenant dans cette promotion : requête ORM triée,
+        # avec le nombre de cours dispensés par chacun.
+        enseignants = (Enseignant.objects
+                       .filter(cours__promotion=promotion)
+                       .annotate(nb_cours=Count('cours',
+                                                filter=Q(cours__promotion=promotion),
+                                                distinct=True))
+                       .order_by('nom', 'prenom'))
         nb_noted = Inscription.objects.filter(
             etudiant__promotion=promotion).count()
         ctx.update({
             'cours': cours,
             'etudiants': etudiants,
-            'enseignants': sorted(enseignants, key=str),
+            'enseignants': enseignants,
             'nb_inscriptions': nb_noted,
         })
         return ctx
@@ -295,6 +301,45 @@ class EnseignantDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     template_name = "app/enseignant_confirm_delete.html"
     success_url = reverse_lazy("enseignant_list")
     success_message = "L'enseignant « %(object)s » a été supprimé."
+
+
+class EnseignantDetailView(DetailView):
+    """Fiche détaillée d'un enseignant : cours, promotions et examens."""
+
+    model = Enseignant
+    template_name = "app/enseignant_detail.html"
+    context_object_name = "enseignant"
+
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related(
+            Prefetch('cours', queryset=Cours.objects.select_related('promotion')))
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        enseignant = self.object
+        cours = (enseignant.cours
+                 .select_related('promotion')
+                 .order_by('promotion__nom', 'nom'))
+        promotions = (Promotion.objects
+                      .filter(cours__enseignant=enseignant)
+                      .distinct()
+                      .order_by('nom'))
+        examens = (Examen.objects
+                   .filter(cours__enseignant=enseignant)
+                   .select_related('cours__promotion', 'session')
+                   .annotate(nb_inscriptions=Count('inscriptions', distinct=True))
+                   .order_by('date_examen'))
+        nb_etudiants = (Etudiant.objects
+                        .filter(promotion__cours__enseignant=enseignant)
+                        .distinct()
+                        .count())
+        ctx.update({
+            'cours': cours,
+            'promotions': promotions,
+            'examens': examens,
+            'nb_etudiants': nb_etudiants,
+        })
+        return ctx
 
 
 # --- CRUD SESSION ---

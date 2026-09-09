@@ -22,10 +22,11 @@
                     <tbody>
                         {% for ens in enseignants %}
                         <tr>
-                            <td>{{ ens.nom }}</td>
-                            <td>{{ ens.prenom }}</td>
+                            <td><a href="{% url 'enseignant_detail' ens.pk %}" class="fw-semibold text-decoration-none">{{ ens.nom }}</a></td>
+                            <td><a href="{% url 'enseignant_detail' ens.pk %}" class="text-decoration-none text-body">{{ ens.prenom }}</a></td>
                             <td>{{ ens.email }}</td>
                             <td class="text-end">
+                                <a href="{% url 'enseignant_detail' ens.pk %}" class="btn btn-sm btn-outline-primary">Détail</a>
                                 <a href="{% url 'enseignant_update' ens.pk %}" class="btn btn-sm btn-outline-secondary">Modifier</a>
                                 <a href="{% url 'enseignant_delete' ens.pk %}" class="btn btn-sm btn-outline-danger">Supprimer</a>
                             </td>
