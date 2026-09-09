@@ -635,3 +635,94 @@ class EnseignantDetailViewTest(BaseDataMixin, TestCase):
         self.assertContains(
             reponse, reverse('enseignant_detail',
                              args=[self.enseignant.pk]))
+
+
+class EtudiantDetailViewTest(BaseDataMixin, TestCase):
+    """Fiche détaillée d'un étudiant : inscriptions, notes et moyenne."""
+
+    def test_detail_affiche_infos_et_notes(self):
+        self._creer_etudiants(2)
+        self._inscriptions(2)
+        etudiant = Etudiant.objects.get(numero_etudiant='L3INFOA-000')
+        for ins in Inscription.objects.filter(etudiant=etudiant):
+            ins.note_interro = 3.5
+            ins.note_tp = 4
+            ins.note_examen = 6
+            ins.save()
+        reponse = self.client.get(reverse('etudiant_detail', args=[etudiant.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        contenu = reponse.content.decode()
+        self.assertIn('NOM0', contenu)
+        self.assertIn('L3INFOA-000', contenu)
+        self.assertIn('etu0@example.com', contenu)
+        self.assertIn('Langage de programmation mobile', contenu)
+        self.assertIn('SESSION 1, SEMESTRE 1 2025 - 2026', contenu)
+        # Moyenne 13,50 affichée
+        self.assertIn('13,50', contenu)
+
+    def test_detail_sans_inscription(self):
+        self._creer_etudiants(1)
+        etudiant = Etudiant.objects.get(numero_etudiant='L3INFOA-000')
+        reponse = self.client.get(reverse('etudiant_detail', args=[etudiant.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'Aucun examen pour cet étudiant.')
+
+    def test_detail_inexistant_renvoie_404(self):
+        reponse = self.client.get(reverse('etudiant_detail', args=[9999]))
+        self.assertEqual(reponse.status_code, 404)
+
+    def test_liste_lien_vers_detail(self):
+        self._creer_etudiants(1)
+        etudiant = Etudiant.objects.get(numero_etudiant='L3INFOA-000')
+        reponse = self.client.get(reverse(
+            'etudiant_list') + f'?promotion={self.promotion.pk}')
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, reverse('etudiant_detail', args=[etudiant.pk]))
+
+    def test_promotion_detail_lien_vers_detail_etudiant(self):
+        self._creer_etudiants(1)
+        etudiant = Etudiant.objects.get(numero_etudiant='L3INFOA-000')
+        reponse = self.client.get(reverse(
+            'promotion_detail', args=[self.promotion.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, reverse('etudiant_detail', args=[etudiant.pk]))
+
+
+class CoursDetailViewTest(BaseDataMixin, TestCase):
+    """Fiche détaillée d'un cours : examens, inscriptions et moyenne."""
+
+    def test_detail_affiche_infos_notes_et_moyenne(self):
+        self._creer_etudiants(2)
+        self._inscriptions(2)
+        cours = Cours.objects.get(nom='Langage de programmation mobile')
+        for ins in Inscription.objects.filter(examen__cours=cours):
+            ins.note_interro = 3.5
+            ins.note_tp = 4
+            ins.note_examen = 6
+            ins.save()
+        reponse = self.client.get(reverse('cours_detail', args=[cours.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        contenu = reponse.content.decode()
+        self.assertIn('Langage de programmation mobile', contenu)
+        self.assertIn('NOM0', contenu)
+        self.assertIn('SESSION 1, SEMESTRE 1 2025 - 2026', contenu)
+        # Moyenne du cours : 13,50 affichée
+        self.assertIn('13,50', contenu)
+
+    def test_detail_sans_examen(self):
+        cours = Cours.objects.create(
+            nom='Cours orphelin', promotion=self.promotion,
+            enseignant=self.enseignant)
+        reponse = self.client.get(reverse('cours_detail', args=[cours.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'Aucun examen pour ce cours.')
+
+    def test_detail_inexistant_renvoie_404(self):
+        reponse = self.client.get(reverse('cours_detail', args=[9999]))
+        self.assertEqual(reponse.status_code, 404)
+
+    def test_liste_lien_vers_detail(self):
+        cours = Cours.objects.get(nom='Langage de programmation mobile')
+        reponse = self.client.get(reverse('cours_list'))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, reverse('cours_detail', args=[cours.pk]))

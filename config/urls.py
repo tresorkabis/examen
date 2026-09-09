@@ -20,12 +20,12 @@ from django.urls import path
 from app.forms import LoginForm
 from app.views import (
     dashboard, 
-    EtudiantListView, EtudiantCreateView, EtudiantUpdateView, EtudiantDeleteView,
+    EtudiantListView, EtudiantDetailView, EtudiantCreateView, EtudiantUpdateView, EtudiantDeleteView,
     PromotionListView, PromotionCreateView, PromotionDetailView, PromotionUpdateView, PromotionDeleteView,
     EnseignantListView, EnseignantDetailView, EnseignantCreateView, EnseignantUpdateView, EnseignantDeleteView,
     SessionListView, SessionDetailView, SessionCreateView, SessionUpdateView, SessionDeleteView,
     session_participants_pdf,
-    CoursListView, CoursCreateView, CoursUpdateView, CoursDeleteView,
+    CoursListView, CoursDetailView, CoursCreateView, CoursUpdateView, CoursDeleteView,
     ExamenListView, ExamenCreateView, ExamenUpdateView, ExamenDeleteView,
     fiche_cote, examen_inscrire, examen_desinscrire, examen_inscrire_tous
 )
@@ -41,6 +41,7 @@ urlpatterns = [
     # URLs Etudiant
     path('etudiants/', EtudiantListView.as_view(), name='etudiant_list'),
     path('etudiants/add/', EtudiantCreateView.as_view(), name='etudiant_create'),
+    path('etudiants/<int:pk>/', EtudiantDetailView.as_view(), name='etudiant_detail'),
     path('etudiants/<int:pk>/edit/', EtudiantUpdateView.as_view(), name='etudiant_update'),
     path('etudiants/<int:pk>/delete/', EtudiantDeleteView.as_view(), name='etudiant_delete'),
     
@@ -69,6 +70,7 @@ urlpatterns = [
     # URLs Cours
     path('cours/', CoursListView.as_view(), name='cours_list'),
     path('cours/add/', CoursCreateView.as_view(), name='cours_create'),
+    path('cours/<int:pk>/', CoursDetailView.as_view(), name='cours_detail'),
     path('cours/<int:pk>/edit/', CoursUpdateView.as_view(), name='cours_update'),
     path('cours/<int:pk>/delete/', CoursDeleteView.as_view(), name='cours_delete'),
 

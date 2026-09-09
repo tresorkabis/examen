@@ -235,6 +235,32 @@ class EtudiantDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     success_message = "L'étudiant « %(object)s » a été supprimé."
 
 
+class EtudiantDetailView(DetailView):
+    """Fiche détaillée d'un étudiant : inscriptions, notes et examens."""
+
+    model = Etudiant
+    template_name = "app/etudiant_detail.html"
+    context_object_name = "etudiant"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        etudiant = self.object
+        inscriptions = (etudiant.inscription_set
+                        .select_related(
+                            'examen__cours__promotion',
+                            'examen__cours__enseignant',
+                            'examen__session')
+                        .order_by('examen__date_examen'))
+        notes = [i.note for i in inscriptions if i.note is not None]
+        moyenne = (sum(notes) / len(notes)) if notes else None
+        ctx.update({
+            'inscriptions': inscriptions,
+            'nb_examens': len(inscriptions),
+            'moyenne_generale': moyenne,
+        })
+        return ctx
+
+
 # --- CRUD PROMOTION ---
 class PromotionListView(SafePaginationMixin, ListView):
     model = Promotion
@@ -376,6 +402,48 @@ class EnseignantDetailView(DetailView):
             'nb_etudiants': nb_etudiants,
         })
         return ctx
+
+        return ctx
+
+
+# --- DETAIL COURS ---
+class CoursDetailView(DetailView):
+    """Fiche détaillée d'un cours : enseignant, promotion, examens et notes."""
+
+    model = Cours
+    template_name = "app/cours_detail.html"
+    context_object_name = "cours"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        cours = self.object
+        examens = (Examen.objects
+                   .filter(cours=cours)
+                   .select_related('session', 'cours__promotion',
+                                   'cours__enseignant')
+                   .annotate(nb_inscriptions=Count('inscriptions', distinct=True))
+                   .order_by('date_examen'))
+        inscriptions = (Inscription.objects
+                        .filter(examen__cours=cours)
+                        .select_related('etudiant__promotion', 'examen',
+                                        'examen__session')
+                        .order_by('examen__date_examen', 'etudiant__nom',
+                                  'etudiant__prenom'))
+        # Moyenne du cours : moyenne des moyennes des inscriptions notées.
+        notes = [i.note for i in inscriptions if i.note is not None]
+        moyenne = round(sum(notes) / len(notes), 2) if notes else None
+        nb_etudiants = (Etudiant.objects
+                        .filter(inscription__examen__cours=cours)
+                        .distinct()
+                        .count())
+        ctx.update({
+            'examens': examens,
+            'inscriptions': inscriptions,
+            'moyenne': moyenne,
+            'nb_etudiants': nb_etudiants,
+        })
+        return ctx
+
 
 
 # --- CRUD SESSION ---

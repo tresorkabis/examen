@@ -1,0 +1,107 @@
+{% extends 'app/base.html' %}
+
+{% block title %}{{ etudiant.nom }} {{ etudiant.prenom }}{% endblock %}
+
+{% block content %}
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <h2 class="mb-0">{{ etudiant.nom }} {{ etudiant.prenom }}</h2>
+        <div class="d-flex gap-2">
+            <a href="{% url 'etudiant_update' etudiant.pk %}" class="btn btn-outline-secondary">
+                <i class="bi bi-pencil me-1"></i>Modifier
+            </a>
+            <a href="{% url 'etudiant_delete' etudiant.pk %}" class="btn btn-outline-danger">
+                <i class="bi bi-trash me-1"></i>Supprimer
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-body d-flex flex-wrap gap-2">
+            <span class="badge text-bg-light border fs-6 font-monospace">
+                <i class="bi bi-hash me-1"></i>{{ etudiant.numero_etudiant }}
+            </span>
+            <span class="badge text-bg-light border fs-6">
+                <i class="bi bi-envelope me-1"></i>{{ etudiant.email }}
+            </span>
+            <a href="{% url 'promotion_detail' etudiant.promotion.pk %}"
+               class="badge text-bg-primary text-decoration-none fs-6">
+                <i class="bi bi-diagram-3 me-1"></i>{{ etudiant.promotion.nom }}
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100 text-center">
+                <div class="card-body">
+                    <div class="display-6 fw-bold text-primary">{{ nb_examens }}</div>
+                    <div class="text-muted"><i class="bi bi-file-earmark-text me-1"></i>Examen{{ nb_examens|pluralize }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100 text-center">
+                <div class="card-body">
+                    {% if moyenne_generale is not None %}
+                        <div class="display-6 fw-bold text-success">{{ moyenne_generale|floatformat:2 }}</div>
+                    {% else %}
+                        <div class="display-6 fw-bold text-secondary">—</div>
+                    {% endif %}
+                    <div class="text-muted"><i class="bi bi-award me-1"></i>Moyenne générale /20</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header fw-semibold">
+            <i class="bi bi-journal-text me-1"></i>Examens et notes ({{ nb_examens }})
+        </div>
+        <div class="card-body p-0" style="max-height: 480px; overflow-y: auto;">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Cours</th>
+                            <th>Promotion</th>
+                            <th>Session</th>
+                            <th>Date</th>
+                            <th class="text-center">Interro /5</th>
+                            <th class="text-center">TP /5</th>
+                            <th class="text-center">Examen /10</th>
+                            <th class="text-center">Moyenne /20</th>
+                            <th class="text-end">Fiche</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ins in inscriptions %}
+                        <tr>
+                            <td class="fw-semibold">{{ ins.examen.cours.nom }}</td>
+                            <td>{{ ins.examen.cours.promotion.nom }}</td>
+                            <td>{{ ins.examen.session.nom }}</td>
+                            <td>{{ ins.examen.date_examen|date:"d/m/Y H:i" }}</td>
+                            <td class="text-center">{{ ins.note_interro|default_if_none:'—' }}</td>
+                            <td class="text-center">{{ ins.note_tp|default_if_none:'—' }}</td>
+                            <td class="text-center">{{ ins.note_examen|default_if_none:'—' }}</td>
+                            <td class="text-center">
+                                {% if ins.note is not None %}
+                                    <span class="badge {% if ins.note >= 10 %}text-bg-success{% else %}text-bg-danger{% endif %}">{{ ins.note|floatformat:2 }}</span>
+                                {% else %}—{% endif %}
+                            </td>
+                            <td class="text-end">
+                                <a href="{% url 'examen_fiche' ins.examen.pk %}" class="btn btn-sm btn-outline-primary">Fiche</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">
+                                Aucun examen pour cet étudiant.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+{% endblock %}

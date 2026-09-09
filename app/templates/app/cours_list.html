@@ -71,11 +71,12 @@
                     <tbody>
                         {% for c in cours_list %}
                         <tr>
-                            <td>{{ c.nom }}</td>
+                            <td class="fw-semibold"><a href="{% url 'cours_detail' c.pk %}">{{ c.nom }}</a></td>
                             <td>{{ c.coefficient }}</td>
                             <td>{{ c.enseignant|default:"—" }}</td>
                             <td>{{ c.promotion }}</td>
                             <td class="text-end">
+                                <a href="{% url 'cours_detail' c.pk %}" class="btn btn-sm btn-outline-primary" title="Détail du cours"><i class="bi bi-eye me-1"></i>Détail</a>
                                 <a href="{% url 'cours_update' c.pk %}" class="btn btn-sm btn-outline-secondary">Modifier</a>
                                 <a href="{% url 'cours_delete' c.pk %}" class="btn btn-sm btn-outline-danger">Supprimer</a>
                             </td>

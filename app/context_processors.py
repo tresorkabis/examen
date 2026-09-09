@@ -14,7 +14,9 @@ BREADCRUMB_MAP = {
 
     # Listes
     "etudiant_list": ("Étudiants", []),
+    "etudiant_detail": ("Détail", [("Étudiants", "etudiant_list")]),
     "cours_list": ("Cours", []),
+    "cours_detail": ("Détail", [("Cours", "cours_list")]),
     "promotion_list": ("Promotions", []),
     "enseignant_list": ("Enseignants", []),
     "session_list": ("Sessions", []),

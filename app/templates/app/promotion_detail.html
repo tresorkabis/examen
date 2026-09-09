@@ -49,13 +49,13 @@
                 <div class="card-body p-0" style="max-height: 480px; overflow-y: auto;">
                     <div class="list-group list-group-flush">
                         {% for e in etudiants %}
-                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <a href="{% url 'etudiant_detail' e.pk %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
                                 <div>
                                     <span class="fw-semibold">{{ e.nom }} {{ e.prenom }}</span>
                                     <div class="small text-muted">{{ e.email }}</div>
                                 </div>
                                 <span class="badge text-bg-light font-monospace">{{ e.numero_etudiant }}</span>
-                            </div>
+                            </a>
                         {% empty %}
                             <div class="list-group-item text-center text-muted py-4">
                                 Aucun étudiant dans cette promotion.
@@ -82,7 +82,7 @@
                             <tbody>
                                 {% for c in cours %}
                                 <tr>
-                                    <td>{{ c.nom }}</td>
+                                    <td><a href="{% url 'cours_detail' c.pk %}">{{ c.nom }}</a></td>
                                     <td>{{ c.enseignant|default:"—" }}</td>
                                     <td class="text-center">{{ c.coefficient }}</td>
                                 </tr>
