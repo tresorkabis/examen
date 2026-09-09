@@ -71,10 +71,26 @@
                 <table class="table table-hover align-middle">
                     <thead>
                         <tr>
-                            <th>Cours</th>
-                            <th>Promotion</th>
-                            <th>Session</th>
-                            <th>Date</th>
+                            <th>
+                                <a href="?tri={% if tri == 'cours' %}-cours{% else %}cours{% endif %}{% if base_qs %}&{{ base_qs }}{% endif %}" class="text-decoration-none text-reset" title="Trier par cours">
+                                    Cours{% if tri == 'cours' %} <i class="bi bi-sort-alpha-down"></i>{% elif tri == '-cours' %} <i class="bi bi-sort-alpha-up-alt"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th>
+                                <a href="?tri={% if tri == 'promotion' %}-promotion{% else %}promotion{% endif %}{% if base_qs %}&{{ base_qs }}{% endif %}" class="text-decoration-none text-reset" title="Trier par promotion">
+                                    Promotion{% if tri == 'promotion' %} <i class="bi bi-sort-alpha-down"></i>{% elif tri == '-promotion' %} <i class="bi bi-sort-alpha-up-alt"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th>
+                                <a href="?tri={% if tri == 'session' %}-session{% else %}session{% endif %}{% if base_qs %}&{{ base_qs }}{% endif %}" class="text-decoration-none text-reset" title="Trier par session">
+                                    Session{% if tri == 'session' %} <i class="bi bi-sort-alpha-down"></i>{% elif tri == '-session' %} <i class="bi bi-sort-alpha-up-alt"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th>
+                                <a href="?tri={% if tri == 'date' %}-date{% else %}date{% endif %}{% if base_qs %}&{{ base_qs }}{% endif %}" class="text-decoration-none text-reset" title="Trier par date">
+                                    Date{% if tri == 'date' %} <i class="bi bi-sort-down"></i>{% elif tri == '-date' %} <i class="bi bi-sort-up"></i>{% endif %}
+                                </a>
+                            </th>
                             <th class="text-center">Nombre de participant</th>
                             <th class="text-end">Actions</th>
                         </tr>

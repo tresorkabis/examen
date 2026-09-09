@@ -371,6 +371,27 @@ class ExamenListFilterTests(TestCase):
         response = self._liste({'q': 'mobile'})
         contenu = response.content.decode()
         self.assertIn('?page=2&amp;q=mobile', contenu)
+
+    def test_tri_par_defaut_par_cours(self):
+        # « Ethique… » (cours2) doit précéder « Langage… » (cours1).
+        examens = list(self._liste({}).context['examens'])
+        self.assertEqual([e.pk for e in examens], [self.ex2.pk, self.ex1.pk])
+
+    def test_tri_par_cours_inverse_et_conserve_les_filtres(self):
+        response = self._liste({'tri': '-cours', 'q': 'mobile'})
+        contenu = response.content.decode()
+        self.assertIn('Langage de programmation mobile', contenu)
+        # Le lien de tri vers l'ordre croissant conserve le filtre courant.
+        self.assertIn('?tri=cours&q=mobile', contenu)
+
+    def test_tri_date_restaure_ancien_ordre(self):
+        # Tri chronologique : ex1 (janvier) avant ex2 (juin).
+        examens = list(self._liste({'tri': 'date'}).context['examens'])
+        self.assertEqual([e.pk for e in examens], [self.ex1.pk, self.ex2.pk])
+
+    def test_tri_invalide_retombe_sur_cours(self):
+        examens = list(self._liste({'tri': 'pirate'}).context['examens'])
+        self.assertEqual([e.pk for e in examens], [self.ex2.pk, self.ex1.pk])
 class MergePromotionsCommandTest(TestCase):
     """Vérifie la fusion de promotions (ex. « L2 SD A » + « L2 TS A » → « L2 SDA »)."""
 

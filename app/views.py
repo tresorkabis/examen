@@ -541,6 +541,7 @@ class ExamenListView(SafePaginationMixin, ListView):
               .annotate(nb_inscriptions=Count('inscriptions', distinct=True)))
         params = self.request.GET
         self.filters = {}
+        self.tri = params.get('tri', 'cours').strip() or 'cours'
 
         q = params.get('q', '').strip()
         if q:
@@ -566,7 +567,20 @@ class ExamenListView(SafePaginationMixin, ListView):
             qs = qs.filter(session__pk=session)
             self.filters['session'] = int(session)
 
-        return qs.order_by('date_examen')
+        tris_autorises = {
+            'cours': ('cours__nom', 'date_examen'),
+            '-cours': ('-cours__nom', '-date_examen'),
+            'promotion': ('cours__promotion__nom', 'cours__nom', 'date_examen'),
+            '-promotion': ('-cours__promotion__nom', '-cours__nom', '-date_examen'),
+            'session': ('session__nom', 'cours__nom', 'date_examen'),
+            '-session': ('-session__nom', '-cours__nom', '-date_examen'),
+            'date': ('date_examen', 'cours__nom'),
+            '-date': ('-date_examen', '-cours__nom'),
+        }
+        if self.tri not in tris_autorises:
+            self.tri = 'cours'
+        self.filters['tri'] = self.tri
+        return qs.order_by(*tris_autorises[self.tri])
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -581,6 +595,13 @@ class ExamenListView(SafePaginationMixin, ListView):
                                       .filter(examen__isnull=False)
                                       .distinct().order_by('date_debut', 'nom'))
         context['filters'] = self.filters
+        # Chaîne de requête sans « tri » ni « page », pour les liens de tri
+        # qui conservent les filtres courants.
+        params = self.request.GET.copy()
+        params.pop('tri', None)
+        params.pop('page', None)
+        context['base_qs'] = params.urlencode()
+        context['tri'] = self.tri
         context['total_examens'] = Examen.objects.count()
         return context
 
