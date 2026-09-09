@@ -9,6 +9,8 @@ class Promotion(models.Model):
 
     class Meta:
         ordering = ['nom']
+        indexes = [models.Index(fields=['nom'])]
+
 
 class Enseignant(models.Model):
     nom = models.CharField(max_length=100)
@@ -20,6 +22,8 @@ class Enseignant(models.Model):
 
     class Meta:
         ordering = ['nom', 'prenom']
+        indexes = [models.Index(fields=['nom', 'prenom'])]
+
 
 class Etudiant(models.Model):
     nom = models.CharField(max_length=100)
@@ -33,6 +37,10 @@ class Etudiant(models.Model):
 
     class Meta:
         ordering = ['nom', 'prenom']
+        indexes = [
+            models.Index(fields=['nom', 'prenom']),
+            models.Index(fields=['promotion', 'nom', 'prenom']),
+        ]
 
 class Cours(models.Model):
     nom = models.CharField(max_length=100)
@@ -45,6 +53,10 @@ class Cours(models.Model):
 
     class Meta:
         ordering = ['nom']
+        indexes = [
+            models.Index(fields=['nom']),
+            models.Index(fields=['promotion', 'nom']),
+        ]
 
 class Session(models.Model):
     SEMESTRE_CHOICES = [
@@ -78,6 +90,10 @@ class Examen(models.Model):
 
     class Meta:
         ordering = ['date_examen']
+        indexes = [
+            models.Index(fields=['date_examen']),
+            models.Index(fields=['session', 'date_examen']),
+        ]
 
 class Inscription(models.Model):
     """Inscription d'un étudiant à un examen, avec ses notes.
@@ -106,6 +122,7 @@ class Inscription(models.Model):
     class Meta:
         unique_together = ('etudiant', 'examen')
         ordering = ['etudiant']
+        indexes = [models.Index(fields=['examen', 'etudiant'])]
 
     @property
     def moyenne(self):

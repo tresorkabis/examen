@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
 from django.core.exceptions import ValidationError
+from django.core.cache import cache
 from django.db.models import Count, Prefetch, Q
 from django.http import FileResponse, Http404, HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404, redirect
@@ -19,14 +20,23 @@ from .forms import (PromotionForm, EnseignantForm, EtudiantForm, CoursForm,
 from .models import Etudiant, Cours, Session, Enseignant, Promotion, Examen, Inscription
 
 
+def _compteurs_tableau_de_bord():
+    """Compteurs du dashboard, mis en cache 60 s (4 COUNT → 0 requête)."""
+    compteurs = cache.get('dashboard_compteurs')
+    if compteurs is None:
+        compteurs = {
+            'total_etudiants': Etudiant.objects.count(),
+            'total_cours': Cours.objects.count(),
+            'total_sessions': Session.objects.count(),
+            'total_enseignants': Enseignant.objects.count(),
+        }
+        cache.set('dashboard_compteurs', compteurs, 60)
+    return compteurs
+
+
 def dashboard(request):
-    context = {
-        'total_etudiants': Etudiant.objects.count(),
-        'total_cours': Cours.objects.count(),
-        'total_sessions': Session.objects.count(),
-        'total_enseignants': Enseignant.objects.count(),
-    }
-    return render(request, 'app/dashboard.html', context)
+    return render(request, 'app/dashboard.html',
+                  _compteurs_tableau_de_bord())
 
 
 class SafePaginationMixin:
@@ -98,29 +108,47 @@ class EtudiantListView(ListView):
     context_object_name = "promotions"
 
     def get_queryset(self):
+        q = self.request.GET.get('q', '').strip()
+        if q:
+            # Recherche en base (indexée) : ne charge que les promotions
+            # ayant au moins un étudiant correspondant.
+            return (Promotion.objects
+                    .filter(Q(etudiants__nom__icontains=q)
+                            | Q(etudiants__prenom__icontains=q)
+                            | Q(etudiants__numero_etudiant__icontains=q)
+                            | Q(etudiants__email__icontains=q))
+                    .distinct()
+                    .prefetch_related(Prefetch(
+                        'etudiants',
+                        queryset=Etudiant.objects.filter(
+                            Q(nom__icontains=q)
+                            | Q(prenom__icontains=q)
+                            | Q(numero_etudiant__icontains=q)
+                            | Q(email__icontains=q))
+                        .order_by('nom', 'prenom')))
+                    .order_by('nom'))
+        if self.request.GET.get('toutes') == '1':
+            return (Promotion.objects
+                    .prefetch_related(Prefetch(
+                        'etudiants',
+                        queryset=Etudiant.objects.order_by('nom', 'prenom')))
+                    .order_by('nom'))
+        # Par défaut : seules les promotions non vides (EXISTS, sans tout charger).
         return (Promotion.objects
-                .prefetch_related('etudiants')
+                .filter(etudiants__isnull=False)
+                .distinct()
+                .prefetch_related(Prefetch(
+                    'etudiants',
+                    queryset=Etudiant.objects.order_by('nom', 'prenom')))
                 .order_by('nom'))
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        q = self.request.GET.get('q', '').strip().lower()
-        show_empty = self.request.GET.get('toutes') == '1'
-        groups = []
-        for promotion in context['promotions']:
-            students = list(promotion.etudiants.all())
-            if q:
-                students = [
-                    e for e in students
-                    if q in e.nom.lower() or q in e.prenom.lower()
-                    or q in e.numero_etudiant.lower() or q in e.email.lower()
-                ]
-                if not students:
-                    continue  # en recherche, on masque les promotions sans résultat
-            elif not students and not show_empty:
-                continue  # par défaut, on masque les promotions sans étudiant
-            promotion.filtered_etudiants = students
-            groups.append(promotion)
+        q = self.request.GET.get('q', '').strip()
+        groups = list(context['promotions'])
+        for promotion in groups:
+            # Déjà filtré/trié en base via le Prefetch du get_queryset.
+            promotion.filtered_etudiants = list(promotion.etudiants.all())
         context['groups'] = groups
         context['q'] = q
         context['open_all'] = bool(q)
