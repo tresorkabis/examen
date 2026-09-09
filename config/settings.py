@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -20,12 +21,23 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-6*g6&mqv^p+p93m#!n(h*u+9_j&&q1h=krh5oml&73rdtg0z*4'
+# Surchargeable via la variable d'environnement DJANGO_SECRET_KEY.
+SECRET_KEY = os.environ.get(
+    'DJANGO_SECRET_KEY',
+    'django-insecure-6*g6&mqv^p+p93m#!n(h*u+9_j&&q1h=krh5oml&73rdtg0z*4'
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Surchargeable via DJANGO_DEBUG (ex. « DJANGO_DEBUG=False »).
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = []
+# Hôtes autorisés (séparés par des virgules via ALLOWED_HOSTS).
+# « testserver » est ajouté pour la suite de tests de Django.
+ALLOWED_HOSTS = [
+    h.strip() for h in os.environ.get(
+        'ALLOWED_HOSTS', 'localhost,127.0.0.1,testserver'
+    ).split(',') if h.strip()
+]
 
 
 # Application definition
@@ -106,7 +118,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'fr-fr'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Africa/Kinshasa'
 
 USE_I18N = True
 
@@ -123,3 +135,11 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+
+# Authentification
+# Les accès en écriture (création / modification / suppression, fiche de cote)
+# exigent une connexion ; LOGIN_REDIRECT_URL ramène au tableau de bord.
+LOGIN_URL = 'login'
+LOGIN_REDIRECT_URL = 'dashboard'
+LOGOUT_REDIRECT_URL = 'login'

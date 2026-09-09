@@ -57,17 +57,17 @@
         </div>
 
 <div class="row mb-1">
-<div class="col-12 d-flex justify-content-between">
-<span><span class="fw-semibold">Titulaire :</span> {{ titulaire|default:"—" }}</span>
-<span class="text-end"><span class="fw-semibold">Promotion :</span> {{ examen.cours.promotion.nom }}</span>
-</div>
-</div>
-<div class="row mb-4">
-<div class="col-12">
-<span class="fw-semibold">Intitulé du Cours :</span>
-{{ examen.cours.nom }}
-</div>
-</div>
+            <div class="col-12 d-flex justify-content-between">
+                <span><span class="fw-semibold">Titulaire :</span> {{ titulaire|default:"—" }}</span>
+                <span class="text-end"><span class="fw-semibold">Promotion :</span> {{ examen.cours.promotion.nom }}</span>
+            </div>
+        </div>
+        <div class="row mb-4">
+            <div class="col-12">
+                <span class="fw-semibold">Intitulé du Cours :</span>
+                {{ examen.cours.nom }}
+            </div>
+        </div>
 
         <!-- Tableau des notes (lecture seule, remplissage manuscrit) -->
         <div class="table-responsive">

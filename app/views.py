@@ -1,4 +1,6 @@
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
 from django.core.exceptions import ValidationError
 from django.db.models import Count, Q
@@ -121,7 +123,7 @@ class EtudiantListView(ListView):
         return context
 
 
-class EtudiantCreateView(SuccessMessageMixin, CreateView):
+class EtudiantCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     model = Etudiant
     form_class = EtudiantForm
     template_name = "app/etudiant_form.html"
@@ -137,7 +139,7 @@ class EtudiantCreateView(SuccessMessageMixin, CreateView):
         return initial
 
 
-class EtudiantUpdateView(SuccessMessageMixin, UpdateView):
+class EtudiantUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     model = Etudiant
     form_class = EtudiantForm
     template_name = "app/etudiant_form.html"
@@ -145,7 +147,7 @@ class EtudiantUpdateView(SuccessMessageMixin, UpdateView):
     success_message = "L'étudiant « %(prenom)s %(nom)s » a été modifié."
 
 
-class EtudiantDeleteView(DeleteMessageMixin, DeleteView):
+class EtudiantDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     model = Etudiant
     template_name = "app/etudiant_confirm_delete.html"
     success_url = reverse_lazy("etudiant_list")
@@ -196,7 +198,7 @@ class PromotionDetailView(DetailView):
         return ctx
 
 
-class PromotionCreateView(SuccessMessageMixin, CreateView):
+class PromotionCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     model = Promotion
     form_class = PromotionForm
     template_name = "app/promotion_form.html"
@@ -204,7 +206,7 @@ class PromotionCreateView(SuccessMessageMixin, CreateView):
     success_message = "La promotion « %(nom)s » a été créée."
 
 
-class PromotionUpdateView(SuccessMessageMixin, UpdateView):
+class PromotionUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     model = Promotion
     form_class = PromotionForm
     template_name = "app/promotion_form.html"
@@ -212,7 +214,7 @@ class PromotionUpdateView(SuccessMessageMixin, UpdateView):
     success_message = "La promotion « %(nom)s » a été modifiée."
 
 
-class PromotionDeleteView(DeleteMessageMixin, DeleteView):
+class PromotionDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     model = Promotion
     template_name = "app/promotion_confirm_delete.html"
     success_url = reverse_lazy("promotion_list")
@@ -227,7 +229,7 @@ class EnseignantListView(SafePaginationMixin, ListView):
     paginate_by = 25
 
 
-class EnseignantCreateView(SuccessMessageMixin, CreateView):
+class EnseignantCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     model = Enseignant
     form_class = EnseignantForm
     template_name = "app/enseignant_form.html"
@@ -235,7 +237,7 @@ class EnseignantCreateView(SuccessMessageMixin, CreateView):
     success_message = "L'enseignant « %(prenom)s %(nom)s » a été créé."
 
 
-class EnseignantUpdateView(SuccessMessageMixin, UpdateView):
+class EnseignantUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     model = Enseignant
     form_class = EnseignantForm
     template_name = "app/enseignant_form.html"
@@ -243,7 +245,7 @@ class EnseignantUpdateView(SuccessMessageMixin, UpdateView):
     success_message = "L'enseignant « %(prenom)s %(nom)s » a été modifié."
 
 
-class EnseignantDeleteView(DeleteMessageMixin, DeleteView):
+class EnseignantDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     model = Enseignant
     template_name = "app/enseignant_confirm_delete.html"
     success_url = reverse_lazy("enseignant_list")
@@ -258,7 +260,7 @@ class SessionListView(SafePaginationMixin, ListView):
     paginate_by = 25
 
 
-class SessionCreateView(SuccessMessageMixin, CreateView):
+class SessionCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     model = Session
     form_class = SessionForm
     template_name = "app/session_form.html"
@@ -266,7 +268,7 @@ class SessionCreateView(SuccessMessageMixin, CreateView):
     success_message = "La session « %(nom)s » a été créée."
 
 
-class SessionUpdateView(SuccessMessageMixin, UpdateView):
+class SessionUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     model = Session
     form_class = SessionForm
     template_name = "app/session_form.html"
@@ -274,7 +276,7 @@ class SessionUpdateView(SuccessMessageMixin, UpdateView):
     success_message = "La session « %(nom)s » a été modifiée."
 
 
-class SessionDeleteView(DeleteMessageMixin, DeleteView):
+class SessionDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     model = Session
     template_name = "app/session_confirm_delete.html"
     success_url = reverse_lazy("session_list")
@@ -325,7 +327,7 @@ class CoursListView(SafePaginationMixin, ListView):
         return context
 
 
-class CoursCreateView(SuccessMessageMixin, CreateView):
+class CoursCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     model = Cours
     form_class = CoursForm
     template_name = "app/cours_form.html"
@@ -333,7 +335,7 @@ class CoursCreateView(SuccessMessageMixin, CreateView):
     success_message = "Le cours « %(nom)s » a été créé."
 
 
-class CoursUpdateView(SuccessMessageMixin, UpdateView):
+class CoursUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     model = Cours
     form_class = CoursForm
     template_name = "app/cours_form.html"
@@ -341,7 +343,7 @@ class CoursUpdateView(SuccessMessageMixin, UpdateView):
     success_message = "Le cours « %(nom)s » a été modifié."
 
 
-class CoursDeleteView(DeleteMessageMixin, DeleteView):
+class CoursDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     model = Cours
     template_name = "app/cours_confirm_delete.html"
     success_url = reverse_lazy("cours_list")
@@ -363,7 +365,7 @@ class ExamenListView(SafePaginationMixin, ListView):
                                          distinct=True)))
 
 
-class ExamenCreateView(SuccessMessageMixin, CreateView):
+class ExamenCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     """Aucune inscription pré-créée : la fiche de cote se construit
     dynamiquement à partir des étudiants de la promotion du cours.
     Une ligne d'inscription n'est créée en base que lorsqu'une note est saisie.
@@ -384,7 +386,7 @@ class ExamenCreateView(SuccessMessageMixin, CreateView):
         return ctx
 
 
-class ExamenUpdateView(SuccessMessageMixin, UpdateView):
+class ExamenUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     model = Examen
     form_class = ExamenForm
     template_name = "app/examen_form.html"
@@ -410,21 +412,14 @@ class ExamenUpdateView(SuccessMessageMixin, UpdateView):
         return ctx
 
 
-class ExamenDeleteView(DeleteMessageMixin, DeleteView):
+class ExamenDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     model = Examen
     template_name = "app/examen_confirm_delete.html"
     success_url = reverse_lazy("examen_list")
     success_message = "L'examen « %(object)s » a été supprimé."
 
 
-def _moyenne_classe(inscriptions):
-    """Moyenne de classe (/20) sur les notes déjà calculées, None si aucune."""
-    notes = [i.note for i in inscriptions if i.note is not None]
-    if not notes:
-        return None
-    return round(sum(notes) / len(notes), 2)
-
-
+@login_required
 def fiche_cote(request, pk):
     """Fiche de cote d'un examen (modèle du PDF « Fiche_ETHIQUE & DEONTOLOGIE »).
 
@@ -450,11 +445,10 @@ def fiche_cote(request, pk):
         'inscriptions': inscriptions,
         'inscriptibles': inscriptibles,
         'titulaire': examen.cours.enseignant,
-        'class_moyenne': _moyenne_classe(list(inscriptions)),
-        'nb_notes': sum(1 for i in inscriptions if i.note is not None),
     })
 
 
+@login_required
 def examen_inscrire(request, pk):
     """Inscrit un ou plusieurs étudiants (de la promotion du cours) à un examen.
 
@@ -490,6 +484,7 @@ def examen_inscrire(request, pk):
     return redirect(_retour_examen(request, examen))
 
 
+@login_required
 def examen_inscrire_tous(request, pk):
     """Inscrit d'un coup tous les étudiants de la promotion du cours
     qui ne sont pas encore sur la fiche de cote."""
@@ -511,6 +506,7 @@ def examen_inscrire_tous(request, pk):
     return redirect(_retour_examen(request, examen))
 
 
+@login_required
 def examen_desinscrire(request, pk, inscription_pk):
     """Retire un étudiant d'une fiche de cote (supprime aussi ses notes)."""
     examen = get_object_or_404(Examen, pk=pk)
