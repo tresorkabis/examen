@@ -362,7 +362,8 @@ class ExamenListView(SafePaginationMixin, ListView):
                 .select_related('cours__promotion', 'cours__enseignant', 'session')
                 .annotate(nb_notes=Count('inscriptions',
                                          filter=Q(inscriptions__note__isnull=False),
-                                         distinct=True)))
+                                         distinct=True))
+                .order_by('date_examen'))
 
 
 class ExamenCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):

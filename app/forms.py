@@ -1,6 +1,16 @@
 from django import forms
+from django.contrib.auth.forms import AuthenticationForm
 
 from .models import Promotion, Enseignant, Etudiant, Cours, Session, Examen
+
+
+class LoginForm(AuthenticationForm):
+    """Formulaire de connexion avec champs stylés Bootstrap."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.setdefault('class', 'form-control')
 
 
 class BootstrapModelForm(forms.ModelForm):
