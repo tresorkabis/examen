@@ -6,6 +6,7 @@ l'authentification (accès en écriture protégé).
 """
 from datetime import date, datetime
 
+from django.core.management import call_command
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
@@ -353,3 +354,67 @@ class ExamenListFilterTests(TestCase):
         response = self._liste({'q': 'mobile'})
         contenu = response.content.decode()
         self.assertIn('?page=2&amp;q=mobile', contenu)
+class MergePromotionsCommandTest(TestCase):
+    """Vérifie la fusion de promotions (ex. « L2 SD A » + « L2 TS A » → « L2 SDA »)."""
+
+    def setUp(self):
+        self.enseignant = Enseignant.objects.create(
+            nom='ENSEIGNANT', prenom='TEST',
+            email='enseignant.merge@example.com')
+        self.promo_a = Promotion.objects.create(nom='L2 SD A')
+        self.promo_b = Promotion.objects.create(nom='L2 TS A')
+
+    def _etudiant(self, promo, i):
+        return Etudiant.objects.create(
+            nom=f'ETU{i}', prenom=f'Prenom{i}',
+            email=f'merge{i}@example.com',
+            numero_etudiant=f'L2SDA-{i:03d}', promotion=promo)
+
+    def _cours(self, promo, nom):
+        return Cours.objects.create(
+            nom=nom, coefficient=1, enseignant=self.enseignant,
+            promotion=promo)
+
+    def test_fusion_regroupe_etudiants_et_cours(self):
+        self._etudiant(self.promo_a, 1)
+        self._etudiant(self.promo_a, 2)
+        self._etudiant(self.promo_b, 3)
+        self._cours(self.promo_a, 'ANGLAIS')
+        self._cours(self.promo_a, 'ARCHIVAGE 2')
+        self._cours(self.promo_b, 'STENO')
+
+        call_command('merge_promotions',
+                     target='L2 SDA',
+                     sources=['L2 SD A', 'L2 TS A'])
+
+        cible = Promotion.objects.get(nom='L2 SDA')
+        self.assertEqual(Etudiant.objects.filter(promotion=cible).count(), 3)
+        self.assertEqual(Cours.objects.filter(promotion=cible).count(), 3)
+        self.assertFalse(Promotion.objects.filter(nom__in=['L2 SD A', 'L2 TS A']).exists())
+
+    def test_fusion_idempotente_si_cible_existe_deja(self):
+        cible = Promotion.objects.create(nom='L2 SDA')
+        self._etudiant(self.promo_a, 1)
+        self._etudiant(self.promo_b, 2)
+
+        call_command('merge_promotions',
+                     target='L2 SDA',
+                     sources=['L2 SD A', 'L2 TS A'])
+
+        self.assertEqual(Promotion.objects.get(nom='L2 SDA').pk, cible.pk)
+        self.assertEqual(Promotion.objects.filter(nom__in=['L2 SD A', 'L2 TS A']).count(), 0)
+        self.assertEqual(Etudiant.objects.filter(promotion__nom='L2 SDA').count(), 2)
+
+    def test_dry_run_ne_modifie_pas_la_base(self):
+        self._etudiant(self.promo_a, 1)
+        self._cours(self.promo_a, 'ANGLAIS')
+
+        call_command('merge_promotions',
+                     target='L2 SDA',
+                     sources=['L2 SD A'],
+                     dry_run=True)
+
+        self.assertTrue(Promotion.objects.filter(nom='L2 SD A').exists())
+        self.assertFalse(Promotion.objects.filter(nom='L2 SDA').exists())
+        self.assertEqual(Etudiant.objects.filter(promotion=self.promo_a).count(), 1)
+        self.assertEqual(Cours.objects.filter(promotion=self.promo_a).count(), 1)

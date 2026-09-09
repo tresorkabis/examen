@@ -37,7 +37,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         target_name = options['target'].strip()
         sources = [s.strip() for s in options['sources']]
-        dry_run = options['dry-run']
+        dry_run = options['dry_run']
 
         if not target_name:
             raise CommandError('--target est requis.')
