@@ -1,0 +1,167 @@
+{% extends 'app/base.html' %}
+
+{% block title %}{{ session.nom }}{% endblock %}
+
+{% block content %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">{{ session.nom }}</h2>
+        <div class="d-flex gap-2">
+            <a href="{% url 'session_participants_pdf' session.pk %}" class="btn btn-outline-primary">
+                <i class="bi bi-file-earmark-pdf me-1"></i>PDF participants
+            </a>
+            <a href="{% url 'session_update' session.pk %}" class="btn btn-outline-secondary">
+                <i class="bi bi-pencil me-1"></i>Modifier
+            </a>
+            <a href="{% url 'session_delete' session.pk %}" class="btn btn-outline-danger">
+                <i class="bi bi-trash me-1"></i>Supprimer
+            </a>
+        </div>
+    </div>
+
+    <div class="mb-3">
+        <span class="badge text-bg-secondary">Semestre {{ session.semestre }}</span>
+        <span class="badge {% if session.type_session == 'rattrapage' %}bg-warning text-dark{% else %}bg-success{% endif %}">
+            {{ session.get_type_session_display }}
+        </span>
+        <span class="text-muted ms-2">
+            <i class="bi bi-calendar-range me-1"></i>
+            Du {{ session.date_debut|date:"d/m/Y" }} au {{ session.date_fin|date:"d/m/Y" }}
+        </span>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100 text-center">
+                <div class="card-body">
+                    <div class="display-6 fw-bold text-primary">{{ examens|length }}</div>
+                    <div class="text-muted"><i class="bi bi-journal-text me-1"></i>Cours examinés</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100 text-center">
+                <div class="card-body">
+                    <div class="display-6 fw-bold text-secondary">{{ nb_inscriptions }}</div>
+                    <div class="text-muted"><i class="bi bi-person-check me-1"></i>Inscriptions</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100 text-center">
+                <div class="card-body">
+                    <div class="display-6 fw-bold text-info">{{ nb_participants }}</div>
+                    <div class="text-muted"><i class="bi bi-people-fill me-1"></i>Participants uniques</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header">
+            <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="participants-tab" data-bs-toggle="tab"
+                            data-bs-target="#tab-participants" type="button" role="tab"
+                            aria-controls="tab-participants" aria-selected="true">
+                        <i class="bi bi-people me-1"></i>Participants ({{ nb_participants }})
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="cours-tab" data-bs-toggle="tab"
+                            data-bs-target="#tab-cours" type="button" role="tab"
+                            aria-controls="tab-cours" aria-selected="false">
+                        <i class="bi bi-book me-1"></i>Cours ({{ examens|length }})
+                    </button>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body p-0">
+            <div class="tab-content">
+                <div class="tab-pane fade show active" id="tab-participants" role="tabpanel"
+                     aria-labelledby="participants-tab">
+                    <div class="px-3 pb-1 small text-muted">
+                        Étudiants inscrits aux examens de la session, regroupés par promotion.
+                    </div>
+                    {% for promotion, etudiants in participants_par_promotion %}
+                    <div class="border-bottom px-3 py-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-diagram-3 fs-5"></i>
+                            <h6 class="fw-semibold mb-0">{{ promotion.nom }}</h6>
+                            <span class="badge text-bg-secondary">{{ etudiants|length }} participant(s)</span>
+                        </div>
+                        <div class="table-responsive mt-2">
+                            <table class="table table-sm table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>N° étudiant</th>
+                                        <th>Nom et prénoms</th>
+                                        <th class="text-center">Examens</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for e in etudiants %}
+                                    <tr>
+                                        <td class="font-monospace text-muted">{{ e.numero_etudiant }}</td>
+                                        <td class="fw-semibold">{{ e.nom }} {{ e.prenom }}</td>
+                                        <td class="text-center"><span class="badge text-bg-light border">{{ e.nb_examens }}</span></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-center text-muted py-4">
+                        Aucun participant inscrit pour cette session.
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="tab-pane fade" id="tab-cours" role="tabpanel" aria-labelledby="cours-tab">
+                    <div class="px-3 pb-1 small text-muted">
+                        Cours examinés pendant la session (un examen par cours).
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Cours</th>
+                                    <th>Promotion</th>
+                                    <th>Enseignant</th>
+                                    <th>Date</th>
+                                    <th>Salle</th>
+                                    <th class="text-center">Participants</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for e in examens %}
+                                <tr>
+                                    <td class="fw-semibold">{{ e.cours.nom }}</td>
+                                    <td>{{ e.cours.promotion.nom }}</td>
+                                    <td>{{ e.cours.enseignant|default:"—" }}</td>
+                                    <td>{{ e.date_examen|date:"d/m/Y H:i" }}</td>
+                                    <td>{{ e.salle|default:"—" }}</td>
+                                    <td class="text-center">
+                                        <span class="badge text-bg-secondary">{{ e.inscriptions.all|length }}</span>
+                                    </td>
+                                    <td class="text-end">
+                                        <a href="{% url 'examen_fiche' e.pk %}" class="btn btn-sm btn-outline-primary" title="Fiche de cote">
+                                            <i class="bi bi-journal-text me-1"></i>Fiche
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-4">
+                                        Aucun cours programmé pour cette session.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

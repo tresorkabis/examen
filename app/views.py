@@ -1,12 +1,16 @@
+from collections import OrderedDict
+from io import BytesIO
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
 from django.core.exceptions import ValidationError
-from django.db.models import Count, Q
-from django.http import Http404, HttpResponseRedirect
+from django.db.models import Count, Prefetch, Q
+from django.http import FileResponse, Http404, HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse_lazy
+from django.utils.text import slugify
 from django.views.generic import (ListView, CreateView, UpdateView, DeleteView,
                                   DetailView)
 
@@ -258,6 +262,138 @@ class SessionListView(SafePaginationMixin, ListView):
     template_name = "app/session_list.html"
     context_object_name = "sessions"
     paginate_by = 25
+
+
+def _donnees_participants_session(session):
+    """Données partagées par la vue détail et l'export PDF des participants.
+
+    Retourne (examens, participants_par_promotion, nb_inscriptions,
+    nb_participants) : les participants sont les étudiants uniques inscrits
+    à au moins un examen de la session, regroupés par promotion.
+    """
+    examens = (session.examen_set
+               .select_related('cours__promotion', 'cours__enseignant')
+               .prefetch_related(Prefetch(
+                   'inscriptions',
+                   queryset=Inscription.objects
+                   .select_related('etudiant')
+                   .order_by('etudiant__nom', 'etudiant__prenom')))
+               .order_by('date_examen', 'cours__nom'))
+    participants_ids = set()
+    nb_inscriptions = 0
+    for examen in examens:
+        inscriptions = examen.inscriptions.all()  # préchargé (Prefetch)
+        nb_inscriptions += len(inscriptions)
+        participants_ids.update(ins.etudiant_id for ins in inscriptions)
+
+    participants = (Etudiant.objects
+                    .filter(pk__in=participants_ids)
+                    .select_related('promotion')
+                    .annotate(nb_examens=Count(
+                        'inscription',
+                        filter=Q(inscription__examen__session=session)))
+                    .order_by('promotion__nom', 'nom', 'prenom'))
+    groupes = OrderedDict()
+    for etu in participants:
+        groupes.setdefault(etu.promotion, []).append(etu)
+    return examens, list(groupes.items()), nb_inscriptions, len(participants_ids)
+
+
+class SessionDetailView(DetailView):
+    """Détail d'une session : examens programmés et participants.
+
+    Les participants d'un examen sont ses inscriptions (modèle Inscription).
+    L'onglet « Participants » regroupe les étudiants uniques de la session par
+    promotion ; l'onglet « Cours » liste les examens programmés.
+    """
+
+    model = Session
+    template_name = "app/session_detail.html"
+    context_object_name = "session"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        session = self.object
+        examens, groupes, nb_inscriptions, nb_participants = \
+            _donnees_participants_session(session)
+        participants = [etu for _, etus in groupes for etu in etus]
+
+        ctx.update({
+            'examens': examens,
+            'nb_inscriptions': nb_inscriptions,
+            'nb_participants': nb_participants,
+            'participants': participants,
+            'participants_par_promotion': groupes,
+        })
+        return ctx
+
+
+@login_required
+def session_participants_pdf(request, pk):
+    """Exporte en PDF la liste des participants d'une session.
+
+    Une section par promotion (étudiants uniques de la session), avec
+    n°, n° étudiant, nom et nombre d'examens suivis — même contenu que
+    l'onglet « Participants » du détail de la session.
+    """
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (Paragraph, SimpleDocTemplate, Spacer,
+                                    Table, TableStyle)
+
+    session = get_object_or_404(Session, pk=pk)
+    _, groupes, _, nb_participants = _donnees_participants_session(session)
+
+    tampon = BytesIO()
+    doc = SimpleDocTemplate(
+        tampon, pagesize=A4,
+        leftMargin=15 * mm, rightMargin=15 * mm,
+        topMargin=15 * mm, bottomMargin=15 * mm,
+        title=f"Participants - {session.nom}")
+    styles = getSampleStyleSheet()
+    elements = [
+        Paragraph(f"Liste des participants — {session.nom}",
+                  styles['Title']),
+        Paragraph(
+            f"{session.get_semestre_display()} · "
+            f"{session.get_type_session_display()} · "
+            f"du {session.date_debut:%d/%m/%Y} au {session.date_fin:%d/%m/%Y} · "
+            f"{nb_participants} participant(s)",
+            styles['Normal']),
+        Spacer(1, 6 * mm),
+    ]
+    if not groupes:
+        elements.append(Paragraph(
+            "Aucun participant inscrit pour cette session.", styles['Normal']))
+    for promotion, etudiants in groupes:
+        elements.append(Paragraph(
+            f"{promotion.nom} — {len(etudiants)} participant(s)",
+            styles['Heading2']))
+        lignes = [['N°', 'Nom et prénoms', 'Examens']]
+        for i, etu in enumerate(etudiants, start=1):
+            lignes.append([
+                str(i), f"{etu.nom} {etu.prenom}", str(etu.nb_examens)])
+        tableau = Table(lignes, colWidths=[12 * mm, 132 * mm, 20 * mm])
+        tableau.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#212529')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+            ('ALIGN', (-1, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.4, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1),
+             [colors.white, colors.HexColor('#f2f2f2')]),
+        ]))
+        elements.append(tableau)
+        elements.append(Spacer(1, 5 * mm))
+    doc.build(elements)
+    tampon.seek(0)
+    return FileResponse(
+        tampon, as_attachment=True, content_type='application/pdf',
+        filename=f"participants-{slugify(session.nom)}.pdf")
 
 
 class SessionCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):

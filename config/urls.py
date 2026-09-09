@@ -23,7 +23,8 @@ from app.views import (
     EtudiantListView, EtudiantCreateView, EtudiantUpdateView, EtudiantDeleteView,
     PromotionListView, PromotionCreateView, PromotionDetailView, PromotionUpdateView, PromotionDeleteView,
     EnseignantListView, EnseignantCreateView, EnseignantUpdateView, EnseignantDeleteView,
-    SessionListView, SessionCreateView, SessionUpdateView, SessionDeleteView,
+    SessionListView, SessionDetailView, SessionCreateView, SessionUpdateView, SessionDeleteView,
+    session_participants_pdf,
     CoursListView, CoursCreateView, CoursUpdateView, CoursDeleteView,
     ExamenListView, ExamenCreateView, ExamenUpdateView, ExamenDeleteView,
     fiche_cote, examen_inscrire, examen_desinscrire, examen_inscrire_tous
@@ -58,6 +59,8 @@ urlpatterns = [
 
     # URLs Session
     path('sessions/', SessionListView.as_view(), name='session_list'),
+    path('sessions/<int:pk>/', SessionDetailView.as_view(), name='session_detail'),
+    path('sessions/<int:pk>/participants.pdf', session_participants_pdf, name='session_participants_pdf'),
     path('sessions/add/', SessionCreateView.as_view(), name='session_create'),
     path('sessions/<int:pk>/edit/', SessionUpdateView.as_view(), name='session_update'),
     path('sessions/<int:pk>/delete/', SessionDeleteView.as_view(), name='session_delete'),

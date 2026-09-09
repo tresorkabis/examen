@@ -5,6 +5,7 @@ l'inscription/désinscription des étudiants, la pagination hors bornes et
 l'authentification (accès en écriture protégé).
 """
 from datetime import date, datetime
+from io import BytesIO
 
 from django.core.management import call_command
 from django.contrib.auth.models import User
@@ -418,3 +419,118 @@ class MergePromotionsCommandTest(TestCase):
         self.assertFalse(Promotion.objects.filter(nom='L2 SDA').exists())
         self.assertEqual(Etudiant.objects.filter(promotion=self.promo_a).count(), 1)
         self.assertEqual(Cours.objects.filter(promotion=self.promo_a).count(), 1)
+class SessionDetailViewTest(BaseDataMixin, TestCase):
+    """Tests de la page de détail d'une session (examens + participants)."""
+
+    def setUp(self):
+        self.session = Session.objects.create(
+            nom='Session SEMESTRE 1 2025 - 2026', semestre=1,
+            type_session='normale',
+            date_debut=date(2026, 1, 5), date_fin=date(2026, 2, 5))
+        promo1 = Promotion.objects.create(nom='L1 INFO A')
+        promo2 = Promotion.objects.create(nom='L1 SCF LMD')
+        enseignant = Enseignant.objects.create(
+            nom='KABISAYI', prenom='TRESOR',
+            email='session.detail@example.com')
+        self.cours1 = Cours.objects.create(
+            nom='Mathématiques', coefficient=1,
+            enseignant=enseignant, promotion=promo1)
+        self.cours2 = Cours.objects.create(
+            nom='Anglais', coefficient=1,
+            enseignant=enseignant, promotion=promo2)
+        self.ex1 = Examen.objects.create(
+            cours=self.cours1, session=self.session,
+            date_examen=timezone.make_aware(datetime(2026, 1, 15, 8, 0)))
+        self.ex2 = Examen.objects.create(
+            cours=self.cours2, session=self.session,
+            date_examen=timezone.make_aware(datetime(2026, 1, 16, 8, 0)))
+
+    def _etudiant(self, nom, prenom, numero):
+        return Etudiant.objects.create(
+            nom=nom, prenom=prenom,
+            email=f'{numero.lower()}@example.com',
+            numero_etudiant=numero, promotion=self.ex1.cours.promotion)
+
+    def test_liste_examens_et_participants(self):
+        etu1 = self._etudiant('ASSANI', 'LAZARINE', 'L1INFOA-001')
+        etu2 = self._etudiant('MABANGI', 'WAMABANGI', 'L1INFOA-002')
+        Inscription.objects.create(examen=self.ex1, etudiant=etu1)
+        Inscription.objects.create(examen=self.ex1, etudiant=etu2)
+        # etu1 inscrit aussi à ex2 -> inscriptions = 3 mais participants uniques = 2
+        Inscription.objects.create(examen=self.ex2, etudiant=etu1)
+
+        response = self.client.get(reverse('session_detail', args=[self.session.pk]))
+        self.assertEqual(response.status_code, 200)
+        contenu = response.content.decode()
+        self.assertIn('Session SEMESTRE 1 2025 - 2026', contenu)
+        # Onglets Participants / Cours + bouton d'export PDF
+        self.assertIn('nav-tabs', contenu)
+        self.assertIn('id="tab-participants"', contenu)
+        self.assertIn('id="tab-cours"', contenu)
+        self.assertIn(reverse('session_participants_pdf',
+                              args=[self.session.pk]), contenu)
+        self.assertIn('Participants (2)', contenu)
+        self.assertIn('Cours (2)', contenu)
+        self.assertIn('Mathématiques', contenu)
+        self.assertIn('Anglais', contenu)
+        self.assertIn('L1INFOA-001', contenu)
+        self.assertIn('L1INFOA-002', contenu)
+        self.assertEqual(response.context['nb_inscriptions'], 3)
+        self.assertEqual(response.context['nb_participants'], 2)
+        self.assertEqual(len(response.context['participants']), 2)
+
+    def test_session_sans_examen(self):
+        session_vide = Session.objects.create(
+            nom='Session vide', semestre=1, type_session='normale',
+            date_debut=date(2026, 1, 5), date_fin=date(2026, 2, 5))
+        response = self.client.get(reverse('session_detail', args=[session_vide.pk]))
+        self.assertEqual(response.status_code, 200)
+        contenu = response.content.decode()
+        self.assertIn('Aucun participant inscrit pour cette session.', contenu)
+        self.assertIn('Aucun cours programmé pour cette session.', contenu)
+        self.assertEqual(response.context['nb_participants'], 0)
+
+    def test_export_pdf_participants(self):
+        """L'export PDF liste les participants, regroupés par promotion."""
+        from pypdf import PdfReader
+
+        etu1 = self._etudiant('ASSANI', 'LAZARINE', 'L1INFOA-001')
+        etu2 = self._etudiant('MABANGI', 'WAMABANGI', 'L1INFOA-002')
+        Inscription.objects.create(examen=self.ex1, etudiant=etu1)
+        Inscription.objects.create(examen=self.ex1, etudiant=etu2)
+        Inscription.objects.create(examen=self.ex2, etudiant=etu1)
+
+        # Anonyme -> redirection vers la page de connexion.
+        url = reverse('session_participants_pdf', args=[self.session.pk])
+        reponse_anonyme = self.client.get(url)
+        self.assertEqual(reponse_anonyme.status_code, 302)
+
+        self._connexion()
+        reponse = self.client.get(url)
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse['Content-Type'], 'application/pdf')
+        self.assertIn('.pdf', reponse['Content-Disposition'])
+
+        octets = b''.join(reponse.streaming_content)
+        self.assertTrue(octets.startswith(b'%PDF'))
+        texte = ''.join(
+            page.extract_text() or '' for page in PdfReader(BytesIO(octets)).pages)
+        self.assertIn('Liste des participants', texte)
+        self.assertIn('ASSANI LAZARINE', texte)
+        self.assertIn('MABANGI WAMABANGI', texte)
+        self.assertIn('L1 INFO A', texte)
+        self.assertNotIn('L1INFOA-001', texte)
+        self.assertNotIn('L1INFOA-002', texte)
+
+    def test_export_pdf_session_vide(self):
+        """L'export PDF d'une session sans participant reste un PDF valide."""
+        session_vide = Session.objects.create(
+            nom='Session vide', semestre=1, type_session='normale',
+            date_debut=date(2026, 1, 5), date_fin=date(2026, 2, 5))
+        self._connexion()
+        reponse = self.client.get(reverse(
+            'session_participants_pdf', args=[session_vide.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse['Content-Type'], 'application/pdf')
+        octets = b''.join(reponse.streaming_content)
+        self.assertTrue(octets.startswith(b'%PDF'))
