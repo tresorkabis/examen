@@ -90,6 +90,15 @@ class Examen(models.Model):
 
     class Meta:
         ordering = ['date_examen']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['cours', 'session'],
+                name='unique_examen_cours_session',
+                violation_error_message=(
+                    'Un examen existe déjà pour ce cours dans cette session.'
+                ),
+            ),
+        ]
         indexes = [
             models.Index(fields=['date_examen']),
             models.Index(fields=['session', 'date_examen']),

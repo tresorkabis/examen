@@ -363,14 +363,18 @@ class ExamenListFilterTests(TestCase):
         self.assertIn('Ethique &amp; Deontologie', contenu)
 
     def test_filtres_conserves_dans_les_liens_de_pagination(self):
-        # 30 examens -> 2 pages ; le filtre doit être conservé dans ?page=2
+        # 30 examens -> 2 pages ; le filtre doit être conservé dans ?page=2.
+        # Un (cours, session) étant unique, on crée des couples distincts.
         for i in range(30):
+            cours = Cours.objects.create(
+                nom=f'Cours pagination {i:02d}', coefficient=1,
+                enseignant=self.ens1, promotion=self.promo1)
             Examen.objects.create(
-                cours=self.cours1, session=self.sess1,
+                cours=cours, session=self.sess1,
                 date_examen=timezone.make_aware(datetime(2026, 3, 1, 9, 0)))
-        response = self._liste({'q': 'mobile'})
+        response = self._liste({'promotion': str(self.promo1.pk)})
         contenu = response.content.decode()
-        self.assertIn('?page=2&amp;q=mobile', contenu)
+        self.assertIn('?page=2&amp;promotion=', contenu)
 
     def test_tri_par_defaut_par_cours(self):
         # « Ethique… » (cours2) doit précéder « Langage… » (cours1).
@@ -392,6 +396,20 @@ class ExamenListFilterTests(TestCase):
     def test_tri_invalide_retombe_sur_cours(self):
         examens = list(self._liste({'tri': 'pirate'}).context['examens'])
         self.assertEqual([e.pk for e in examens], [self.ex2.pk, self.ex1.pk])
+
+    def test_unicite_cours_session(self):
+        # Un 2e examen avec le même (cours, session) viole la contrainte.
+        from django.db import IntegrityError
+        with self.assertRaises(IntegrityError):
+            Examen.objects.create(
+                cours=self.cours1, session=self.sess1,
+                date_examen=timezone.make_aware(datetime(2026, 1, 25, 8, 0)))
+
+    def test_unicite_autorise_meme_cours_autre_session(self):
+        examen = Examen.objects.create(
+            cours=self.cours1, session=self.sess2,
+            date_examen=timezone.make_aware(datetime(2026, 6, 5, 10, 0)))
+        self.assertIsNotNone(examen.pk)
 class MergePromotionsCommandTest(TestCase):
     """Vérifie la fusion de promotions (ex. « L2 SD A » + « L2 TS A » → « L2 SDA »)."""
 
