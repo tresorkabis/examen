@@ -715,7 +715,7 @@ class CoursDetailViewTest(BaseDataMixin, TestCase):
             enseignant=self.enseignant)
         reponse = self.client.get(reverse('cours_detail', args=[cours.pk]))
         self.assertEqual(reponse.status_code, 200)
-        self.assertContains(reponse, 'Aucun examen pour ce cours.')
+        self.assertContains(reponse, 'Aucun examen programmé pour ce cours.')
 
     def test_detail_inexistant_renvoie_404(self):
         reponse = self.client.get(reverse('cours_detail', args=[9999]))
