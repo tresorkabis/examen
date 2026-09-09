@@ -361,9 +361,7 @@ class ExamenListView(SafePaginationMixin, ListView):
     def get_queryset(self):
         qs = (Examen.objects
               .select_related('cours__promotion', 'cours__enseignant', 'session')
-              .annotate(nb_notes=Count('inscriptions',
-                                       filter=Q(inscriptions__note__isnull=False),
-                                       distinct=True)))
+              .annotate(nb_inscriptions=Count('inscriptions', distinct=True)))
         params = self.request.GET
         self.filters = {}
 

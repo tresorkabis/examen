@@ -75,8 +75,7 @@
                             <th>Promotion</th>
                             <th>Session</th>
                             <th>Date</th>
-                            <th>Salle</th>
-                            <th class="text-center">Notés</th>
+                            <th class="text-center">Nombre de participant</th>
                             <th class="text-end">Actions</th>
                         </tr>
                     </thead>
@@ -87,8 +86,7 @@
                             <td>{{ e.cours.promotion }}</td>
                             <td>{{ e.session }}</td>
                             <td>{{ e.date_examen|date:"d/m/Y H:i" }}</td>
-                            <td>{{ e.salle|default:"—" }}</td>
-                            <td class="text-center"><span class="badge text-bg-secondary">{{ e.nb_notes|default:0 }}</span></td>
+                            <td class="text-center"><span class="badge text-bg-secondary">{{ e.nb_inscriptions|default:0 }}</span></td>
                             <td class="text-end">
                                 <a href="{% url 'examen_fiche' e.pk %}" class="btn btn-sm btn-outline-primary" title="Fiche de cote">
                                     <i class="bi bi-journal-text me-1"></i>Fiche
@@ -99,7 +97,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-4">
+                            <td colspan="6" class="text-center text-muted py-4">
                                 {% if filters %}Aucun examen ne correspond aux filtres.{% else %}Aucun examen enregistré. Créez-en un pour établir une fiche de cote.{% endif %}
                             </td>
                         </tr>
