@@ -36,13 +36,12 @@
 
     <div class="accordion" id="promoAccordion">
         {% for promotion in groups %}
-            {% with forloop.first as is_first %}
             <div class="accordion-item shadow-sm mb-3 border-0 rounded-3 overflow-hidden">
                 <h3 class="accordion-header">
-                    <button class="accordion-button {% if not open_all and not is_first %}collapsed{% endif %} bg-light fw-semibold"
+                    <button class="accordion-button {% if not open_all %}collapsed{% endif %} bg-light fw-semibold"
                             type="button" data-bs-toggle="collapse"
                             data-bs-target="#promo-{{ promotion.pk }}"
-                            aria-expanded="{% if open_all or is_first %}true{% else %}false{% endif %}"
+                            aria-expanded="{% if open_all %}true{% else %}false{% endif %}"
                             aria-controls="promo-{{ promotion.pk }}">
                         <i class="bi bi-people-fill me-2 text-secondary"></i>
                         {{ promotion.nom }}
@@ -51,7 +50,7 @@
                     </button>
                 </h3>
                 <div id="promo-{{ promotion.pk }}"
-                     class="accordion-collapse collapse {% if open_all or is_first %}show{% endif %}"
+                     class="accordion-collapse collapse {% if open_all %}show{% endif %}"
                      data-bs-parent="#promoAccordion">
                     <div class="accordion-body p-0">
                         <div class="list-group list-group-flush">
@@ -90,7 +89,6 @@
                     </div>
                 </div>
             </div>
-            {% endwith %}
         {% empty %}
             <div class="card shadow-sm">
                 <div class="card-body text-center text-muted py-5">
