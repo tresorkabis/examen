@@ -269,3 +269,87 @@ class AuthAccessTests(TestCase):
         response = self.client.get(
             reverse('etudiant_update', kwargs={'pk': self.etudiant.pk}))
         self.assertEqual(response.status_code, 200)
+class ExamenListFilterTests(TestCase):
+    """Recherche et filtres de la liste des examens."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.promo1 = Promotion.objects.create(nom='L3 INFO A')
+        cls.promo2 = Promotion.objects.create(nom='L3 SCF')
+        cls.ens1 = Enseignant.objects.create(
+            nom='KABISAYI', prenom='TRESOR',
+            email='filter.ens1@example.com')
+        cls.ens2 = Enseignant.objects.create(
+            nom='MUJINGA', prenom='MAGUY',
+            email='filter.ens2@example.com')
+        cls.cours1 = Cours.objects.create(
+            nom='Langage de programmation mobile', coefficient=1,
+            enseignant=cls.ens1, promotion=cls.promo1)
+        cls.cours2 = Cours.objects.create(
+            nom='Ethique & Deontologie', coefficient=1,
+            enseignant=cls.ens2, promotion=cls.promo2)
+        cls.sess1 = Session.objects.create(
+            nom='SESSION 1', semestre=1, type_session='normale',
+            date_debut=date(2026, 1, 5), date_fin=date(2026, 2, 5))
+        cls.sess2 = Session.objects.create(
+            nom='RATTRAPAGE SEMESTRE 2', semestre=2,
+            type_session='rattrapage',
+            date_debut=date(2026, 6, 1), date_fin=date(2026, 6, 15))
+        cls.ex1 = Examen.objects.create(
+            cours=cls.cours1, session=cls.sess1,
+            date_examen=timezone.make_aware(datetime(2026, 1, 20, 8, 0)))
+        cls.ex2 = Examen.objects.create(
+            cours=cls.cours2, session=cls.sess2,
+            date_examen=timezone.make_aware(datetime(2026, 6, 5, 8, 0)))
+
+    def _liste(self, params):
+        return self.client.get(reverse('examen_list'), params)
+
+    def test_recherche_par_cours(self):
+        response = self._liste({'q': 'mobile'})
+        self.assertEqual(response.status_code, 200)
+        contenu = response.content.decode()
+        self.assertIn('Langage de programmation mobile', contenu)
+        self.assertNotIn('Ethique & Deontologie', contenu)
+
+    def test_recherche_par_enseignant(self):
+        response = self._liste({'q': 'KABISAYI'})
+        contenu = response.content.decode()
+        self.assertIn('Langage de programmation mobile', contenu)
+        self.assertNotIn('Ethique & Deontologie', contenu)
+
+    def test_filtre_promotion(self):
+        response = self._liste({'promotion': str(self.promo1.pk)})
+        contenu = response.content.decode()
+        self.assertIn('Langage de programmation mobile', contenu)
+        self.assertNotIn('Ethique & Deontologie', contenu)
+
+    def test_filtre_session(self):
+        response = self._liste({'session': str(self.sess2.pk)})
+        contenu = response.content.decode()
+        self.assertIn('Ethique &amp; Deontologie', contenu)
+        self.assertNotIn('Langage de programmation mobile', contenu)
+
+    def test_aucun_resultat_message(self):
+        response = self._liste({'q': 'zzzz'})
+        contenu = response.content.decode()
+        self.assertIn('Aucun examen ne correspond aux filtres', contenu)
+
+    def test_reinitialiser_les_filtres_affiche_tout(self):
+        response = self._liste({'q': 'mobile'})
+        contenu = response.content.decode()
+        self.assertIn('R\u00e9initialiser les filtres', contenu)
+        response = self._liste({})
+        contenu = response.content.decode()
+        self.assertIn('Langage de programmation mobile', contenu)
+        self.assertIn('Ethique &amp; Deontologie', contenu)
+
+    def test_filtres_conserves_dans_les_liens_de_pagination(self):
+        # 30 examens -> 2 pages ; le filtre doit être conservé dans ?page=2
+        for i in range(30):
+            Examen.objects.create(
+                cours=self.cours1, session=self.sess1,
+                date_examen=timezone.make_aware(datetime(2026, 3, 1, 9, 0)))
+        response = self._liste({'q': 'mobile'})
+        contenu = response.content.decode()
+        self.assertIn('?page=2&amp;q=mobile', contenu)

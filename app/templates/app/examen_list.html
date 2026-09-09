@@ -10,6 +10,61 @@
         </a>
     </div>
 
+    <div class="card shadow-sm mb-3">
+        <div class="card-body py-2">
+            <form method="get" class="row g-2 align-items-center">
+                <div class="col-md-4">
+                    <input type="search" name="q" value="{{ filters.q|default:'' }}" class="form-control"
+                           placeholder="Rechercher un examen (cours, promotion, enseignant, session)…"
+                           aria-label="Rechercher un examen">
+                </div>
+                <div class="col-md-2">
+                    <select name="promotion" class="form-select" aria-label="Filtrer par promotion"
+                            onchange="this.form.submit()">
+                        <option value="">Toutes les promotions</option>
+                        {% for p in filter_promotions %}
+                            <option value="{{ p.pk }}" {% if filters.promotion == p.pk %}selected{% endif %}>{{ p.nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="enseignant" class="form-select" aria-label="Filtrer par enseignant"
+                            onchange="this.form.submit()">
+                        <option value="">Tous les enseignants</option>
+                        {% for e in filter_enseignants %}
+                            <option value="{{ e.pk }}" {% if filters.enseignant == e.pk %}selected{% endif %}>{{ e.nom }} {{ e.prenom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="session" class="form-select" aria-label="Filtrer par session"
+                            onchange="this.form.submit()">
+                        <option value="">Toutes les sessions</option>
+                        {% for s in filter_sessions %}
+                            <option value="{{ s.pk }}" {% if filters.session == s.pk %}selected{% endif %}>{{ s.nom|truncatechars:30 }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary" title="Rechercher">
+                        <i class="bi bi-search"></i>
+                    </button>
+                    {% if filters %}
+                        <a href="{% url 'examen_list' %}" class="btn btn-outline-secondary" title="Réinitialiser les filtres">
+                            <i class="bi bi-x-lg"></i>
+                        </a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if filters %}
+        <p class="text-muted">
+            {{ paginator.count }} examen(s) sur {{ total_examens }} correspondent aux filtres.
+        </p>
+    {% endif %}
+
     <div class="card shadow-sm">
         <div class="card-body">
             <div class="table-responsive">
@@ -45,7 +100,7 @@
                         {% empty %}
                         <tr>
                             <td colspan="7" class="text-center text-muted py-4">
-                                Aucun examen enregistré. Créez-en un pour établir une fiche de cote.
+                                {% if filters %}Aucun examen ne correspond aux filtres.{% else %}Aucun examen enregistré. Créez-en un pour établir une fiche de cote.{% endif %}
                             </td>
                         </tr>
                         {% endfor %}

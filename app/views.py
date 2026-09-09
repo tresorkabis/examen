@@ -352,18 +352,62 @@ class CoursDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
 
 # --- CRUD EXAMEN ---
 class ExamenListView(SafePaginationMixin, ListView):
+    """Liste des examens, filtrable par recherche, promotion, enseignant et session."""
     model = Examen
     template_name = "app/examen_list.html"
     context_object_name = "examens"
     paginate_by = 25
 
     def get_queryset(self):
-        return (Examen.objects
-                .select_related('cours__promotion', 'cours__enseignant', 'session')
-                .annotate(nb_notes=Count('inscriptions',
-                                         filter=Q(inscriptions__note__isnull=False),
-                                         distinct=True))
-                .order_by('date_examen'))
+        qs = (Examen.objects
+              .select_related('cours__promotion', 'cours__enseignant', 'session')
+              .annotate(nb_notes=Count('inscriptions',
+                                       filter=Q(inscriptions__note__isnull=False),
+                                       distinct=True)))
+        params = self.request.GET
+        self.filters = {}
+
+        q = params.get('q', '').strip()
+        if q:
+            qs = qs.filter(Q(cours__nom__icontains=q)
+                           | Q(cours__promotion__nom__icontains=q)
+                           | Q(cours__enseignant__nom__icontains=q)
+                           | Q(cours__enseignant__prenom__icontains=q)
+                           | Q(session__nom__icontains=q))
+            self.filters['q'] = q
+
+        promo = params.get('promotion', '').strip()
+        if promo.isdigit():
+            qs = qs.filter(cours__promotion__pk=promo)
+            self.filters['promotion'] = int(promo)
+
+        ens = params.get('enseignant', '').strip()
+        if ens.isdigit():
+            qs = qs.filter(cours__enseignant__pk=ens)
+            self.filters['enseignant'] = int(ens)
+
+        session = params.get('session', '').strip()
+        if session.isdigit():
+            qs = qs.filter(session__pk=session)
+            self.filters['session'] = int(session)
+
+        return qs.order_by('date_examen')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Options des filtres : uniquement les valeurs réellement utilisées
+        context['filter_promotions'] = (Promotion.objects
+                                        .filter(cours__examen__isnull=False)
+                                        .distinct().order_by('nom'))
+        context['filter_enseignants'] = (Enseignant.objects
+                                         .filter(cours__examen__isnull=False)
+                                         .distinct().order_by('nom', 'prenom'))
+        context['filter_sessions'] = (Session.objects
+                                      .filter(examen__isnull=False)
+                                      .distinct().order_by('date_debut', 'nom'))
+        context['filters'] = self.filters
+        context['total_examens'] = Examen.objects.count()
+        return context
 
 
 class ExamenCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
