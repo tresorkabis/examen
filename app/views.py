@@ -110,11 +110,12 @@ class DeleteMessageMixin:
 
 # --- CRUD ETUDIANT ---
 class EtudiantListView(ListView):
-    """Liste des étudiants regroupés par promotion, sous forme de cartes.
+    """Étudiants : cartes des promotions, puis liste d'une promotion au clic.
 
-    Pas de pagination : chaque promotion forme une carte (accordéon).
-    Une recherche « ?q= » filtre les étudiants par nom / prénom / numéro /
-    email et n'affiche que les promotions concernées (cartes ouvertes).
+    Sans paramètre : grille de cartes (une par promotion non vide, avec
+    effectif annoté). Avec « ?promotion=<pk> » : liste des étudiants de
+    cette promotion. Une recherche « ?q= » filtre les étudiants par nom /
+    prénom / numéro / email et n'affiche que les promotions concernées.
     """
     model = Promotion
     template_name = "app/etudiant_list.html"
@@ -122,14 +123,19 @@ class EtudiantListView(ListView):
 
     def get_queryset(self):
         q = self.request.GET.get('q', '').strip()
+        promo_pk = self.request.GET.get('promotion', '').strip()
         if q:
             # Recherche en base (indexée) : ne charge que les promotions
-            # ayant au moins un étudiant correspondant.
-            return (Promotion.objects
-                    .filter(Q(etudiants__nom__icontains=q)
-                            | Q(etudiants__prenom__icontains=q)
-                            | Q(etudiants__numero_etudiant__icontains=q)
-                            | Q(etudiants__email__icontains=q))
+            # ayant au moins un étudiant correspondant. Si une promotion est
+            # sélectionnée, on restreint la recherche à celle-ci.
+            filtres = (Q(etudiants__nom__icontains=q)
+                       | Q(etudiants__prenom__icontains=q)
+                       | Q(etudiants__numero_etudiant__icontains=q)
+                       | Q(etudiants__email__icontains=q))
+            qs = Promotion.objects.filter(filtres)
+            if promo_pk.isdigit():
+                qs = qs.filter(pk=int(promo_pk))
+            return (qs
                     .distinct()
                     .prefetch_related(Prefetch(
                         'etudiants',
@@ -139,9 +145,13 @@ class EtudiantListView(ListView):
                             | Q(numero_etudiant__icontains=q)
                             | Q(email__icontains=q))
                         .order_by('nom', 'prenom')))
+                    .annotate(nb_etudiants_total=Count('etudiants', distinct=True),
+                              nb_cours=Count('cours', distinct=True))
                     .order_by('nom'))
         if self.request.GET.get('toutes') == '1':
             return (Promotion.objects
+                    .annotate(nb_etudiants_total=Count('etudiants', distinct=True),
+                              nb_cours=Count('cours', distinct=True))
                     .prefetch_related(Prefetch(
                         'etudiants',
                         queryset=Etudiant.objects.order_by('nom', 'prenom')))
@@ -150,6 +160,8 @@ class EtudiantListView(ListView):
         return (Promotion.objects
                 .filter(etudiants__isnull=False)
                 .distinct()
+                .annotate(nb_etudiants_total=Count('etudiants', distinct=True),
+                          nb_cours=Count('cours', distinct=True))
                 .prefetch_related(Prefetch(
                     'etudiants',
                     queryset=Etudiant.objects.order_by('nom', 'prenom')))
@@ -158,13 +170,37 @@ class EtudiantListView(ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         q = self.request.GET.get('q', '').strip()
+        promo_pk = self.request.GET.get('promotion', '').strip()
         groups = list(context['promotions'])
         for promotion in groups:
             # Déjà filtré/trié en base via le Prefetch du get_queryset.
             promotion.filtered_etudiants = list(promotion.etudiants.all())
+            # Nombre de résultats dans cette carte lors d'une recherche.
+            promotion.nb_match = len(promotion.filtered_etudiants) if q else 0
         context['groups'] = groups
         context['q'] = q
-        context['open_all'] = bool(q)
+        context['toutes'] = self.request.GET.get('toutes') == '1'
+        context['nb_etudiants_trouves'] = sum(p.nb_match for p in groups) if q else 0
+        context['promotion_param'] = promo_pk
+        # Promotion sélectionnée au clic sur une carte : sa liste d'étudiants.
+        promotion_active = None
+        if promo_pk.isdigit():
+            promotion_active = next(
+                (p for p in groups if p.pk == int(promo_pk)), None)
+            if promotion_active is None and not q:
+                # Promotion vide ou filtrée hors queryset : on la charge quand
+                # même pour afficher sa liste (vide) plutôt qu'une 404.
+                promotion_active = (
+                    Promotion.objects
+                    .filter(pk=int(promo_pk))
+                    .prefetch_related(Prefetch(
+                        'etudiants',
+                        queryset=Etudiant.objects.order_by('nom', 'prenom')))
+                    .first())
+        if promotion_active is not None and not q:
+            promotion_active.filtered_etudiants = list(
+                promotion_active.etudiants.all())
+        context['promotion_active'] = promotion_active
         return context
 
 
