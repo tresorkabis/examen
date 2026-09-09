@@ -26,6 +26,12 @@
         .fiche-sheet { box-shadow: none !important; border: none !important; padding: 0 !important; }
         .fiche-note { border: none !important; text-align: center !important; }
         .fiche-table { font-size: 11pt; }
+        /* Noms jamais coupés sur 2 lignes à l'impression :
+           la colonne NOMS reste sur une ligne, les colonnes de notes
+           reçoivent une largeur fixe pour lui laisser la place. */
+        .fiche-table th:nth-child(n+3), .fiche-table td:nth-child(n+3) { width: 22mm; }
+        .fiche-table th:nth-child(2), .fiche-table td:nth-child(2) { white-space: nowrap; }
+        .fiche-table td { padding: .3rem .45rem; }
         /* Forcer les bandes de couleur à l'impression */
         .fiche-table tbody tr:nth-of-type(odd) td { background-color: #ffffff !important; }
         .fiche-table tbody tr:nth-of-type(even) td { background-color: #f3f6f9 !important; }
