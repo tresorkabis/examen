@@ -27,19 +27,54 @@
         .card-body { padding: 0 !important; }
         .fiche-sheet { box-shadow: none !important; border: none !important; padding: 0 !important; }
         .fiche-note { border: none !important; text-align: center !important; }
-        .fiche-table { font-size: 11pt; }
-        /* Le tableau tient en largeur à l'impression : colonnes de notes
-           étroites (13mm), n° minimal, noms sur une seule ligne mais en
-           10pt pour que la bordure droite reste visible. */
-        .fiche-table th:nth-child(n+3), .fiche-table td:nth-child(n+3) { width: 13mm; }
-        .fiche-table th:nth-child(2), .fiche-table td:nth-child(2) { white-space: nowrap; font-size: 10pt; }
-        .fiche-table th:nth-child(1) { width: 8mm !important; }
-        /* La colonne NOMS ne doit pas absorber tout l'espace restant :
-           largeur fixe et tableau compact, centré sur la page. */
-        .fiche-table th:nth-child(2), .fiche-table td:nth-child(2) { width: 81mm; }
-        .fiche-table { width: auto !important; margin-left: auto !important; margin-right: auto !important; }
-        .fiche-table td { padding: .25rem .3rem; }
-        @page { size: A4 portrait; margin: 10mm 9mm; }
+
+        /* Tableau : largeur 100 % du conteneur (lui-même limité par les
+           marges de page) + colonnes en POURCENTAGES : quelles que soient
+           les marges réelles d'impression, le tableau ne peut jamais
+           déborder ni être rogné à droite.
+           Répartition : N° 5% · NOMS 47% · notes 12% × 4 = 100 %. */
+        .fiche-table {
+            width: 100% !important;
+            table-layout: fixed !important;
+            border-collapse: collapse !important;
+        }
+        .fiche-table td { padding: .25rem .3rem; font-size: 10.5pt; }
+
+        /* Largeurs relatives imposées (sur th ET td) */
+        .fiche-table th:nth-child(1), .fiche-table td:nth-child(1) { width: 5% !important; text-align: center; }
+        .fiche-table th:nth-child(2), .fiche-table td:nth-child(2) { width: 43% !important; }
+        .fiche-table th:nth-child(n+3), .fiche-table td:nth-child(n+3) { width: 13% !important; }
+
+        /* Noms : toujours sur une ligne */
+        .fiche-table td:nth-child(2) { white-space: nowrap; font-size: 9.5pt; }
+
+        /* En-têtes : une seule ligne, titres complets */
+        .fiche-table thead th {
+            white-space: nowrap !important;
+            font-size: 8.5pt;
+            padding: .25rem .1rem;
+            vertical-align: middle;
+            text-align: center;
+        }
+
+        /* Aucun conteneur ne doit rogner le tableau */
+        html, body { overflow: visible !important; }
+        .table-responsive, .card, .card-body, .fiche-sheet { overflow: visible !important; }
+
+        /* Les .row de Bootstrap ont des marges NÉGATIVES (gutters) : une fois
+           le padding du .container neutralisé, elles font dépasser le contenu
+           (titre, promotion, tableau) de ~12px à droite → rogné à l'impression.
+           On annule gutters et marges négatives, tout s'aligne dans la page. */
+        .row { margin-left: 0 !important; margin-right: 0 !important; }
+        .row > * { padding-left: 0 !important; padding-right: 0 !important; }
+        /* Sécurité : rien ne peut dépasser de la zone imprimable */
+        .container, .card, .card-body, .fiche-sheet,
+        .table-responsive, .fiche-header { max-width: 99% !important; }
+
+        /* Bordure droite de la dernière colonne tracée explicitement */
+        .fiche-table th:last-child, .fiche-table td:last-child { border-right: 1px solid #dee2e6 !important; }
+
+        @page { size: A4 portrait; margin: 12mm; }
         /* Forcer les bandes de couleur à l'impression */
         .fiche-table tbody tr:nth-of-type(odd) td { background-color: #ffffff !important; }
         .fiche-table tbody tr:nth-of-type(even) td { background-color: #f3f6f9 !important; }
@@ -70,7 +105,7 @@
             <div class="fiche-title fs-5">{{ examen.session.nom }}</div>
         </div>
 
-        <div class="row mb-1">
+        <div class="row mb-1 ml-1">
             <div class="col-12 d-flex justify-content-between">
                 <span><span class="fw-semibold">Titulaire :</span> {{ titulaire|default:"—" }}</span>
                 <span class="text-end"><span class="fw-semibold">Promotion :</span> {{ examen.cours.promotion.nom }}</span>
