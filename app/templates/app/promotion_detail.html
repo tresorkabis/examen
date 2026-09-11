@@ -2,10 +2,79 @@
 
 {% block title %}{{ promotion.nom }}{% endblock %}
 
+{% block extra_style %}
+<style>
+    /* En-tête imprimé : masqué à l'écran */
+    .print-only { display: none; }
+
+    /* ===== Impression : uniquement la liste des étudiants ===== */
+    @media print {
+        /* Masquer TOUTE l'interface (sidebar, barre mobile, boutons, etc.) */
+        #sidebar, nav.navbar, .navbar, header, footer, .offcanvas-backdrop,
+        .no-print, .breadcrumb, .alert { display: none !important; }
+        body { background: #fff !important; -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
+        .main-content { margin-left: 0 !important; min-height: 0 !important; }
+        .container { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
+
+        /* Ligne d'en-tête réservée à l'impression */
+        .print-only { display: block !important; }
+
+        /* La liste affichée à l'écran (liens, emails, n° étudiant) est
+           remplacée à l'impression par un tableau N° + NOMS */
+        .students-list-screen { display: none !important; }
+
+        /* Le tableau occupe toute la largeur et n'est plus coupé par le scroll */
+        .row { margin-left: 0 !important; margin-right: 0 !important; }
+        .row > * { padding-left: 0 !important; padding-right: 0 !important; }
+        .col-lg-6 { width: 100% !important; flex: 0 0 100% !important; max-width: 100% !important; }
+        html, body { overflow: visible !important; }
+        .card-body, .table-responsive { max-height: none !important; overflow: visible !important; }
+        .card { border: none !important; box-shadow: none !important; background: #fff !important; }
+
+        /* Tableau imprimé : colonne N° + noms alignés à gauche */
+        .students-print-table {
+            display: table !important;
+            width: 100% !important;
+            border-collapse: collapse !important;
+        }
+        .students-print-table th, .students-print-table td {
+            padding: .3rem .4rem !important;
+            border-bottom: 1px solid #dee2e6 !important;
+            text-align: left !important;
+            vertical-align: top !important;
+        }
+        .students-print-table thead th {
+            border-bottom: 2px solid #212529 !important;
+            font-size: 10pt;
+            text-transform: uppercase;
+        }
+        .students-print-table th.num, .students-print-table td.num {
+            width: 9% !important;
+            text-align: center !important;
+            font-weight: 600;
+            color: #212529;
+        }
+        .students-print-table td.nom { width: 91% !important; font-weight: 600; }
+
+        /* Marge verticale suffisante pour l'en-tête et le pied de page du navigateur */
+        @page { size: A4 portrait; margin: 16mm 12mm; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>{{ promotion.nom }}</h2>
-        <div class="d-flex gap-2">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div>
+            <h2 class="mb-0">{{ promotion.nom }}</h2>
+            <div class="print-only small text-muted mt-1">
+                Liste des étudiants — {{ etudiants|length }} étudiant{{ etudiants|length|pluralize }}
+                · imprimé le {% now 'd/m/Y à H:i' %}
+            </div>
+        </div>
+        <div class="d-flex gap-2 no-print">
+            <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
+                <i class="bi bi-printer me-1"></i>Imprimer la liste
+            </button>
             <a href="{% url 'promotion_update' promotion.pk %}" class="btn btn-outline-secondary">
                 <i class="bi bi-pencil me-1"></i>Modifier
             </a>
@@ -15,7 +84,13 @@
         </div>
     </div>
 
-    <div class="row g-3 mb-3">
+    <small class="d-block text-muted mb-3 no-print">
+        <i class="bi bi-info-circle me-1"></i>Astuce impression : décochez
+        « En-têtes et pieds de page » dans l'aperçu pour une liste nette
+        (gardez les marges « Par défaut » et le format A4 si vous les conservez).
+    </small>
+
+    <div class="row g-3 mb-3 no-print">
         <div class="col-md-4">
             <div class="card shadow-sm h-100 text-center">
                 <div class="card-body">
@@ -45,9 +120,9 @@
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="card shadow-sm h-100">
-                <div class="card-header fw-semibold"><i class="bi bi-people me-1"></i>Étudiants ({{ etudiants|length }})</div>
+                <div class="card-header fw-semibold no-print"><i class="bi bi-people me-1"></i>Étudiants ({{ etudiants|length }})</div>
                 <div class="card-body p-0" style="max-height: 480px; overflow-y: auto;">
-                    <div class="list-group list-group-flush">
+                    <div class="list-group list-group-flush students-list-screen">
                         {% for e in etudiants %}
                             <a href="{% url 'etudiant_detail' e.pk %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
                                 <div>
@@ -62,11 +137,35 @@
                             </div>
                         {% endfor %}
                     </div>
+
+                    <!-- Tableau réservé à l'impression : N° + noms, sans email ni numéro étudiant -->
+                    <table class="students-print-table d-none">
+                        <thead>
+                            <tr>
+                                <th class="num">N°</th>
+                                <th>Noms &amp; prénoms</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for e in etudiants %}
+                            <tr>
+                                <td class="num">{{ forloop.counter }}</td>
+                                <td class="nom">{{ e.nom }} {{ e.prenom }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="2" class="text-center text-muted py-4">
+                                    Aucun étudiant dans cette promotion.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
 
-        <div class="col-lg-6">
+        <div class="col-lg-6 no-print">
             <div class="card shadow-sm h-100">
                 <div class="card-header fw-semibold"><i class="bi bi-book me-1"></i>Cours ({{ cours|length }})</div>
                 <div class="card-body p-0" style="max-height: 480px; overflow-y: auto;">
@@ -101,7 +200,7 @@
         </div>
     </div>
 
-    <div class="card shadow-sm mt-3">
+    <div class="card shadow-sm mt-3 no-print">
         <div class="card-header fw-semibold"><i class="bi bi-person-badge me-1"></i>Enseignants intervenant dans cette promotion ({{ enseignants|length }})</div>
         <div class="card-body p-0" style="max-height: 320px; overflow-y: auto;">
             <div class="list-group list-group-flush">

@@ -20,7 +20,12 @@
 
         /* ===== Impression : uniquement la fiche ===== */
     @media print {
-        #sidebar, .no-print, .breadcrumb, .alert { display: none !important; }
+        /* Masquer TOUTE l'interface de l'application : sidebar déjà masquée,
+           mais aussi la barre de navigation mobile (nav.navbar, visible à
+           l'impression sur les viewports < 992px), qui sinon s'imprime en
+           haut de la fiche, coupée par le bord de la page. */
+        #sidebar, nav.navbar, .navbar, header, footer, .offcanvas-backdrop,
+        .no-print, .breadcrumb, .alert { display: none !important; }
         body { background: #fff !important; -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
         .main-content { margin-left: 0 !important; min-height: 0 !important; }
         .container { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
@@ -74,7 +79,12 @@
         /* Bordure droite de la dernière colonne tracée explicitement */
         .fiche-table th:last-child, .fiche-table td:last-child { border-right: 1px solid #dee2e6 !important; }
 
-        @page { size: A4 portrait; margin: 12mm; }
+        /* Marge verticale généreuse : l'en-tête et le pied de page du
+           navigateur (titre de la page, date, n° de page) sont dessinés
+           DANS la marge haute/basse, et y sont rognés si celle-ci est
+           trop petite. 12 mm suffit rarement (surtout Safari et les
+           réglages de marges « Minimales »), d'où 16 mm haut et bas. */
+        @page { size: A4 portrait; margin: 16mm 12mm; }
         /* Forcer les bandes de couleur à l'impression */
         .fiche-table tbody tr:nth-of-type(odd) td { background-color: #ffffff !important; }
         .fiche-table tbody tr:nth-of-type(even) td { background-color: #f3f6f9 !important; }
@@ -176,6 +186,12 @@
             <button type="button" class="btn btn-primary" onclick="window.print()">
                 <i class="bi bi-printer me-1"></i>Imprimer la fiche
             </button>
+            <small class="d-block text-muted mt-2">
+                <i class="bi bi-info-circle me-1"></i>Astuce impression : pour une
+                fiche nette, décochez « En-têtes et pieds de page » dans l'aperçu.
+                Si vous les conservez (titre, date, n° de page), choisissez les
+                marges « Par défaut » et le format A4 pour qu'ils ne soient pas coupés.
+            </small>
         </div>
 
         <!-- Ajout d'étudiants au fur et à mesure -->
