@@ -118,7 +118,10 @@ Aucun examen à venir.
 {% for session in dernieres_sessions %}
 <a href="{% url 'session_detail' session.pk %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
 <span class="fw-semibold">{{ session.nom }}</span>
+<span>
 <span class="badge text-bg-light border">{{ session.get_type_session_display }}</span>
+{% if session.est_active %}<span class="badge text-bg-success ms-1">En cours</span>{% endif %}
+</span>
 </a>
 {% endfor %}
 </div>

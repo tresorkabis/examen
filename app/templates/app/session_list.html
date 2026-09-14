@@ -24,7 +24,14 @@
                     <tbody>
                         {% for s in sessions %}
                         <tr>
-                            <td>{{ s.nom }}</td>
+                            <td>
+                            {{ s.nom }}
+                            {% if s.est_active %}
+                                <span class="badge text-bg-success" title="Session d'examens en cours">
+                                    <i class="bi bi-check-circle me-1"></i>Session en cours
+                                </span>
+                            {% endif %}
+                        </td>
                             <td>{{ s.get_semestre_display }}</td>
                             <td>
                                 <span class="badge {% if s.type_session == 'rattrapage' %}bg-warning text-dark{% else %}bg-success{% endif %}">
@@ -34,6 +41,20 @@
                             <td>{{ s.date_debut }}</td>
                             <td>{{ s.date_fin }}</td>
                             <td class="text-end">
+                                <form method="post" action="{% url 'session_active' s.pk %}" class="d-inline">
+                                    {% csrf_token %}
+                                    {% if s.est_active %}
+                                        <button type="submit" class="btn btn-sm btn-outline-warning"
+                                                title="Retirer la mention « session en cours »">
+                                            <i class="bi bi-x-circle me-1"></i>Annuler
+                                        </button>
+                                    {% else %}
+                                        <button type="submit" class="btn btn-sm btn-outline-success"
+                                                title="Définir cette session comme session en cours">
+                                            <i class="bi bi-check-circle me-1"></i>Définir en cours
+                                        </button>
+                                    {% endif %}
+                                </form>
                                 <a href="{% url 'session_detail' s.pk %}" class="btn btn-sm btn-outline-primary">Détail</a>
                                 <a href="{% url 'session_update' s.pk %}" class="btn btn-sm btn-outline-secondary">Modifier</a>
                                 <a href="{% url 'session_delete' s.pk %}" class="btn btn-sm btn-outline-danger">Supprimer</a>

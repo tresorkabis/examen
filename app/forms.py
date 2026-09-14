@@ -74,6 +74,7 @@ class ExamenForm(BootstrapModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        instance = kwargs.get('instance')
         super().__init__(*args, **kwargs)
         self.fields['cours'].queryset = (Cours.objects
                                          .select_related('promotion', 'enseignant')
@@ -87,3 +88,8 @@ class ExamenForm(BootstrapModelForm):
         self.fields['cours'].label_from_instance = label_cours
         self.fields['date_examen'].input_formats = ['%Y-%m-%dT%H:%M']
         self.fields['salle'].initial = 'Local 1'
+        # À la création, présélectionner la session en cours (si définie).
+        if instance is None:
+            active = Session.objects.filter(est_active=True).first()
+            if active:
+                self.fields['session'].initial = active.pk

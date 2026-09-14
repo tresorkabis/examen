@@ -1,19 +1,3 @@
-"""
-URL configuration for config project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.1/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path
@@ -24,7 +8,7 @@ from app.views import (
     PromotionListView, PromotionCreateView, PromotionDetailView, PromotionUpdateView, PromotionDeleteView,
     EnseignantListView, EnseignantDetailView, EnseignantCreateView, EnseignantUpdateView, EnseignantDeleteView,
     SessionListView, SessionDetailView, SessionCreateView, SessionUpdateView, SessionDeleteView,
-    session_participants_pdf,
+    session_participants_pdf, session_definir_active,
     CoursListView, CoursDetailView, CoursCreateView, CoursUpdateView, CoursDeleteView,
     ExamenListView, ExamenCreateView, ExamenUpdateView, ExamenDeleteView,
     fiche_cote, examen_inscrire, examen_desinscrire, examen_inscrire_tous,
@@ -67,6 +51,7 @@ urlpatterns = [
     path('sessions/add/', SessionCreateView.as_view(), name='session_create'),
     path('sessions/<int:pk>/edit/', SessionUpdateView.as_view(), name='session_update'),
     path('sessions/<int:pk>/delete/', SessionDeleteView.as_view(), name='session_delete'),
+    path('sessions/<int:pk>/active/', session_definir_active, name='session_active'),
     
     # URLs Cours
     path('cours/', CoursListView.as_view(), name='cours_list'),

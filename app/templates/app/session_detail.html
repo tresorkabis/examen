@@ -23,6 +23,11 @@
         <span class="badge {% if session.type_session == 'rattrapage' %}bg-warning text-dark{% else %}bg-success{% endif %}">
             {{ session.get_type_session_display }}
         </span>
+        {% if session.est_active %}
+        <span class="badge text-bg-success" title="Session d'examens en cours">
+            <i class="bi bi-check-circle me-1"></i>Session en cours
+        </span>
+        {% endif %}
         <span class="text-muted ms-2">
             <i class="bi bi-calendar-range me-1"></i>
             Du {{ session.date_debut|date:"d/m/Y" }} au {{ session.date_fin|date:"d/m/Y" }}

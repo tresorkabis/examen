@@ -609,6 +609,29 @@ class SessionDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     success_message = "La session « %(object)s » a été supprimée."
 
 
+@login_required
+def session_definir_active(request, pk):
+    """Marque une session comme « session en cours » (une seule à la fois).
+
+    Simple bascule : le premier POST active la session (et désactive les
+    autres via Session.save), le suivant retire la mention.
+    """
+    session = get_object_or_404(Session, pk=pk)
+    if request.method == 'POST':
+        session.est_active = not session.est_active
+        session.save()
+        if session.est_active:
+            messages.success(
+                request,
+                f"La session « {session.nom} » est désormais la session en cours.")
+        else:
+            messages.info(
+                request,
+                f"La session « {session.nom} » n'est plus marquée "
+                "comme session en cours.")
+    return redirect('session_list')
+
+
 # --- CRUD COURS ---
 class CoursListView(SafePaginationMixin, ListView):
     """Liste des cours, filtrable par recherche, promotion et enseignant."""

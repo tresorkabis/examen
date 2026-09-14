@@ -15,6 +15,7 @@ from django.utils import timezone
 
 from .models import (Promotion, Enseignant, Etudiant, Cours, Session,
                      Examen, Inscription)
+from .forms import ExamenForm
 
 
 class BaseDataMixin:
@@ -630,6 +631,91 @@ class ExamenImpressionTests(BaseDataMixin, TestCase):
         contenu = reponse.content.decode()
         self.assertIn('Le Secrétaire du Jury', contenu)
         self.assertIn('Le Président du Jury', contenu)
+
+
+class SessionActiveTests(TestCase):
+    """Définition de la « session en cours » (une seule active à la fois)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.s1 = Session.objects.create(
+            nom='SESSION 1', semestre=1, type_session='normale',
+            date_debut=date(2026, 1, 5), date_fin=date(2026, 2, 5))
+        cls.s2 = Session.objects.create(
+            nom='SESSION 2', semestre=2, type_session='normale',
+            date_debut=date(2026, 6, 1), date_fin=date(2026, 7, 5),
+            est_active=True)
+        cls.user = User.objects.create_user(
+            'admin', 'admin@example.com', 'pass12345')
+
+    def _connexion(self):
+        self.client.force_login(self.user)
+
+    def test_une_seule_session_active(self):
+        s3 = Session.objects.create(
+            nom='SESSION 3', semestre=1, type_session='rattrapage',
+            date_debut=date(2026, 8, 1), date_fin=date(2026, 8, 15),
+            est_active=True)
+        self.s2.refresh_from_db()
+        self.assertFalse(self.s2.est_active)
+        self.assertTrue(s3.est_active)
+        self.assertEqual(Session.objects.filter(est_active=True).count(), 1)
+
+    def test_defaut_inactif(self):
+        session = Session.objects.create(
+            nom='SESSION 4', semestre=2, type_session='normale',
+            date_debut=date(2026, 9, 1), date_fin=date(2026, 9, 15))
+        self.assertFalse(session.est_active)
+
+    def test_vue_bascule_active(self):
+        self._connexion()
+        response = self.client.post(
+            reverse('session_active', kwargs={'pk': self.s1.pk}))
+        self.assertRedirects(response, reverse('session_list'))
+        self.s1.refresh_from_db()
+        self.s2.refresh_from_db()
+        self.assertTrue(self.s1.est_active)
+        self.assertFalse(self.s2.est_active)
+
+    def test_vue_annule(self):
+        self._connexion()
+        self.client.post(reverse('session_active', kwargs={'pk': self.s2.pk}))
+        self.s2.refresh_from_db()
+        self.assertFalse(self.s2.est_active)
+
+    def test_anonyme_redirige_vers_login(self):
+        response = self.client.post(
+            reverse('session_active', kwargs={'pk': self.s1.pk}))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_inexistant_renvoie_404(self):
+        self._connexion()
+        response = self.client.post(
+            reverse('session_active', kwargs={'pk': 9999}))
+        self.assertEqual(response.status_code, 404)
+
+    def test_liste_affiche_badge_session_en_cours(self):
+        response = self.client.get(reverse('session_list'))
+        contenu = response.content.decode()
+        self.assertIn('Session en cours', contenu)
+        self.assertIn('Définir en cours', contenu)
+        self.assertIn('Annuler', contenu)
+
+    def test_formulaire_examen_preselectionne_session_active(self):
+        form = ExamenForm()
+        self.assertEqual(form.fields['session'].initial, self.s2.pk)
+
+    def test_formulaire_examen_edition_preserve_session(self):
+        promotion = Promotion.objects.create(nom='L3 SCF')
+        cours = Cours.objects.create(
+            nom='Mathématiques', coefficient=1, promotion=promotion)
+        examen = Examen.objects.create(
+            cours=cours, session=self.s1,
+            date_examen=timezone.make_aware(datetime(2026, 1, 15, 8, 0)))
+        form = ExamenForm(instance=examen)
+        # En édition, on conserve la session déjà attachée à l'examen.
+        self.assertEqual(form.fields['session'].initial, self.s1.pk)
 
 
 class MergePromotionsCommandTest(TestCase):

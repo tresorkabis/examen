@@ -72,9 +72,21 @@ class Session(models.Model):
     type_session = models.CharField(max_length=20, choices=TYPE_CHOICES)
     date_debut = models.DateField()
     date_fin = models.DateField()
+    est_active = models.BooleanField(
+        default=False, verbose_name='Session en cours',
+        help_text="Désigne la session d'examens actuellement en cours. "
+                  "Une seule session peut être active à la fois.")
 
     def __str__(self):
         return f"{self.nom} - Sem {self.semestre} ({self.get_type_session_display()})"
+
+    def save(self, *args, **kwargs):
+        """Garantit l'unicité : si cette session devient active, toutes les
+        autres sessions actives sont désactivées (une seule à la fois)."""
+        if self.est_active:
+            Session.objects.filter(est_active=True).exclude(pk=self.pk)\
+                .update(est_active=False)
+        super().save(*args, **kwargs)
 
     class Meta:
         ordering = ['date_debut', 'nom']
