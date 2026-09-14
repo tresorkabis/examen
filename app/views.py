@@ -716,6 +716,17 @@ class ExamenListView(SafePaginationMixin, ListView):
             qs = qs.filter(session__pk=session)
             self.filters['session'] = int(session)
 
+        statut = params.get('statut', '').strip()
+        if statut == 'note':
+            qs = qs.filter(est_note=True)
+            self.filters['statut'] = 'note'
+        elif statut == 'non-note':
+            qs = qs.filter(est_note=False)
+            self.filters['statut'] = 'non-note'
+        elif statut == 'a-venir':
+            qs = qs.filter(date_examen__gte=timezone.now())
+            self.filters['statut'] = 'a-venir'
+
         tris_autorises = {
             'cours': ('cours__nom', 'date_examen'),
             '-cours': ('-cours__nom', '-date_examen'),
@@ -733,6 +744,14 @@ class ExamenListView(SafePaginationMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # Statistiques d'en-tête : total, notés, en attente, à venir
+        # (une seule requête d'agrégation, indépendante des filtres).
+        context['stats_examens'] = Examen.objects.aggregate(
+            total=Count('id'),
+            notes=Count('id', filter=Q(est_note=True)),
+            en_attente=Count('id', filter=Q(est_note=False)),
+            a_venir=Count('id', filter=Q(date_examen__gte=timezone.now())),
+        )
         # Options des filtres : uniquement les valeurs réellement utilisées
         context['filter_promotions'] = (Promotion.objects
                                         .filter(cours__examen__isnull=False)
@@ -916,3 +935,44 @@ def _retour_examen(request, examen):
     if nxt.startswith(f'/examens/{examen.pk}/edit/'):
         return nxt
     return f'/examens/{examen.pk}/fiche/'
+
+
+@login_required
+def examen_marquer_notee(request, pk):
+    """Signale qu'un examen est noté (ou retire cette mention), depuis la liste.
+
+    Une simple bascule : le premier POST coche « est_note », le suivant le
+    décoche. « next » (envoyé par le formulaire de la liste) permet de revenir
+    sur la même page en conservant filtres, tri et pagination ; toute valeur
+    ne commençant pas par « /examens/ » (redirection ouverte) est ignorée.
+    """
+    examen = get_object_or_404(Examen, pk=pk)
+    if request.method == 'POST':
+        examen.est_note = not examen.est_note
+        examen.save(update_fields=['est_note'])
+        libelle = f"l'examen « {examen.cours.nom} » ({examen.session})"
+        if examen.est_note:
+            messages.success(request, f"{libelle} a été signalé comme noté.")
+        else:
+            messages.info(request, f"{libelle} n'est plus marqué comme noté.")
+        nxt = request.POST.get('next', '')
+        if nxt.startswith('/examens/'):
+            return HttpResponseRedirect(nxt)
+    return redirect('examen_list')
+
+
+def examen_non_notes_impression(request):
+    """Page imprimable : liste des cours (examens) dont les copies ne sont
+    pas encore corrigées (est_note=False), tous confondus, triés par cours.
+
+    Document de suivi pour le secrétariat / chef de département : tableau
+    compact, total et zone de signature, conçu pour l'impression (même
+    démarche que la fiche de cote).
+    """
+    examens = (Examen.objects
+               .select_related('cours__promotion', 'cours__enseignant', 'session')
+               .filter(est_note=False)
+               .order_by('cours__nom', 'cours__promotion__nom',
+                         'session__date_debut', 'date_examen'))
+    return render(request, 'app/examen_non_notes_print.html',
+                  {'examens': examens, 'total': examens.count()})

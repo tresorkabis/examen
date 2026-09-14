@@ -2,18 +2,73 @@
 
 {% block title %}Liste des Examens{% endblock %}
 
+{% block extra_style %}
+<style>
+    /* ===== Cartes statistiques de la page Examens ===== */
+    .bg-exam-total   { background: linear-gradient(135deg, #0d6efd, #0a58ca); }
+    .bg-exam-note    { background: linear-gradient(135deg, #198754, #146c43); }
+    .bg-exam-pending { background: linear-gradient(135deg, #fd7e14, #e8590c); }
+    .bg-exam-upcoming{ background: linear-gradient(135deg, #6f42c1, #59359d); }
+</style>
+{% endblock %}
+
 {% block content %}
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>Liste des Examens</h2>
-        <a href="{% url 'examen_create' %}" class="btn btn-primary">
-            <i class="bi bi-plus-lg me-1"></i>Ajouter un Examen
-        </a>
+        <div class="d-flex gap-2">
+            <a href="{% url 'examen_non_notes_print' %}" class="btn btn-outline-secondary"
+               title="Imprimer la liste des cours dont les copies ne sont pas encore corrigées">
+                <i class="bi bi-printer me-1"></i>Imprimer les non-notés
+            </a>
+            <a href="{% url 'examen_create' %}" class="btn btn-primary">
+                <i class="bi bi-plus-lg me-1"></i>Ajouter un Examen
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-3 g-md-4 mb-3">
+        <div class="col-6 col-xl-3">
+            <a class="stat-card bg-exam-total p-3 p-md-4" href="{% url 'examen_list' %}"
+               aria-label="Tous les examens">
+                <div class="stat-icon"><i class="bi bi-file-earmark-text"></i></div>
+                <div class="stat-value">{{ stats_examens.total }}</div>
+                <div class="stat-label">Examens</div>
+                <div class="stat-foot">Tous les examens<i class="bi bi-arrow-right ms-1"></i></div>
+            </a>
+        </div>
+        <div class="col-6 col-xl-3">
+            <a class="stat-card bg-exam-note p-3 p-md-4" href="{% url 'examen_list' %}?statut=note"
+               aria-label="Examens notés">
+                <div class="stat-icon"><i class="bi bi-check-circle"></i></div>
+                <div class="stat-value">{{ stats_examens.notes }}</div>
+                <div class="stat-label">Notés</div>
+                <div class="stat-foot">Copies corrigées<i class="bi bi-arrow-right ms-1"></i></div>
+            </a>
+        </div>
+        <div class="col-6 col-xl-3">
+            <a class="stat-card bg-exam-pending p-3 p-md-4" href="{% url 'examen_list' %}?statut=non-note"
+               aria-label="Examens en attente de correction">
+                <div class="stat-icon"><i class="bi bi-hourglass-split"></i></div>
+                <div class="stat-value">{{ stats_examens.en_attente }}</div>
+                <div class="stat-label">En attente</div>
+                <div class="stat-foot">Non notés<i class="bi bi-arrow-right ms-1"></i></div>
+            </a>
+        </div>
+        <div class="col-6 col-xl-3">
+            <a class="stat-card bg-exam-upcoming p-3 p-md-4" href="{% url 'examen_list' %}?statut=a-venir"
+               aria-label="Examens à venir">
+                <div class="stat-icon"><i class="bi bi-calendar-event"></i></div>
+                <div class="stat-value">{{ stats_examens.a_venir }}</div>
+                <div class="stat-label">À venir</div>
+                <div class="stat-foot">Filtrer la liste<i class="bi bi-arrow-right ms-1"></i></div>
+            </a>
+        </div>
     </div>
 
     <div class="card shadow-sm mb-3">
         <div class="card-body py-2">
             <form method="get" class="row g-2 align-items-center">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <input type="search" name="q" value="{{ filters.q|default:'' }}" class="form-control"
                            placeholder="Rechercher un examen (cours, promotion, enseignant, session)…"
                            aria-label="Rechercher un examen">
@@ -43,6 +98,15 @@
                         {% for s in filter_sessions %}
                             <option value="{{ s.pk }}" {% if filters.session == s.pk %}selected{% endif %}>{{ s.nom|truncatechars:30 }}</option>
                         {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="statut" class="form-select" aria-label="Filtrer par statut"
+                            onchange="this.form.submit()">
+                        <option value="">Tous les statuts</option>
+                        <option value="note" {% if filters.statut == 'note' %}selected{% endif %}>Notés</option>
+                        <option value="non-note" {% if filters.statut == 'non-note' %}selected{% endif %}>Non notés</option>
+                        <option value="a-venir" {% if filters.statut == 'a-venir' %}selected{% endif %}>À venir</option>
                     </select>
                 </div>
                 <div class="col-md-2 d-flex gap-2">
@@ -92,18 +156,45 @@
                                 </a>
                             </th>
                             <th class="text-center">Nombre de participant</th>
+                            <th class="text-center">Statut</th>
                             <th class="text-end">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for e in examens %}
                         <tr>
-                            <td class="fw-semibold">{{ e.cours.nom }}</td>
+                            <td class="fw-semibold">{{ e.cours.nom }}{% if e.cours.enseignant %} ({{ e.cours.enseignant.nom }}){% endif %}</td>
                             <td>{{ e.cours.promotion }}</td>
                             <td>{{ e.session }}</td>
-                            <td>{{ e.date_examen|date:"d/m/Y H:i" }}</td>
+                            <td>{{ e.date_examen|date:"d/m/Y" }}</td>
                             <td class="text-center"><span class="badge text-bg-secondary">{{ e.nb_inscriptions|default:0 }}</span></td>
+                            <td class="text-center">
+                                {% if e.est_note %}
+                                    <span class="badge text-bg-success" title="Les copies de cet examen ont été corrigées">
+                                        <i class="bi bi-check-circle me-1"></i>Noté
+                                    </span>
+                                {% else %}
+                                    <span class="badge text-bg-secondary" title="Examen en attente de correction">
+                                        Non noté
+                                    </span>
+                                {% endif %}
+                            </td>
                             <td class="text-end">
+                                <form method="post" action="{% url 'examen_notee' e.pk %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    {% if e.est_note %}
+                                        <button type="submit" class="btn btn-sm btn-outline-warning"
+                                                title="Retirer la mention « noté » de cet examen">
+                                            <i class="bi bi-x-circle me-1"></i>Annuler noté
+                                        </button>
+                                    {% else %}
+                                        <button type="submit" class="btn btn-sm btn-outline-success"
+                                                title="Signaler que les copies de cet examen sont corrigées">
+                                            <i class="bi bi-check-circle me-1"></i>Marquer noté
+                                        </button>
+                                    {% endif %}
+                                </form>
                                 <a href="{% url 'examen_fiche' e.pk %}" class="btn btn-sm btn-outline-primary" title="Fiche de cote">
                                     <i class="bi bi-journal-text me-1"></i>Fiche
                                 </a>
@@ -113,7 +204,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="6" class="text-center text-muted py-4">
+                            <td colspan="7" class="text-center text-muted py-4">
                                 {% if filters %}Aucun examen ne correspond aux filtres.{% else %}Aucun examen enregistré. Créez-en un pour établir une fiche de cote.{% endif %}
                             </td>
                         </tr>

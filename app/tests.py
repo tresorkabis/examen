@@ -336,6 +336,34 @@ class ExamenListFilterTests(TestCase):
         self.assertIn('Langage de programmation mobile', contenu)
         self.assertNotIn('Ethique & Deontologie', contenu)
 
+    def test_cours_affiche_enseignant_entre_parentheses(self):
+        """La colonne Cours affiche le nom de l'enseignant entre parenthèses."""
+        response = self._liste({})
+        self.assertEqual(response.status_code, 200)
+        contenu = response.content.decode()
+        self.assertIn('Langage de programmation mobile (KABISAYI)', contenu)
+        self.assertIn('Ethique &amp; Deontologie (MUJINGA)', contenu)
+
+    def test_cours_sans_enseignant_sans_parentheses(self):
+        cours = Cours.objects.create(
+            nom='Cours sans titulaire', coefficient=1, promotion=self.promo1)
+        Examen.objects.create(
+            cours=cours, session=self.sess1,
+            date_examen=timezone.make_aware(datetime(2026, 2, 2, 8, 0)))
+        response = self._liste({})
+        contenu = response.content.decode()
+        self.assertIn('Cours sans titulaire', contenu)
+        self.assertNotIn('Cours sans titulaire (', contenu)
+
+    def test_date_sans_heure(self):
+        """La colonne Date n'affiche que la date, jamais l'heure."""
+        response = self._liste({})
+        contenu = response.content.decode()
+        self.assertIn('20/01/2026', contenu)
+        self.assertIn('05/06/2026', contenu)
+        self.assertNotIn('20/01/2026 08', contenu)
+        self.assertNotIn('05/06/2026 08', contenu)
+
     def test_filtre_promotion(self):
         response = self._liste({'promotion': str(self.promo1.pk)})
         contenu = response.content.decode()
@@ -410,6 +438,200 @@ class ExamenListFilterTests(TestCase):
             cours=self.cours1, session=self.sess2,
             date_examen=timezone.make_aware(datetime(2026, 6, 5, 10, 0)))
         self.assertIsNotNone(examen.pk)
+
+    def test_stats_en_tete(self):
+        """Les cartes d'en-tête affichent total, notés, en attente et à venir."""
+        from datetime import timedelta
+        self.ex1.est_note = True
+        self.ex1.save(update_fields=['est_note'])
+        Examen.objects.create(
+            cours=self.cours1, session=self.sess2,
+            date_examen=timezone.now() + timedelta(days=30))
+        response = self._liste({})
+        self.assertEqual(response.status_code, 200)
+        stats = response.context['stats_examens']
+        self.assertEqual(stats['total'], 3)
+        self.assertEqual(stats['notes'], 1)
+        self.assertEqual(stats['en_attente'], 2)
+        self.assertEqual(stats['a_venir'], 1)
+        contenu = response.content.decode()
+        for mot in ('Examens', 'Notés', 'En attente', 'À venir'):
+            self.assertIn(mot, contenu)
+        # Les cartes pointent vers la liste, préservant l'ergonomie.
+        self.assertIn('?statut=note', contenu)
+        self.assertIn('?statut=non-note', contenu)
+        self.assertIn('?statut=a-venir', contenu)
+
+    def test_filtre_a_venir(self):
+        """« ?statut=a-venir » ne garde que les examens dont la date est à venir."""
+        from datetime import timedelta
+        cours_futur = Cours.objects.create(
+            nom='Cours à venir', coefficient=1,
+            enseignant=self.ens1, promotion=self.promo1)
+        Examen.objects.create(
+            cours=cours_futur, session=self.sess2,
+            date_examen=timezone.now() + timedelta(days=30))
+        response = self._liste({'statut': 'a-venir'})
+        self.assertEqual(response.status_code, 200)
+        contenu = response.content.decode()
+        # Seul l'examen futur subsiste (ex1 et ex2 sont passés).
+        self.assertIn('1 examen(s) sur 3 correspondent aux filtres', contenu)
+        self.assertIn('Cours à venir', contenu)
+        self.assertNotIn('Langage de programmation mobile', contenu)
+        self.assertNotIn('Ethique &amp; Deontologie', contenu)
+        # ... et le filtre reste sélectionné dans la barre de filtres.
+        self.assertIn('selected>À venir', contenu)
+        self.assertEqual(response.context['filters']['statut'], 'a-venir')
+
+    def test_filtre_statut(self):
+        """« ?statut=note » ne garde que les examens marqués comme notés."""
+        self.ex1.est_note = True
+        self.ex1.save(update_fields=['est_note'])
+        response = self._liste({'statut': 'note'})
+        contenu = response.content.decode()
+        self.assertIn('Langage de programmation mobile', contenu)
+        self.assertNotIn('Ethique &amp; Deontologie', contenu)
+        # L'inverse exclut l'examen noté.
+        response = self._liste({'statut': 'non-note'})
+        contenu = response.content.decode()
+        self.assertIn('Ethique &amp; Deontologie', contenu)
+        self.assertNotIn('Langage de programmation mobile', contenu)
+
+
+class ExamenNoteTests(BaseDataMixin, TestCase):
+    """Bascule « examen noté » depuis la liste des examens (/examens/)."""
+
+    def test_par_defaut_non_note(self):
+        self.assertFalse(Examen.objects.get(pk=self.examen.pk).est_note)
+
+    def test_anonyme_redirige_vers_login(self):
+        response = self.client.post(
+            reverse('examen_notee', kwargs={'pk': self.examen.pk}))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_marquer_puis_demarquer(self):
+        self._connexion()
+        url = reverse('examen_notee', kwargs={'pk': self.examen.pk})
+        response = self.client.post(url)
+        self.assertRedirects(response, reverse('examen_list'))
+        self.assertTrue(Examen.objects.get(pk=self.examen.pk).est_note)
+        # Second POST : on retire la mention.
+        self.client.post(url)
+        self.assertFalse(Examen.objects.get(pk=self.examen.pk).est_note)
+
+    def test_get_ne_modifie_pas_mais_redirige(self):
+        self._connexion()
+        response = self.client.get(
+            reverse('examen_notee', kwargs={'pk': self.examen.pk}))
+        self.assertRedirects(response, reverse('examen_list'))
+        self.assertFalse(Examen.objects.get(pk=self.examen.pk).est_note)
+
+    def test_next_preserve_filtres_tri_et_page(self):
+        self._connexion()
+        url = reverse('examen_notee', kwargs={'pk': self.examen.pk})
+        cible = '/examens/?tri=cours&page=2'
+        response = self.client.post(url, {'next': cible})
+        self.assertRedirects(response, cible, fetch_redirect_response=False)
+        self.assertTrue(Examen.objects.get(pk=self.examen.pk).est_note)
+
+    def test_next_externe_ignore(self):
+        """Une valeur de « next » externe ne doit pas produire de redirection ouverte."""
+        self._connexion()
+        url = reverse('examen_notee', kwargs={'pk': self.examen.pk})
+        response = self.client.post(url, {'next': 'https://example.com/'})
+        self.assertRedirects(response, reverse('examen_list'))
+
+    def test_inexistant_renvoie_404(self):
+        self._connexion()
+        response = self.client.post(
+            reverse('examen_notee', kwargs={'pk': 9999}))
+        self.assertEqual(response.status_code, 404)
+
+    def test_liste_affiche_badge_note(self):
+        self.examen.est_note = True
+        self.examen.save(update_fields=['est_note'])
+        response = self.client.get(reverse('examen_list'))
+        self.assertEqual(response.status_code, 200)
+        contenu = response.content.decode()
+        self.assertIn('Noté', contenu)
+        self.assertIn('Annuler noté', contenu)
+
+    def test_liste_affiche_badge_non_note(self):
+        response = self.client.get(reverse('examen_list'))
+        self.assertEqual(response.status_code, 200)
+        contenu = response.content.decode()
+        self.assertIn('Non noté', contenu)
+        self.assertIn('Marquer noté', contenu)
+
+
+class ExamenImpressionTests(BaseDataMixin, TestCase):
+    """Page imprimable de la liste des cours (examens) non notés."""
+
+    def _examen_supplementaire(self):
+        session2 = Session.objects.create(
+            nom='SESSION RATTRAPAGE', semestre=1, type_session='rattrapage',
+            date_debut=date(2026, 8, 1), date_fin=date(2026, 8, 15))
+        return Examen.objects.create(
+            cours=self.cours, session=session2,
+            date_examen=timezone.make_aware(datetime(2026, 8, 10, 9, 0)))
+
+    def test_page_accessible_sans_connexion(self):
+        reponse = self.client.get(reverse('examen_non_notes_print'))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'Liste des cours non notés')
+
+    def test_bouton_present_sur_la_liste_des_examens(self):
+        reponse = self.client.get(reverse('examen_list'))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'Imprimer les non-notés')
+        self.assertContains(reponse, reverse('examen_non_notes_print'))
+
+    def test_ne_liste_que_les_non_notes(self):
+        self.examen.est_note = True
+        self.examen.save(update_fields=['est_note'])
+        autre = self._examen_supplementaire()
+        reponse = self.client.get(reverse('examen_non_notes_print'))
+        self.assertEqual(reponse.status_code, 200)
+        examens = list(reponse.context['examens'])
+        self.assertEqual([e.pk for e in examens], [autre.pk])
+        self.assertContains(reponse, 'Nombre total : <strong>1</strong>')
+
+    def test_total_et_colonnes(self):
+        reponse = self.client.get(reverse('examen_non_notes_print'))
+        contenu = reponse.content.decode()
+        for colonne in ('Cours', 'Promotion', 'Enseignant', 'Date',
+                        'Nombre total'):
+            self.assertIn(colonne, contenu)
+        self.assertIn('window.print()', contenu)
+
+    def test_sans_session_ni_heure(self):
+        """La session est retirée du tableau et la date est affichée sans l'heure."""
+        autre = self._examen_supplementaire()
+        reponse = self.client.get(reverse('examen_non_notes_print'))
+        contenu = reponse.content.decode()
+        # La colonne « Session » n'existe plus : aucun nom de session n'apparaît.
+        self.assertNotIn('RATTRAPAGE', contenu)
+        # L'examen supplémentaire est daté du 10/08/2026 à 09h00 :
+        # seule la date doit apparaître, jamais l'heure.
+        self.assertIn('10/08/2026', contenu)
+        self.assertNotIn('09:00', contenu)
+        self.assertNotIn('08:00', contenu)
+
+    def test_pas_de_colonne_local(self):
+        """Aucun local (salle) ne doit être imprimé, même renseigné en base."""
+        reponse = self.client.get(reverse('examen_non_notes_print'))
+        contenu = reponse.content.decode()
+        # self.examen porte « Local 1 » : il ne doit plus apparaître.
+        self.assertNotIn('Local 1', contenu)
+
+    def test_signatures_du_jury(self):
+        reponse = self.client.get(reverse('examen_non_notes_print'))
+        contenu = reponse.content.decode()
+        self.assertIn('Le Secrétaire du Jury', contenu)
+        self.assertIn('Le Président du Jury', contenu)
+
+
 class MergePromotionsCommandTest(TestCase):
     """Vérifie la fusion de promotions (ex. « L2 SD A » + « L2 TS A » → « L2 SDA »)."""
 

@@ -27,7 +27,8 @@ from app.views import (
     session_participants_pdf,
     CoursListView, CoursDetailView, CoursCreateView, CoursUpdateView, CoursDeleteView,
     ExamenListView, ExamenCreateView, ExamenUpdateView, ExamenDeleteView,
-    fiche_cote, examen_inscrire, examen_desinscrire, examen_inscrire_tous
+    fiche_cote, examen_inscrire, examen_desinscrire, examen_inscrire_tous,
+    examen_marquer_notee, examen_non_notes_impression
 )
 
 urlpatterns = [
@@ -75,6 +76,7 @@ urlpatterns = [
     path('cours/<int:pk>/delete/', CoursDeleteView.as_view(), name='cours_delete'),
 
     # URLs Examen
+    path('examens/imprimer/non-notes/', examen_non_notes_impression, name='examen_non_notes_print'),
     path('examens/', ExamenListView.as_view(), name='examen_list'),
     path('examens/add/', ExamenCreateView.as_view(), name='examen_create'),
     path('examens/<int:pk>/edit/', ExamenUpdateView.as_view(), name='examen_update'),
@@ -83,4 +85,5 @@ urlpatterns = [
     path('examens/<int:pk>/inscrire/', examen_inscrire, name='examen_inscrire'),
     path('examens/<int:pk>/inscrire-tous/', examen_inscrire_tous, name='examen_inscrire_tous'),
     path('examens/<int:pk>/desinscrire/<int:inscription_pk>/', examen_desinscrire, name='examen_desinscrire'),
+    path('examens/<int:pk>/notee/', examen_marquer_notee, name='examen_notee'),
 ]

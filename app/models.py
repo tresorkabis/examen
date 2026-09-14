@@ -84,6 +84,10 @@ class Examen(models.Model):
     session = models.ForeignKey(Session, on_delete=models.CASCADE)
     date_examen = models.DateTimeField()
     salle = models.CharField(max_length=50, blank=True, null=True)
+    est_note = models.BooleanField(
+        default=False, verbose_name='Noté',
+        help_text="Indique si les copies de cet examen ont été corrigées "
+                  "(l'examen est alors signalé comme noté).")
 
     def __str__(self):
         return f"{self.cours} - {self.session} ({self.date_examen})"

@@ -22,6 +22,7 @@ BREADCRUMB_MAP = {
     "session_list": ("Sessions", []),
     "session_detail": ("Détail", [("Sessions", "session_list")]),
     "examen_list": ("Examens", []),
+    "examen_non_notes_print": ("Impression des non-notés", [("Examens", "examen_list")]),
 
     # Créations
     "etudiant_create": ("Nouvel Étudiant", [("Étudiants", "etudiant_list")]),

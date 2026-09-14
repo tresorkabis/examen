@@ -1,0 +1,103 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Liste des cours non notés{% endblock %}
+
+{% block extra_style %}
+<style>
+    /* ===== Page d'impression des cours non notés ===== */
+    .print-doc { max-width: 900px; margin: 0 auto; }
+    .print-header { text-align: center; border-bottom: 3px double #212529; padding-bottom: .75rem; margin-bottom: 1rem; }
+    .print-title { font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 1.15rem; }
+    .print-sheet-title { font-weight: 700; margin: 1.25rem 0 .75rem; }
+    .print-nb { font-weight: 600; }
+
+    /* ===== Impression : uniquement le document ===== */
+    @media print {
+        #sidebar, nav.navbar, .breadcrumb, .alert, .no-print { display: none !important; }
+        body { background: #fff !important; -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
+        .main-content { margin-left: 0 !important; min-height: 0 !important; }
+        .container { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
+        .card { border: none !important; box-shadow: none !important; }
+        .card-body { padding: 0 !important; }
+        html, body { overflow: visible !important; }
+        .table-responsive { overflow: visible !important; }
+
+        /* Tableau à largeur fixe pour éviter tout débordement à l'impression */
+        .print-table { width: 100% !important; table-layout: fixed !important; border-collapse: collapse !important; }
+        .print-table th, .print-table td { padding: .3rem .35rem; font-size: 9.5pt; }
+        .print-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        :is(.print-table) th { background-color: #f1f3f5 !important; -webkit-print-color-adjust: exact !important; }
+        .print-table td.num { text-align: center; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="print-doc">
+    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+        <h2>Liste des cours non notés</h2>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-primary" onclick="window.print()">
+                <i class="bi bi-printer me-1"></i>Imprimer
+            </button>
+            <a href="{% url 'examen_list' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Retour
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="print-header">
+                <div class="print-title">Liste des cours non notés</div>
+                <div class="small mt-1">État des examens dont les copies n'ont pas encore été corrigées
+                    — édité le {% now 'd/m/Y' %} à {% now 'H:i' %}.</div>
+            </div>
+
+            {% if examens %}
+            <p class="print-nb">Nombre total : <strong>{{ total }}</strong> cours non noté{{ total|pluralize }}.</p>
+
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle print-table">
+                    <thead>
+                        <tr>
+                            <th class="text-center" style="width:5%">N°</th>
+                            <th style="width:32%">Cours</th>
+                            <th style="width:20%">Promotion</th>
+                            <th style="width:26%">Enseignant</th>
+                            <th style="width:17%">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for e in examens %}
+                        <tr>
+                            <td class="num">{{ forloop.counter }}</td>
+                            <td>{{ e.cours.nom }}</td>
+                            <td>{{ e.cours.promotion.nom }}</td>
+                            <td>{{ e.cours.enseignant|default:"—" }}</td>
+                            <td>{{ e.date_examen|date:"d/m/Y" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-center text-muted py-4 mb-0">
+                <i class="bi bi-check-circle fs-3 d-block mb-2"></i>
+                Aucun cours non noté : tous les examens ont été corrigés.
+            </p>
+            {% endif %}
+
+            <!-- Signatures du jury -->
+            <div class="row mt-5 no-print">
+                <div class="col-6 text-center">
+                    <div class="border-top d-inline-block px-5 pt-1">Le Secrétaire du Jury</div>
+                </div>
+                <div class="col-6 text-center">
+                    <div class="border-top d-inline-block px-5 pt-1">Le Président du Jury</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
