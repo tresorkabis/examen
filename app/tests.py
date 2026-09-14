@@ -7,6 +7,7 @@ l'authentification (accès en écriture protégé).
 from datetime import date, datetime
 from io import BytesIO
 
+from django.core.cache import cache
 from django.core.management import call_command
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -633,6 +634,82 @@ class ExamenImpressionTests(BaseDataMixin, TestCase):
         self.assertIn('Le Président du Jury', contenu)
 
 
+class DashboardSessionActiveTests(TestCase):
+    """Les statistiques du tableau de bord sont liées à la session en cours."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sess_inactive = Session.objects.create(
+            nom='SESSION ANCIENNE', semestre=1, type_session='normale',
+            date_debut=date(2026, 1, 5), date_fin=date(2026, 2, 5))
+        cls.sess_active = Session.objects.create(
+            nom='SESSION EN COURS', semestre=2, type_session='normale',
+            date_debut=date(2026, 6, 1), date_fin=date(2026, 6, 20),
+            est_active=True)
+        cls.promo1 = Promotion.objects.create(nom='L1')
+        cls.promo2 = Promotion.objects.create(nom='L2')
+        cls.ens1 = Enseignant.objects.create(
+            nom='KARIM', prenom='Ali', email='a.karim@example.com')
+        cls.ens2 = Enseignant.objects.create(
+            nom='LAMBER', prenom='Benoit', email='b.lamber@example.com')
+        cls.cours1 = Cours.objects.create(
+            nom='Cours ancien', coefficient=1,
+            enseignant=cls.ens1, promotion=cls.promo1)
+        cls.cours2 = Cours.objects.create(
+            nom='Cours actif', coefficient=1,
+            enseignant=cls.ens2, promotion=cls.promo2)
+        cls.ex1 = Examen.objects.create(
+            cours=cls.cours1, session=cls.sess_inactive,
+            date_examen=timezone.make_aware(datetime(2026, 1, 15, 8, 0)))
+        cls.ex2 = Examen.objects.create(
+            cours=cls.cours2, session=cls.sess_active,
+            date_examen=timezone.make_aware(datetime(2026, 6, 10, 8, 0)))
+        cls.etu1 = Etudiant.objects.create(
+            nom='NDAYE', prenom='Jean',
+            email='j.ndaye@example.com',
+            numero_etudiant='L1-001', promotion=cls.promo1)
+        cls.etu2 = Etudiant.objects.create(
+            nom='KAMANDA', prenom='Marie',
+            email='m.kamanda@example.com',
+            numero_etudiant='L2-001', promotion=cls.promo2)
+        Inscription.objects.create(examen=cls.ex1, etudiant=cls.etu1)
+        Inscription.objects.create(examen=cls.ex2, etudiant=cls.etu2)
+
+    def setUp(self):
+        cache.clear()  # isole chaque test du cache des compteurs
+
+    def test_compteurs_limites_a_la_session_active(self):
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.status_code, 200)
+        ctx = response.context
+        self.assertEqual(ctx['total_examens'], 1)      # ex2 seulement
+        self.assertEqual(ctx['total_cours'], 1)        # cours2
+        self.assertEqual(ctx['total_enseignants'], 1)  # ens2
+        self.assertEqual(ctx['total_promotions'], 1)   # promo2
+        self.assertEqual(ctx['total_etudiants'], 1)    # etu2
+        self.assertEqual(ctx['total_sessions'], 1)     # la session en cours
+
+    def test_dashboard_affiche_session_en_cours(self):
+        response = self.client.get(reverse('dashboard'))
+        contenu = response.content.decode()
+        self.assertIn('Session en cours : SESSION EN COURS', contenu)
+        # La carte Sessions affiche « Session en cours ».
+        self.assertIn('Session en cours', contenu)
+
+    def test_alerte_et_totaux_globaux_sans_session_active(self):
+        Session.objects.filter(est_active=True).update(est_active=False)
+        cache.clear()
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.status_code, 200)
+        ctx = response.context
+        self.assertEqual(ctx['total_examens'], 2)
+        self.assertEqual(ctx['total_cours'], 2)
+        self.assertEqual(ctx['total_sessions'], 2)
+        contenu = response.content.decode()
+        self.assertIn('Aucune session en cours', contenu)
+        self.assertNotIn('Session en cours : SESSION EN COURS', contenu)
+
+
 class SessionActiveTests(TestCase):
     """Définition de la « session en cours » (une seule active à la fois)."""
 
@@ -714,8 +791,9 @@ class SessionActiveTests(TestCase):
             cours=cours, session=self.s1,
             date_examen=timezone.make_aware(datetime(2026, 1, 15, 8, 0)))
         form = ExamenForm(instance=examen)
-        # En édition, on conserve la session déjà attachée à l'examen.
-        self.assertEqual(form.fields['session'].initial, self.s1.pk)
+        # En édition, on conserve la session déjà attachée à l'examen :
+        # la valeur vient de l'instance, pas de la session active.
+        self.assertEqual(form.initial['session'], self.s1.pk)
 
 
 class MergePromotionsCommandTest(TestCase):

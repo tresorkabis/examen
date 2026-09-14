@@ -21,22 +21,65 @@ from .forms import (PromotionForm, EnseignantForm, EtudiantForm, CoursForm,
 from .models import Etudiant, Cours, Session, Enseignant, Promotion, Examen, Inscription
 
 
-def _compteurs_tableau_de_bord():
-    """Compteurs du dashboard, mis en cache 60 s (4 COUNT → 0 requête)."""
-    compteurs = cache.get('dashboard_compteurs')
-    if compteurs is None:
-        compteurs = {
+def _calcul_compteurs(session):
+    """Compteurs du tableau de bord, liés à la session en cours.
+
+    Si une session active (est_active) existe, les compteurs (étudiants,
+    cours, enseignants, promotions, examens) ne concernent que cette session ;
+    sinon ils représentent les totaux globaux de la base de données.
+    """
+    if session is None:
+        return {
             'total_etudiants': Etudiant.objects.count(),
             'total_cours': Cours.objects.count(),
             'total_sessions': Session.objects.count(),
             'total_enseignants': Enseignant.objects.count(),
+            'total_promotions': Promotion.objects.count(),
+            'total_examens': Examen.objects.count(),
         }
-        cache.set('dashboard_compteurs', compteurs, 60)
-    return compteurs
+    return {
+        'total_etudiants': (Etudiant.objects
+                            .filter(inscription__examen__session=session)
+                            .distinct().count()),
+        'total_cours': (Cours.objects
+                        .filter(examen__session=session).distinct().count()),
+        'total_sessions': 1,
+        'total_enseignants': (Enseignant.objects
+                              .filter(cours__examen__session=session)
+                              .distinct().count()),
+        'total_promotions': (Promotion.objects
+                             .filter(cours__examen__session=session)
+                             .distinct().count()),
+        'total_examens': Examen.objects.filter(session=session).count(),
+    }
+
+
+def _compteurs_tableau_de_bord(session):
+    """Compteurs mis en cache 60 s (une entrée par session ou « global »).
+
+    La clé unique « dashboard_compteurs » contient un dictionnaire
+    {clé de session : compteurs} ; les signaux la suppriment en entier
+    à chaque écriture sur les modèles concernés.
+    """
+    cle_session = session.pk if session else 'global'
+    par_cle = cache.get('dashboard_compteurs')
+    if par_cle is None:
+        par_cle = {}
+    if cle_session not in par_cle:
+        par_cle[cle_session] = _calcul_compteurs(session)
+        cache.set('dashboard_compteurs', par_cle, 60)
+    return par_cle[cle_session]
 
 
 def dashboard(request):
-    compteurs = _compteurs_tableau_de_bord()
+    """Tableau de bord : statistiques liées à la session en cours.
+
+    La session active (est_active) restreint les compteurs ; « Prochains
+    examens » reste global (planification) et « Sessions récentes » montre
+    les dernières sessions, la session en cours y étant signalée.
+    """
+    session_active = Session.objects.filter(est_active=True).first()
+    compteurs = _compteurs_tableau_de_bord(session_active)
     prochains = (Examen.objects
                  .select_related('cours__promotion', 'cours__enseignant', 'session')
                  .filter(date_examen__gte=timezone.now())
@@ -46,8 +89,7 @@ def dashboard(request):
         **compteurs,
         'prochains_examens': prochains,
         'dernieres_sessions': dernieres_sessions,
-        'total_promotions': Promotion.objects.count(),
-        'total_examens': Examen.objects.count(),
+        'session_active': session_active,
     }
     return render(request, 'app/dashboard.html', context)
 

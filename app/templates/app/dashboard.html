@@ -6,7 +6,8 @@
 <div>
 <p class="hero-kicker mb-1"><i class="bi bi-mortarboard-fill me-1"></i>Gestion des examens</p>
 <h2 class="mb-1 fw-bold">Tableau de Bord</h2>
-<p class="mb-0 hero-sub">Vue d'ensemble — {% now 'l j F Y' %}.</p>
+<p class="mb-0 hero-sub">Vue d'ensemble — {% now 'l j F Y' %}.
+{% if session_active %}<span class="badge text-bg-success ms-1">Session en cours : {{ session_active.nom|truncatechars:40 }}</span>{% endif %}</p>
 </div>
 <div class="d-flex flex-wrap gap-2">
 <a href="{% url 'examen_create' %}" class="btn btn-hero"><i class="bi bi-plus-circle me-1"></i>Programmer un examen</a>
@@ -14,6 +15,13 @@
 </div>
 </div>
 </div>
+{% if not session_active %}
+<div class="alert alert-warning py-2 small mb-3">
+    <i class="bi bi-exclamation-triangle me-1"></i>
+    Aucune session en cours n'est définie : les statistiques sont globales.
+    <a href="{% url 'session_list' %}" class="alert-link">Définir une session en cours</a>.
+</div>
+{% endif %}
 <div class="row g-3 g-md-4 mb-4">
 <div class="col-6 col-xl-3">
 <a class="stat-card bg-students p-3 p-md-4" href="{% url 'etudiant_list' %}" aria-label="Voir les étudiants">
@@ -35,8 +43,8 @@
 <a class="stat-card bg-sessions p-3 p-md-4" href="{% url 'session_list' %}" aria-label="Voir les sessions">
 <div class="stat-icon"><i class="bi bi-calendar-event"></i></div>
 <div class="stat-value">{{ total_sessions }}</div>
-<div class="stat-label">Sessions</div>
-<div class="stat-foot">Voir la liste<i class="bi bi-arrow-right ms-1"></i></div>
+<div class="stat-label">{% if session_active %}Session en cours{% else %}Sessions{% endif %}</div>
+<div class="stat-foot">{% if session_active %}{{ session_active.nom|truncatechars:24 }}{% else %}Voir la liste{% endif %}<i class="bi bi-arrow-right ms-1"></i></div>
 </a>
 </div>
 <div class="col-6 col-xl-3">
