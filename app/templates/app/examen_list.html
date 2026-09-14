@@ -65,7 +65,16 @@
         </div>
     </div>
 
-    <div class="card shadow-sm mb-3">
+    {% if session_defaut %}
+    <div class="alert alert-info py-2 small mb-3">
+        <i class="bi bi-info-circle me-1"></i>
+        Affichage par défaut des examens de la <strong>session en cours</strong>
+        ({{ session_active.nom }}) —
+        <a href="?session=0" class="alert-link">voir toutes les sessions</a>.
+    </div>
+{% endif %}
+
+<div class="card shadow-sm mb-3">
         <div class="card-body py-2">
             <form method="get" class="row g-2 align-items-center">
                 <div class="col-md-3">
@@ -94,9 +103,12 @@
                 <div class="col-md-2">
                     <select name="session" class="form-select" aria-label="Filtrer par session"
                             onchange="this.form.submit()">
-                        <option value="">Toutes les sessions</option>
+                        <option value="0" {% if filters.session == 'toutes' %}selected{% endif %}>Toutes les sessions</option>
+                        {% if session_active %}
+                            <option value="en-cours" {% if session_defaut or session_choisie %}selected{% endif %}>Session en cours</option>
+                        {% endif %}
                         {% for s in filter_sessions %}
-                            <option value="{{ s.pk }}" {% if filters.session == s.pk %}selected{% endif %}>{{ s.nom|truncatechars:30 }}</option>
+                            <option value="{{ s.pk }}" {% if filters.session == s.pk and not session_defaut and not session_choisie %}selected{% endif %}>{{ s.nom|truncatechars:30 }}</option>
                         {% endfor %}
                     </select>
                 </div>

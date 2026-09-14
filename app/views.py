@@ -776,10 +776,26 @@ class ExamenListView(SafePaginationMixin, ListView):
             qs = qs.filter(cours__enseignant__pk=ens)
             self.filters['enseignant'] = int(ens)
 
+        # Session : par défaut, la liste est limitée à la session en cours
+        # (si elle existe) ; « 0 » affiche toutes les sessions ; « en-cours »
+        # restreint explicitement à la session active. Les attributs exposés
+        # au template servent à la sélection du filtre et au bandeau d'info.
+        self.session_active = Session.objects.filter(est_active=True).first()
+        self.session_defaut = False
+        self.session_choisie = False
         session = params.get('session', '').strip()
-        if session.isdigit():
+        if session == '0':
+            self.filters['session'] = 'toutes'
+        elif session == 'en-cours':
+            if self.session_active:
+                qs = qs.filter(session=self.session_active)
+                self.session_choisie = True
+        elif session.isdigit():
             qs = qs.filter(session__pk=session)
             self.filters['session'] = int(session)
+        elif self.session_active:
+            qs = qs.filter(session=self.session_active)
+            self.session_defaut = True
 
         statut = params.get('statut', '').strip()
         if statut == 'note':
@@ -836,6 +852,9 @@ class ExamenListView(SafePaginationMixin, ListView):
         context['base_qs'] = params.urlencode()
         context['tri'] = self.tri
         context['total_examens'] = Examen.objects.count()
+        context['session_active'] = getattr(self, 'session_active', None)
+        context['session_defaut'] = getattr(self, 'session_defaut', False)
+        context['session_choisie'] = getattr(self, 'session_choisie', False)
         return context
 
 

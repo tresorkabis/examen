@@ -710,6 +710,84 @@ class DashboardSessionActiveTests(TestCase):
         self.assertNotIn('Session en cours : SESSION EN COURS', contenu)
 
 
+class ExamensSessionEnCoursTests(TestCase):
+    """La liste des examens est limitée, par défaut, à la session en cours."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sess_inactive = Session.objects.create(
+            nom='SESSION ANCIENNE', semestre=1, type_session='normale',
+            date_debut=date(2026, 1, 5), date_fin=date(2026, 2, 5))
+        cls.sess_active = Session.objects.create(
+            nom='SESSION EN COURS', semestre=2, type_session='normale',
+            date_debut=date(2026, 6, 1), date_fin=date(2026, 6, 20),
+            est_active=True)
+        cls.promo = Promotion.objects.create(nom='L3 SCF')
+        cls.ens = Enseignant.objects.create(
+            nom='KALALA', prenom='Paul', email='p.kalala@example.com')
+        cls.cours_actif = Cours.objects.create(
+            nom='Cours actif', coefficient=1,
+            enseignant=cls.ens, promotion=cls.promo)
+        cls.cours_ancien = Cours.objects.create(
+            nom='Cours ancien', coefficient=1,
+            enseignant=cls.ens, promotion=cls.promo)
+        cls.ex_active = Examen.objects.create(
+            cours=cls.cours_actif, session=cls.sess_active,
+            date_examen=timezone.make_aware(datetime(2026, 6, 10, 8, 0)))
+        cls.ex_inactive = Examen.objects.create(
+            cours=cls.cours_ancien, session=cls.sess_inactive,
+            date_examen=timezone.make_aware(datetime(2026, 1, 15, 8, 0)))
+
+    def _get(self, params=None):
+        return self.client.get(reverse('examen_list'), params or {})
+
+    def test_defaut_limite_a_la_session_active(self):
+        response = self._get()
+        ctx = response.context
+        self.assertEqual(list(ctx['examens']), [self.ex_active])
+        self.assertTrue(ctx['session_defaut'])
+        self.assertEqual(ctx['session_active'], self.sess_active)
+        contenu = response.content.decode()
+        self.assertIn('session en cours', contenu)
+        self.assertIn('Cours actif', contenu)
+        self.assertNotIn('Cours ancien', contenu)
+        self.assertIn('selected>Session en cours', contenu)
+
+    def test_toutes_les_sessions(self):
+        response = self._get({'session': '0'})
+        ctx = response.context
+        self.assertEqual(
+            {e.pk for e in ctx['examens']},
+            {self.ex_active.pk, self.ex_inactive.pk})
+        self.assertFalse(ctx['session_defaut'])
+        self.assertIn('Cours ancien', response.content.decode())
+
+    def test_filtre_session_par_pk(self):
+        response = self._get({'session': str(self.sess_inactive.pk)})
+        ctx = response.context
+        self.assertEqual(list(ctx['examens']), [self.ex_inactive])
+        self.assertFalse(ctx['session_defaut'])
+        self.assertFalse(ctx['session_choisie'])
+
+    def test_en_cours_explicite(self):
+        response = self._get({'session': 'en-cours'})
+        ctx = response.context
+        self.assertEqual(list(ctx['examens']), [self.ex_active])
+        self.assertTrue(ctx['session_choisie'])
+        self.assertFalse(ctx['session_defaut'])
+        self.assertIn('selected>Session en cours', response.content.decode())
+
+    def test_sans_session_active_tout_est_affiche(self):
+        Session.objects.filter(est_active=True).update(est_active=False)
+        response = self._get()
+        ctx = response.context
+        self.assertEqual(
+            {e.pk for e in ctx['examens']},
+            {self.ex_active.pk, self.ex_inactive.pk})
+        self.assertFalse(ctx['session_defaut'])
+        self.assertIsNone(ctx['session_active'])
+
+
 class SessionActiveTests(TestCase):
     """Définition de la « session en cours » (une seule active à la fois)."""
 
