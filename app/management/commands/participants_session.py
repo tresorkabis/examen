@@ -56,7 +56,7 @@ class Command(BaseCommand):
         for examen in examens:
             inscriptions = (examen.inscriptions
                             .select_related('etudiant')
-                            .order_by('etudiant__nom', 'etudiant__prenom'))
+                            .order_by('etudiant__noms'))
             self.stdout.write(
                 f'\n● {examen.cours.nom} — {examen.cours.promotion.nom} '
                 f'({examen.date_examen:%d/%m/%Y %H:%M})')
@@ -67,4 +67,4 @@ class Command(BaseCommand):
                 etu = ins.etudiant
                 self.stdout.write(
                     f'   {i:>2}. {etu.numero_etudiant}  '
-                    f'{etu.nom.upper()} {etu.prenom}')
+                    f'{etu.noms}')

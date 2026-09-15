@@ -146,7 +146,7 @@
                     <tr>
                         <td class="num">{{ forloop.counter }}</td>
                         <td>
-                            {{ ins.etudiant.nom }} {{ ins.etudiant.prenom }}
+                            {{ ins.etudiant.noms }}
                             <button type="submit"
                                     form="form-desinscrire-{{ ins.pk }}"
                                     class="btn btn-sm btn-link text-danger p-0 ms-1 no-print"
@@ -206,7 +206,7 @@
                                 aria-label="Ajouter un étudiant à la fiche">
                             <option value="">Ajouter un étudiant de {{ examen.cours.promotion.nom }}…</option>
                             {% for e in inscriptibles %}
-                                <option value="{{ e.pk }}">{{ e.nom }} {{ e.prenom }} ({{ e.numero_etudiant }})</option>
+                                <option value="{{ e.pk }}">{{ e.noms }} ({{ e.numero_etudiant }})</option>
                             {% endfor %}
                         </select>
                     </div>

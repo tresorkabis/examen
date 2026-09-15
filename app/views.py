@@ -42,16 +42,16 @@ def _calcul_compteurs(session):
         }
     return {
         'total_etudiants': (Etudiant.objects
-                            .filter(inscription__examen__session=session)
+                            .filter(inscriptions__examen__session=session)
                             .distinct().count()),
         'total_cours': (Cours.objects
-                        .filter(examen__session=session).distinct().count()),
+                        .filter(examens__session=session).distinct().count()),
         'total_sessions': 1,
         'total_enseignants': (Enseignant.objects
-                              .filter(cours__examen__session=session)
+                              .filter(cours__examens__session=session)
                               .distinct().count()),
         'total_promotions': (Promotion.objects
-                             .filter(cours__examen__session=session)
+                             .filter(cours__examens__session=session)
                              .distinct().count()),
         'total_examens': Examen.objects.filter(session=session).count(),
     }
@@ -173,8 +173,7 @@ class EtudiantListView(ListView):
             # Recherche en base (indexée) : ne charge que les promotions
             # ayant au moins un étudiant correspondant. Si une promotion est
             # sélectionnée, on restreint la recherche à celle-ci.
-            filtres = (Q(etudiants__nom__icontains=q)
-                       | Q(etudiants__prenom__icontains=q)
+            filtres = (Q(etudiants__noms__icontains=q)
                        | Q(etudiants__numero_etudiant__icontains=q)
                        | Q(etudiants__email__icontains=q))
             qs = Promotion.objects.filter(filtres)
@@ -185,11 +184,10 @@ class EtudiantListView(ListView):
                     .prefetch_related(Prefetch(
                         'etudiants',
                         queryset=Etudiant.objects.filter(
-                            Q(nom__icontains=q)
-                            | Q(prenom__icontains=q)
+                            Q(noms__icontains=q)
                             | Q(numero_etudiant__icontains=q)
                             | Q(email__icontains=q))
-                        .order_by('nom', 'prenom')))
+                        .order_by('noms')))
                     .annotate(nb_etudiants_total=Count('etudiants', distinct=True),
                               nb_cours=Count('cours', distinct=True))
                     .order_by('nom'))
@@ -199,7 +197,7 @@ class EtudiantListView(ListView):
                               nb_cours=Count('cours', distinct=True))
                     .prefetch_related(Prefetch(
                         'etudiants',
-                        queryset=Etudiant.objects.order_by('nom', 'prenom')))
+                        queryset=Etudiant.objects.order_by('noms')))
                     .order_by('nom'))
         # Par défaut : seules les promotions non vides (EXISTS, sans tout charger).
         return (Promotion.objects
@@ -209,7 +207,7 @@ class EtudiantListView(ListView):
                           nb_cours=Count('cours', distinct=True))
                 .prefetch_related(Prefetch(
                     'etudiants',
-                    queryset=Etudiant.objects.order_by('nom', 'prenom')))
+                    queryset=Etudiant.objects.order_by('noms')))
                 .order_by('nom'))
 
     def get_context_data(self, **kwargs):
@@ -240,7 +238,7 @@ class EtudiantListView(ListView):
                     .filter(pk=int(promo_pk))
                     .prefetch_related(Prefetch(
                         'etudiants',
-                        queryset=Etudiant.objects.order_by('nom', 'prenom')))
+                        queryset=Etudiant.objects.order_by('noms')))
                     .first())
         if promotion_active is not None and not q:
             promotion_active.filtered_etudiants = list(
@@ -254,7 +252,7 @@ class EtudiantCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     form_class = EtudiantForm
     template_name = "app/etudiant_form.html"
     success_url = reverse_lazy("etudiant_list")
-    success_message = "L'étudiant « %(prenom)s %(nom)s » a été créé avec succès."
+    success_message = "L'étudiant « %(noms)s » a été créé avec succès."
 
     def get_initial(self):
         """Pré-sélectionne la promotion via « ?promotion=<pk> » (bouton + d'une carte)."""
@@ -270,7 +268,8 @@ class EtudiantUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     form_class = EtudiantForm
     template_name = "app/etudiant_form.html"
     success_url = reverse_lazy("etudiant_list")
-    success_message = "L'étudiant « %(prenom)s %(nom)s » a été modifié."
+    success_message = "L'étudiant « %(noms)s » a été modifié."
+
 
 
 class EtudiantDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
@@ -290,7 +289,7 @@ class EtudiantDetailView(DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         etudiant = self.object
-        inscriptions = (etudiant.inscription_set
+        inscriptions = (etudiant.inscriptions
                         .select_related(
                             'examen__cours__promotion',
                             'examen__cours__enseignant',
@@ -336,7 +335,7 @@ class PromotionDetailView(DetailView):
                  .select_related('enseignant')
                  .order_by('nom'))
         etudiants = (promotion.etudiants
-                     .order_by('nom', 'prenom'))
+                     .order_by('noms'))
         # Enseignants intervenant dans cette promotion : requête ORM triée,
         # avec le nombre de cours dispensés par chacun.
         enseignants = (Enseignant.objects
@@ -491,13 +490,12 @@ class CoursDetailView(DetailView):
                         .filter(examen__cours=cours)
                         .select_related('etudiant__promotion', 'examen',
                                         'examen__session')
-                        .order_by('examen__date_examen', 'etudiant__nom',
-                                  'etudiant__prenom'))
+                        .order_by('examen__date_examen', 'etudiant__noms'))
         # Moyenne du cours : moyenne des moyennes des inscriptions notées.
         notes = [i.note for i in inscriptions if i.note is not None]
         moyenne = round(sum(notes) / len(notes), 2) if notes else None
         nb_etudiants = (Etudiant.objects
-                        .filter(inscription__examen__cours=cours)
+                        .filter(inscriptions__examen__cours=cours)
                         .distinct()
                         .count())
         ctx.update({
@@ -543,13 +541,13 @@ def _donnees_participants_session(session):
     nb_participants) : les participants sont les étudiants uniques inscrits
     à au moins un examen de la session, regroupés par promotion.
     """
-    examens = (session.examen_set
+    examens = (session.examens
                .select_related('cours__promotion', 'cours__enseignant')
                .prefetch_related(Prefetch(
                    'inscriptions',
                    queryset=Inscription.objects
                    .select_related('etudiant')
-                   .order_by('etudiant__nom', 'etudiant__prenom')))
+                   .order_by('etudiant__noms')))
                .order_by('date_examen', 'cours__nom'))
     participants_ids = set()
     nb_inscriptions = 0
@@ -562,9 +560,10 @@ def _donnees_participants_session(session):
                     .filter(pk__in=participants_ids)
                     .select_related('promotion')
                     .annotate(nb_examens=Count(
-                        'inscription',
-                        filter=Q(inscription__examen__session=session)))
-                    .order_by('promotion__nom', 'nom', 'prenom'))
+                        'inscriptions',
+                        filter=Q(inscriptions__examen__session=session)))
+                    .order_by('promotion__nom', 'noms'))
+
     groupes = OrderedDict()
     for etu in participants:
         groupes.setdefault(etu.promotion, []).append(etu)
@@ -646,7 +645,7 @@ def session_participants_pdf(request, pk):
         lignes = [['N°', 'Nom et prénoms', 'Examens']]
         for i, etu in enumerate(etudiants, start=1):
             lignes.append([
-                str(i), f"{etu.nom} {etu.prenom}", str(etu.nb_examens)])
+                str(i), f"{etu.noms}", str(etu.nb_examens)])
         tableau = Table(lignes, colWidths=[12 * mm, 132 * mm, 20 * mm])
         tableau.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#212529')),
@@ -875,13 +874,13 @@ class ExamenListView(SafePaginationMixin, ListView):
         )
         # Options des filtres : uniquement les valeurs réellement utilisées
         context['filter_promotions'] = (Promotion.objects
-                                        .filter(cours__examen__isnull=False)
+                                        .filter(cours__examens__isnull=False)
                                         .distinct().order_by('nom'))
         context['filter_enseignants'] = (Enseignant.objects
-                                         .filter(cours__examen__isnull=False)
+                                         .filter(cours__examens__isnull=False)
                                          .distinct().order_by('nom', 'prenom'))
         context['filter_sessions'] = (Session.objects
-                                      .filter(examen__isnull=False)
+                                      .filter(examens__isnull=False)
                                       .distinct().order_by('date_debut', 'nom'))
         context['filters'] = self.filters
         # Chaîne de requête sans « tri » ni « page », pour les liens de tri
@@ -936,12 +935,12 @@ class ExamenUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
         examen = self.object
         ctx['inscriptions'] = (examen.inscriptions
                                .select_related('etudiant')
-                               .order_by('etudiant__nom', 'etudiant__prenom'))
+                               .order_by('etudiant__noms'))
         ctx['inscriptibles'] = (Etudiant.objects
                                 .filter(promotion=examen.cours.promotion)
                                 .exclude(pk__in=examen.inscriptions
                                          .values_list('etudiant_id', flat=True))
-                                .order_by('nom', 'prenom'))
+                                .order_by('noms'))
         return ctx
 
 
@@ -966,13 +965,13 @@ def fiche_cote(request, pk):
         pk=pk)
     inscriptions = (examen.inscriptions
                     .select_related('etudiant')
-                    .order_by('etudiant__nom', 'etudiant__prenom'))
+                    .order_by('etudiant__noms'))
 
     inscrits_ids = inscriptions.values_list('etudiant_id', flat=True)
     inscriptibles = (Etudiant.objects
                      .filter(promotion=examen.cours.promotion)
                      .exclude(pk__in=inscrits_ids)
-                     .order_by('nom', 'prenom'))
+                     .order_by('noms'))
     return render(request, 'app/fiche_cote.html', {
         'examen': examen,
         'inscriptions': inscriptions,

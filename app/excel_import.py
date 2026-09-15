@@ -127,20 +127,18 @@ def import_etudiants_excel(file_obj, default_promotion_id=None):
                 for idx, row in df.iterrows():
                     line_num = idx + 2  # Excel 1-based header row + 1
                     try:
-                        # Extraire Nom / Prénom
+                        # Extraire Noms
                         if nom_col and not pd.isna(row[nom_col]):
-                            nom = str(row[nom_col]).strip()
-                            prenom = str(row[prenom_col]).strip() if prenom_col and not pd.isna(row[prenom_col]) else '-'
+                            nom_str = str(row[nom_col]).strip()
+                            prenom_str = str(row[prenom_col]).strip() if prenom_col and not pd.isna(row[prenom_col]) else ''
+                            noms_val = f"{nom_str} {prenom_str}".strip()
                         elif full_name_col and not pd.isna(row[full_name_col]):
-                            full_name = str(row[full_name_col]).strip()
-                            parts = full_name.split(' ', 1)
-                            nom = parts[0]
-                            prenom = parts[1] if len(parts) > 1 else '-'
+                            noms_val = str(row[full_name_col]).strip()
                         else:
                             skipped_count += 1
                             continue
 
-                        if not nom:
+                        if not noms_val:
                             skipped_count += 1
                             continue
 
@@ -158,30 +156,32 @@ def import_etudiants_excel(file_obj, default_promotion_id=None):
                             else:
                                 promo_obj, _ = Promotion.objects.get_or_create(nom='Promotion Générale')
 
-                        # Numéro étudiant
-                        if numero_col and not pd.isna(row[numero_col]):
-                            numero = str(row[numero_col]).strip()
-                        else:
-                            promo_slug = slugify(promo_obj.nom).upper() or 'ETU'
-                            numero = f"{promo_slug}-{idx + 1:03d}"
+                        # Numéro étudiant (optionnel, généré par le modèle si absent)
+                        numero = str(row[numero_col]).strip() if numero_col and not pd.isna(row[numero_col]) else None
 
-                        # Email
-                        if email_col and not pd.isna(row[email_col]):
-                            email = str(row[email_col]).strip()
-                        else:
-                            email = generate_unique_student_email(nom, prenom)
+                        # Email (optionnel)
+                        email = str(row[email_col]).strip() if email_col and not pd.isna(row[email_col]) else None
 
                         # Enregistrement
-                        etu, created = Etudiant.objects.get_or_create(
-                            numero_etudiant=numero,
-                            defaults={'nom': nom, 'prenom': prenom, 'email': email, 'promotion': promo_obj}
-                        )
+                        if numero:
+                            etu, created = Etudiant.objects.get_or_create(
+                                numero_etudiant=numero,
+                                defaults={'noms': noms_val, 'email': email, 'promotion': promo_obj}
+                            )
+                        else:
+                            etu, created = Etudiant.objects.get_or_create(
+                                noms=noms_val,
+                                promotion=promo_obj,
+                                defaults={'email': email}
+                            )
+
                         if created:
                             created_count += 1
                         else:
-                            etu.nom = nom
-                            etu.prenom = prenom
+                            etu.noms = noms_val
                             etu.promotion = promo_obj
+                            if email:
+                                etu.email = email
                             etu.save()
                             updated_count += 1
 
@@ -194,7 +194,6 @@ def import_etudiants_excel(file_obj, default_promotion_id=None):
                 promo_obj = default_promotion
                 if not promo_obj:
                     promo_obj, _ = Promotion.objects.get_or_create(nom=normalize_promotion_name(sheet_name.strip()))
-
 
                 promo_slug = slugify(promo_obj.nom).upper() or 'ETU'
                 seen_names = set()
@@ -213,27 +212,24 @@ def import_etudiants_excel(file_obj, default_promotion_id=None):
                             continue
                         seen_names.add(val_name.upper())
 
-                        parts = val_name.split(' ')
-                        nom = parts[0]
-                        prenom = ' '.join(parts[1:]) or '-'
+                        noms_val = val_name
                         numero = f"{promo_slug}-{int(val_num):03d}"
-                        email = generate_unique_student_email(nom, prenom)
 
                         etu, created = Etudiant.objects.get_or_create(
                             numero_etudiant=numero,
-                            defaults={'nom': nom, 'prenom': prenom, 'email': email, 'promotion': promo_obj}
+                            defaults={'noms': noms_val, 'email': None, 'promotion': promo_obj}
                         )
                         if created:
                             created_count += 1
                         else:
-                            etu.nom = nom
-                            etu.prenom = prenom
+                            etu.noms = noms_val
                             etu.promotion = promo_obj
                             etu.save()
                             updated_count += 1
 
                     except Exception as row_err:
                         errors.append(f"Feuille '{sheet_name}', ligne {idx + 1} : {row_err}")
+
 
     return {
         'success': True,

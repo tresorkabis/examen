@@ -91,12 +91,8 @@ class Command(BaseCommand):
                     continue
                 seen_names.add(full_name.upper())
 
-                # NOM POSTNOM PRÉNOM -> nom = 1er mot, prenom = reste
-                parts = full_name.split(' ')
-                nom = parts[0]
-                prenom = ' '.join(parts[1:]) or '-'
+                noms_val = full_name
                 numero = f'{promo_slug}-{int(num):03d}'
-                email = self._unique_email(nom, prenom)
 
                 if dry_run:
                     created_file += 1
@@ -104,15 +100,16 @@ class Command(BaseCommand):
 
                 etu, was_created = Etudiant.objects.get_or_create(
                     numero_etudiant=numero,
-                    defaults={'nom': nom, 'prenom': prenom, 'email': email,
+                    defaults={'noms': noms_val, 'email': None,
                               'promotion': promotion},
                 )
                 if was_created:
                     created_file += 1
                 else:
-                    etu.nom, etu.prenom, etu.promotion = nom, prenom, promotion
+                    etu.noms, etu.promotion = noms_val, promotion
                     etu.save()
                     updated_file += 1
+
 
             created_total += created_file
             updated_total += updated_file

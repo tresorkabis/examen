@@ -63,11 +63,14 @@
                 {% for e in promotion_active.filtered_etudiants %}
                     <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <div>
-                            <a href="{% url 'etudiant_detail' e.pk %}" class="fw-semibold text-decoration-none">{{ e.nom }} {{ e.prenom }}</a>
+                            <a href="{% url 'etudiant_detail' e.pk %}" class="fw-semibold text-decoration-none">{{ e.noms }}</a>
                             <span class="badge text-bg-light border ms-2 font-monospace">{{ e.numero_etudiant }}</span>
+                            {% if e.email %}
                             <div class="small text-muted">
                                 <i class="bi bi-envelope me-1"></i>{{ e.email }}
                             </div>
+                            {% endif %}
+
                         </div>
                         <div class="text-nowrap">
                             <a href="{% url 'etudiant_update' e.pk %}" class="btn btn-sm btn-outline-secondary" title="Modifier {{ e }}">

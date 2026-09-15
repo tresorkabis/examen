@@ -116,7 +116,7 @@
                     <tbody>
                         {% for i in inscriptions %}
                         <tr>
-                            <td><a href="{% url 'etudiant_detail' i.etudiant.pk %}">{{ i.etudiant.nom }} {{ i.etudiant.prenom }}</a></td>
+                            <td><a href="{% url 'etudiant_detail' i.etudiant.pk %}">{{ i.etudiant.noms }}</a></td>
                             <td>{{ i.etudiant.promotion.nom }}</td>
                             <td>{{ i.examen.session.nom }}</td>
                             <td class="text-center">{{ i.note_interro|default:'—' }}</td>

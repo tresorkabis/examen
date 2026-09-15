@@ -126,7 +126,7 @@
                         {% for e in etudiants %}
                             <a href="{% url 'etudiant_detail' e.pk %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
                                 <div>
-                                    <span class="fw-semibold">{{ e.nom }} {{ e.prenom }}</span>
+                                    <span class="fw-semibold">{{ e.noms }}</span>
                                     <div class="small text-muted">{{ e.email }}</div>
                                 </div>
                                 <span class="badge text-bg-light font-monospace">{{ e.numero_etudiant }}</span>
@@ -150,7 +150,7 @@
                             {% for e in etudiants %}
                             <tr>
                                 <td class="num">{{ forloop.counter }}</td>
-                                <td class="nom">{{ e.nom }} {{ e.prenom }}</td>
+                                <td class="nom">{{ e.noms }}</td>
                             </tr>
                             {% empty %}
                             <tr>

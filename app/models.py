@@ -1,5 +1,17 @@
+import random
+import string
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+
+
+def generate_numero_etudiant():
+    """Génère un numéro d'étudiant aléatoire et unique (ex: ETU-84920153)."""
+    chars = string.digits
+    while True:
+        code = f"ETU-{''.join(random.choices(chars, k=8))}"
+        if not Etudiant.objects.filter(numero_etudiant=code).exists():
+            return code
+
 
 class Promotion(models.Model):
     nom = models.CharField(max_length=100)
@@ -26,21 +38,29 @@ class Enseignant(models.Model):
 
 
 class Etudiant(models.Model):
-    nom = models.CharField(max_length=100)
-    prenom = models.CharField(max_length=100)
-    email = models.EmailField(unique=True)
-    numero_etudiant = models.CharField(max_length=20, unique=True)
+    noms = models.CharField(max_length=150, default='')
+
+    email = models.EmailField(blank=True, null=True)
+    numero_etudiant = models.CharField(
+        max_length=20, unique=True, default=generate_numero_etudiant, blank=True
+    )
     promotion = models.ForeignKey(Promotion, on_delete=models.CASCADE, related_name='etudiants')
 
+    def save(self, *args, **kwargs):
+        if not self.numero_etudiant:
+            self.numero_etudiant = generate_numero_etudiant()
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.nom} {self.prenom}"
+        return self.noms
 
     class Meta:
-        ordering = ['nom', 'prenom']
+        ordering = ['noms']
         indexes = [
-            models.Index(fields=['nom', 'prenom']),
-            models.Index(fields=['promotion', 'nom', 'prenom']),
+            models.Index(fields=['noms']),
+            models.Index(fields=['promotion', 'noms']),
         ]
+
 
 class Cours(models.Model):
     nom = models.CharField(max_length=100)
@@ -92,8 +112,8 @@ class Session(models.Model):
         ordering = ['date_debut', 'nom']
 
 class Examen(models.Model):
-    cours = models.ForeignKey(Cours, on_delete=models.CASCADE)
-    session = models.ForeignKey(Session, on_delete=models.CASCADE)
+    cours = models.ForeignKey(Cours, on_delete=models.CASCADE, related_name='examens')
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='examens')
     date_examen = models.DateTimeField()
     salle = models.CharField(max_length=50, blank=True, null=True)
     est_note = models.BooleanField(
@@ -127,7 +147,7 @@ class Inscription(models.Model):
     Le champ « note » (moyenne /20) est recalculé automatiquement à chaque
     enregistrement à partir des trois composantes.
     """
-    etudiant = models.ForeignKey(Etudiant, on_delete=models.CASCADE)
+    etudiant = models.ForeignKey(Etudiant, on_delete=models.CASCADE, related_name='inscriptions')
     examen = models.ForeignKey(Examen, on_delete=models.CASCADE, related_name='inscriptions')
     note_interro = models.DecimalField(
         max_digits=3, decimal_places=2, null=True, blank=True,
@@ -145,8 +165,13 @@ class Inscription(models.Model):
                                help_text="Moyenne sur 20 (calculée)")
 
     class Meta:
-        unique_together = ('etudiant', 'examen')
-        ordering = ['etudiant']
+        ordering = ['etudiant__noms']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['etudiant', 'examen'],
+                name='unique_inscription_etudiant_examen',
+            ),
+        ]
         indexes = [models.Index(fields=['examen', 'etudiant'])]
 
     @property

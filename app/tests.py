@@ -45,7 +45,7 @@ class BaseDataMixin:
     def _creer_etudiants(cls, nb=3):
         for i in range(nb):
             Etudiant.objects.create(
-                nom=f'NOM{i}', prenom=f'Prenom{i}',
+                noms=f'NOM{i} Prenom{i}',
                 email=f'etu{i}@example.com',
                 numero_etudiant=f'L3INFOA-{i:03d}',
                 promotion=cls.promotion)
@@ -79,7 +79,7 @@ class ModelMoyenneTests(TestCase):
             cours=cls.cours, session=cls.session,
             date_examen=timezone.make_aware(datetime(2026, 1, 15, 8, 0)))
         cls.etudiant = Etudiant.objects.create(
-            nom='DUPONT', prenom='Jean',
+            noms='DUPONT Jean',
             email='jean.dupont@example.com',
             numero_etudiant='L3INFOA-901',
             promotion=cls.promotion)
@@ -226,7 +226,7 @@ class AuthAccessTests(TestCase):
             cours=cls.cours, session=cls.session,
             date_examen=timezone.make_aware(datetime(2026, 1, 15, 8, 0)))
         cls.etudiant = Etudiant.objects.create(
-            nom='DUPONT', prenom='Jean',
+            noms='DUPONT Jean',
             email='j.dupont@example.com',
             numero_etudiant='L3INFOA-900',
             promotion=cls.promotion)
@@ -700,11 +700,11 @@ class DashboardSessionActiveTests(TestCase):
             cours=cls.cours2, session=cls.sess_active,
             date_examen=timezone.make_aware(datetime(2026, 6, 10, 8, 0)))
         cls.etu1 = Etudiant.objects.create(
-            nom='NDAYE', prenom='Jean',
+            noms='NDAYE Jean',
             email='j.ndaye@example.com',
             numero_etudiant='L1-001', promotion=cls.promo1)
         cls.etu2 = Etudiant.objects.create(
-            nom='KAMANDA', prenom='Marie',
+            noms='KAMANDA Marie',
             email='m.kamanda@example.com',
             numero_etudiant='L2-001', promotion=cls.promo2)
         Inscription.objects.create(examen=cls.ex1, etudiant=cls.etu1)
@@ -921,7 +921,7 @@ class MergePromotionsCommandTest(TestCase):
 
     def _etudiant(self, promo, i):
         return Etudiant.objects.create(
-            nom=f'ETU{i}', prenom=f'Prenom{i}',
+            noms=f'ETU{i} Prenom{i}',
             email=f'merge{i}@example.com',
             numero_etudiant=f'L2SDA-{i:03d}', promotion=promo)
 
@@ -999,15 +999,15 @@ class SessionDetailViewTest(BaseDataMixin, TestCase):
             cours=self.cours2, session=self.session,
             date_examen=timezone.make_aware(datetime(2026, 1, 16, 8, 0)))
 
-    def _etudiant(self, nom, prenom, numero):
+    def _etudiant(self, noms, numero):
         return Etudiant.objects.create(
-            nom=nom, prenom=prenom,
+            noms=noms,
             email=f'{numero.lower()}@example.com',
             numero_etudiant=numero, promotion=self.ex1.cours.promotion)
 
     def test_liste_examens_et_participants(self):
-        etu1 = self._etudiant('ASSANI', 'LAZARINE', 'L1INFOA-001')
-        etu2 = self._etudiant('MABANGI', 'WAMABANGI', 'L1INFOA-002')
+        etu1 = self._etudiant('ASSANI LAZARINE', 'L1INFOA-001')
+        etu2 = self._etudiant('MABANGI WAMABANGI', 'L1INFOA-002')
         Inscription.objects.create(examen=self.ex1, etudiant=etu1)
         Inscription.objects.create(examen=self.ex1, etudiant=etu2)
         # etu1 inscrit aussi à ex2 -> inscriptions = 3 mais participants uniques = 2
@@ -1048,8 +1048,8 @@ class SessionDetailViewTest(BaseDataMixin, TestCase):
         """L'export PDF liste les participants, regroupés par promotion."""
         from pypdf import PdfReader
 
-        etu1 = self._etudiant('ASSANI', 'LAZARINE', 'L1INFOA-001')
-        etu2 = self._etudiant('MABANGI', 'WAMABANGI', 'L1INFOA-002')
+        etu1 = self._etudiant('ASSANI LAZARINE', 'L1INFOA-001')
+        etu2 = self._etudiant('MABANGI WAMABANGI', 'L1INFOA-002')
         Inscription.objects.create(examen=self.ex1, etudiant=etu1)
         Inscription.objects.create(examen=self.ex1, etudiant=etu2)
         Inscription.objects.create(examen=self.ex2, etudiant=etu1)

@@ -69,7 +69,7 @@
                         {% for ins in inscriptions %}
                         <div class="list-group-item d-flex justify-content-between align-items-center py-2">
                             <div>
-                                {{ ins.etudiant.nom }} {{ ins.etudiant.prenom }}
+                                {{ ins.etudiant.noms }}
                                 <span class="badge text-bg-light text-monospace ms-1">{{ ins.etudiant.numero_etudiant }}</span>
                                 {% if ins.note is not None %}
                                     <span class="badge text-bg-success ms-1">{{ ins.note|floatformat:2 }}/20</span>
@@ -114,7 +114,7 @@
                             <label class="list-group-item py-1 px-2 d-flex align-items-center gap-2">
                                 <input type="checkbox" class="form-check-input mt-0 choix-etudiant"
                                        name="etudiants" value="{{ e.pk }}">
-                                <span>{{ e.nom }} {{ e.prenom }}</span>
+                                <span>{{ e.noms }}</span>
                                 <small class="text-muted font-monospace ms-auto">{{ e.numero_etudiant }}</small>
                             </label>
                             {% endfor %}

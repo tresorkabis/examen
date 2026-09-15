@@ -107,8 +107,9 @@
                                     {% for e in etudiants %}
                                     <tr>
                                         <td class="font-monospace text-muted">{{ e.numero_etudiant }}</td>
-                                        <td class="fw-semibold">{{ e.nom }} {{ e.prenom }}</td>
+                                        <td class="fw-semibold">{{ e.noms }}</td>
                                         <td class="text-center"><span class="badge text-bg-light border">{{ e.nb_examens }}</span></td>
+
                                     </tr>
                                     {% endfor %}
                                 </tbody>
