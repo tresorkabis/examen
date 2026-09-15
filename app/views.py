@@ -7,6 +7,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
 from django.core.exceptions import ValidationError
 from django.core.cache import cache
+from django.db import transaction
 from django.db.models import Count, F, Prefetch, Q
 from django.http import FileResponse, Http404, HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404, redirect
@@ -378,7 +379,26 @@ class PromotionDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     success_message = "La promotion « %(object)s » a été supprimée."
 
 
+@login_required
+def promotion_bulk_delete(request):
+    """Suppression en groupe de promotions sélectionnées."""
+    if request.method == 'POST':
+        pks = request.POST.getlist('promotion_ids')
+        if not pks:
+            messages.warning(request, "Aucune promotion n'a été sélectionnée pour la suppression.")
+            return redirect('promotion_list')
+
+        with transaction.atomic():
+            promotions = Promotion.objects.filter(pk__in=pks)
+            count = promotions.count()
+            promotions.delete()
+
+        messages.success(request, f"{count} promotion(s) supprimée(s) avec succès.")
+    return redirect('promotion_list')
+
+
 # --- CRUD ENSEIGNANT ---
+
 class EnseignantListView(SafePaginationMixin, ListView):
     model = Enseignant
     template_name = "app/enseignant_list.html"

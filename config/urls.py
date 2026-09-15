@@ -5,7 +5,7 @@ from app.forms import LoginForm
 from app.views import (
     dashboard, import_excel_view,
     EtudiantListView, EtudiantDetailView, EtudiantCreateView, EtudiantUpdateView, EtudiantDeleteView,
-    PromotionListView, PromotionCreateView, PromotionDetailView, PromotionUpdateView, PromotionDeleteView,
+    PromotionListView, PromotionCreateView, PromotionDetailView, PromotionUpdateView, PromotionDeleteView, promotion_bulk_delete,
     EnseignantListView, EnseignantDetailView, EnseignantCreateView, EnseignantUpdateView, EnseignantDeleteView,
     SessionListView, SessionDetailView, SessionCreateView, SessionUpdateView, SessionDeleteView,
     session_participants_pdf, session_definir_active,
@@ -34,9 +34,11 @@ urlpatterns = [
     # URLs Promotion
     path('promotions/', PromotionListView.as_view(), name='promotion_list'),
     path('promotions/add/', PromotionCreateView.as_view(), name='promotion_create'),
+    path('promotions/bulk-delete/', promotion_bulk_delete, name='promotion_bulk_delete'),
     path('promotions/<int:pk>/', PromotionDetailView.as_view(), name='promotion_detail'),
     path('promotions/<int:pk>/edit/', PromotionUpdateView.as_view(), name='promotion_update'),
     path('promotions/<int:pk>/delete/', PromotionDeleteView.as_view(), name='promotion_delete'),
+
 
     # URLs Enseignant
     path('enseignants/', EnseignantListView.as_view(), name='enseignant_list'),

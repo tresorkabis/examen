@@ -1313,3 +1313,36 @@ class ExcelImportTests(TestCase):
         self.assertContains(reponse, 'Import étudiants terminé')
         self.assertTrue(Etudiant.objects.filter(numero_etudiant='L2INFO-002').exists())
 
+
+class PromotionBulkDeleteTests(TestCase):
+    """Tests pour la suppression en groupe de promotions."""
+
+    def setUp(self):
+        self.user = User.objects.create_user('admin_bulk', 'bulk@example.com', 'pass12345')
+        self.p1 = Promotion.objects.create(nom='Promotion Test 1')
+        self.p2 = Promotion.objects.create(nom='Promotion Test 2')
+        self.p3 = Promotion.objects.create(nom='Promotion Test 3')
+
+    def test_bulk_delete_anonyme_redirige(self):
+        url = reverse('promotion_bulk_delete')
+        response = self.client.post(url, {'promotion_ids': [self.p1.pk, self.p2.pk]})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_bulk_delete_connecte_succes(self):
+        self.client.force_login(self.user)
+        url = reverse('promotion_bulk_delete')
+        response = self.client.post(url, {'promotion_ids': [str(self.p1.pk), str(self.p2.pk)]})
+        self.assertRedirects(response, reverse('promotion_list'))
+        self.assertFalse(Promotion.objects.filter(pk=self.p1.pk).exists())
+        self.assertFalse(Promotion.objects.filter(pk=self.p2.pk).exists())
+        self.assertTrue(Promotion.objects.filter(pk=self.p3.pk).exists())
+
+    def test_bulk_delete_aucun_selectionne(self):
+        self.client.force_login(self.user)
+        url = reverse('promotion_bulk_delete')
+        response = self.client.post(url, {'promotion_ids': []})
+        self.assertRedirects(response, reverse('promotion_list'))
+        self.assertEqual(Promotion.objects.count(), 3)
+
+

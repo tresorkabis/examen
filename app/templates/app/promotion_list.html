@@ -3,65 +3,115 @@
 {% block title %}Liste des Promotions{% endblock %}
 
 {% block content %}
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>Liste des Promotions</h2>
-        <a href="{% url 'promotion_create' %}" class="btn btn-primary">Ajouter une Promotion</a>
-    </div>
-    <div class="card shadow-sm">
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead>
-                        <tr>
-                            <th>Nom de la Promotion</th>
-                            <th class="text-center">Étudiants</th>
-                            <th class="text-center">Cours</th>
-                            <th class="text-center">Enseignants</th>
-                            <th class="text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for p in promotions %}
-                        <tr>
-                            <td class="fw-semibold">{{ p.nom }}</td>
-                            <td class="text-center">
-                                {% if p.nb_etudiants %}
-                                    <a href="{% url 'etudiant_list' %}" class="badge text-bg-primary text-decoration-none"
-                                       title="Voir les étudiants">{{ p.nb_etudiants }}</a>
-                                {% else %}
-                                    <span class="badge text-bg-light">0</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if p.nb_cours %}
-                                    <a href="{% url 'cours_list' %}?promotion={{ p.pk }}" class="badge text-bg-secondary text-decoration-none"
-                                       title="Voir les cours de cette promotion">{{ p.nb_cours }}</a>
-                                {% else %}
-                                    <span class="badge text-bg-light">0</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if p.nb_enseignants %}
-                                    <span class="badge text-bg-info">{{ p.nb_enseignants }}</span>
-                                {% else %}
-                                    <span class="badge text-bg-light">0</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end">
-                                <a href="{% url 'promotion_detail' p.pk %}" class="btn btn-sm btn-outline-primary">Détail</a>
-                                <a href="{% url 'promotion_update' p.pk %}" class="btn btn-sm btn-outline-secondary">Modifier</a>
-                                <a href="{% url 'promotion_delete' p.pk %}" class="btn btn-sm btn-outline-danger">Supprimer</a>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="5" class="text-center text-muted py-4">Aucune promotion enregistrée.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+    <form method="post" action="{% url 'promotion_bulk_delete' %}" id="bulk-delete-form">
+        {% csrf_token %}
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <h2>Liste des Promotions</h2>
+            <div class="d-flex gap-2">
+                <button type="submit" id="btn-bulk-delete" class="btn btn-danger" disabled
+                        onclick="return confirm('Êtes-vous sûr de vouloir supprimer la/les promotion(s) sélectionnée(s) ? Cette action est irréversible.');">
+                    <i class="bi bi-trash me-1"></i>Supprimer la sélection (<span id="selected-count">0</span>)
+                </button>
+                <a href="{% url 'promotion_create' %}" class="btn btn-primary">
+                    <i class="bi bi-plus-lg me-1"></i>Ajouter une Promotion
+                </a>
             </div>
         </div>
-    </div>
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;">
+                                    <input type="checkbox" class="form-check-input" id="select-all" aria-label="Sélectionner toutes les promotions">
+                                </th>
+                                <th>Nom de la Promotion</th>
+                                <th class="text-center">Étudiants</th>
+                                <th class="text-center">Cours</th>
+                                <th class="text-center">Enseignants</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in promotions %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" name="promotion_ids" value="{{ p.pk }}" class="form-check-input promo-checkbox" aria-label="Sélectionner {{ p.nom }}">
+                                </td>
+                                <td class="fw-semibold">{{ p.nom }}</td>
+                                <td class="text-center">
+                                    {% if p.nb_etudiants %}
+                                        <a href="{% url 'etudiant_list' %}" class="badge text-bg-primary text-decoration-none"
+                                           title="Voir les étudiants">{{ p.nb_etudiants }}</a>
+                                    {% else %}
+                                        <span class="badge text-bg-light">0</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if p.nb_cours %}
+                                        <a href="{% url 'cours_list' %}?promotion={{ p.pk }}" class="badge text-bg-secondary text-decoration-none"
+                                           title="Voir les cours de cette promotion">{{ p.nb_cours }}</a>
+                                    {% else %}
+                                        <span class="badge text-bg-light">0</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if p.nb_enseignants %}
+                                        <span class="badge text-bg-info">{{ p.nb_enseignants }}</span>
+                                    {% else %}
+                                        <span class="badge text-bg-light">0</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <a href="{% url 'promotion_detail' p.pk %}" class="btn btn-sm btn-outline-primary">Détail</a>
+                                    <a href="{% url 'promotion_update' p.pk %}" class="btn btn-sm btn-outline-secondary">Modifier</a>
+                                    <a href="{% url 'promotion_delete' p.pk %}" class="btn btn-sm btn-outline-danger">Supprimer</a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-4">Aucune promotion enregistrée.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </form>
     {% include 'app/_pagination.html' %}
+{% endblock %}
+
+{% block extra_script %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const selectAll = document.getElementById('select-all');
+    const checkboxes = document.querySelectorAll('.promo-checkbox');
+    const btnDelete = document.getElementById('btn-bulk-delete');
+    const countSpan = document.getElementById('selected-count');
+
+    function updateState() {
+        const checked = document.querySelectorAll('.promo-checkbox:checked');
+        const count = checked.length;
+        countSpan.textContent = count;
+        btnDelete.disabled = count === 0;
+        if (selectAll) {
+            selectAll.checked = checkboxes.length > 0 && count === checkboxes.length;
+            selectAll.indeterminate = count > 0 && count < checkboxes.length;
+        }
+    }
+
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            checkboxes.forEach(cb => cb.checked = selectAll.checked);
+            updateState();
+        });
+    }
+
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', updateState);
+    });
+});
+</script>
 {% endblock %}
