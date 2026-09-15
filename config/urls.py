@@ -9,7 +9,7 @@ from app.views import (
     EnseignantListView, EnseignantDetailView, EnseignantCreateView, EnseignantUpdateView, EnseignantDeleteView,
     SessionListView, SessionDetailView, SessionCreateView, SessionUpdateView, SessionDeleteView,
     session_participants_pdf, session_definir_active,
-    CoursListView, CoursDetailView, CoursCreateView, CoursUpdateView, CoursDeleteView,
+    CoursListView, CoursDetailView, CoursCreateView, CoursUpdateView, CoursDeleteView, cours_bulk_delete,
     ExamenListView, ExamenCreateView, ExamenUpdateView, ExamenDeleteView,
     fiche_cote, examen_inscrire, examen_desinscrire, examen_inscrire_tous,
     examen_marquer_notee, examen_non_notes_impression
@@ -59,9 +59,11 @@ urlpatterns = [
     # URLs Cours
     path('cours/', CoursListView.as_view(), name='cours_list'),
     path('cours/add/', CoursCreateView.as_view(), name='cours_create'),
+    path('cours/bulk-delete/', cours_bulk_delete, name='cours_bulk_delete'),
     path('cours/<int:pk>/', CoursDetailView.as_view(), name='cours_detail'),
     path('cours/<int:pk>/edit/', CoursUpdateView.as_view(), name='cours_update'),
     path('cours/<int:pk>/delete/', CoursDeleteView.as_view(), name='cours_delete'),
+
 
     # URLs Examen
     path('examens/imprimer/non-notes/', examen_non_notes_impression, name='examen_non_notes_print'),

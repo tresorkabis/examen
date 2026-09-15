@@ -509,8 +509,26 @@ class CoursDetailView(DetailView):
         return ctx
 
 
+@login_required
+def cours_bulk_delete(request):
+    """Suppression en groupe de cours sélectionnés."""
+    if request.method == 'POST':
+        pks = request.POST.getlist('cours_ids')
+        if not pks:
+            messages.warning(request, "Aucun cours n'a été sélectionné pour la suppression.")
+            return redirect('cours_list')
+
+        with transaction.atomic():
+            cours_qs = Cours.objects.filter(pk__in=pks)
+            count = cours_qs.count()
+            cours_qs.delete()
+
+        messages.success(request, f"{count} cours supprimé(s) avec succès.")
+    return redirect('cours_list')
+
 
 # --- CRUD SESSION ---
+
 class SessionListView(SafePaginationMixin, ListView):
     model = Session
     template_name = "app/session_list.html"

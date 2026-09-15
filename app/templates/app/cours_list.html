@@ -3,101 +3,151 @@
 {% block title %}Liste des Cours{% endblock %}
 
 {% block content %}
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>Liste des Cours</h2>
-        <div class="d-flex gap-2">
-            <a href="{% url 'import_excel' %}?type=cours" class="btn btn-outline-success">
-                <i class="bi bi-file-earmark-excel me-1"></i>Importer (Excel)
-            </a>
-            <a href="{% url 'cours_create' %}" class="btn btn-primary">
-                <i class="bi bi-plus-lg me-1"></i>Ajouter un Cours
-            </a>
-        </div>
-    </div>
-
-
-    <div class="card shadow-sm mb-3">
-        <div class="card-body py-2">
-            <form method="get" class="row g-2 align-items-center">
-                <div class="col-md-4">
-                    <input type="search" name="q" value="{{ filters.q|default:'' }}" class="form-control"
-                           placeholder="Rechercher un cours…" aria-label="Rechercher un cours">
-                </div>
-                <div class="col-md-3">
-                    <select name="promotion" class="form-select" aria-label="Filtrer par promotion"
-                            onchange="this.form.submit()">
-                        <option value="">Toutes les promotions</option>
-                        {% for p in filter_promotions %}
-                            <option value="{{ p.pk }}" {% if filters.promotion == p.pk %}selected{% endif %}>{{ p.nom }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <select name="enseignant" class="form-select" aria-label="Filtrer par enseignant"
-                            onchange="this.form.submit()">
-                        <option value="">Tous les enseignants</option>
-                        {% for e in filter_enseignants %}
-                            <option value="{{ e.pk }}" {% if filters.enseignant == e.pk %}selected{% endif %}>{{ e.nom }} {{ e.prenom }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-2 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary" title="Rechercher">
-                        <i class="bi bi-search"></i>
-                    </button>
-                    {% if filters %}
-                        <a href="{% url 'cours_list' %}" class="btn btn-outline-secondary" title="Réinitialiser les filtres">
-                            <i class="bi bi-x-lg"></i>
-                        </a>
-                    {% endif %}
-                </div>
-            </form>
-        </div>
-    </div>
-
-    {% if filters %}
-        <p class="text-muted">
-            {{ paginator.count }} cours sur {{ total_cours }} correspondent aux filtres.
-        </p>
-    {% endif %}
-
-    <div class="card shadow-sm">
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead>
-                        <tr>
-                            <th>Nom du Cours</th>
-                            <th>Coefficient</th>
-                            <th>Enseignant</th>
-                            <th>Promotion</th>
-                            <th class="text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for c in cours_list %}
-                        <tr>
-                            <td class="fw-semibold"><a href="{% url 'cours_detail' c.pk %}">{{ c.nom }}</a></td>
-                            <td>{{ c.coefficient }}</td>
-                            <td>{{ c.enseignant|default:"—" }}</td>
-                            <td>{{ c.promotion }}</td>
-                            <td class="text-end">
-                                <a href="{% url 'cours_detail' c.pk %}" class="btn btn-sm btn-outline-primary" title="Détail du cours"><i class="bi bi-eye me-1"></i>Détail</a>
-                                <a href="{% url 'cours_update' c.pk %}" class="btn btn-sm btn-outline-secondary">Modifier</a>
-                                <a href="{% url 'cours_delete' c.pk %}" class="btn btn-sm btn-outline-danger">Supprimer</a>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="5" class="text-center text-muted py-4">
-                                {% if filters %}Aucun cours ne correspond aux filtres.{% else %}Aucun cours enregistré.{% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+    <form method="post" action="{% url 'cours_bulk_delete' %}" id="bulk-delete-form">
+        {% csrf_token %}
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2>Liste des Cours</h2>
+            <div class="d-flex gap-2">
+                <button type="submit" id="btn-bulk-delete" class="btn btn-danger" disabled
+                        onclick="return confirm('Êtes-vous sûr de vouloir supprimer la/les cours sélectionné(s) ? Cette action est irréversible.');">
+                    <i class="bi bi-trash me-1"></i>Supprimer la sélection (<span id="selected-count">0</span>)
+                </button>
+                <a href="{% url 'import_excel' %}?type=cours" class="btn btn-outline-success">
+                    <i class="bi bi-file-earmark-excel me-1"></i>Importer (Excel)
+                </a>
+                <a href="{% url 'cours_create' %}" class="btn btn-primary">
+                    <i class="bi bi-plus-lg me-1"></i>Ajouter un Cours
+                </a>
             </div>
         </div>
-    </div>
+
+        <div class="card shadow-sm mb-3">
+            <div class="card-body py-2">
+                <div class="row g-2 align-items-center">
+                    <div class="col-md-4">
+                        <input type="search" name="q" value="{{ filters.q|default:'' }}" class="form-control"
+                               placeholder="Rechercher un cours…" aria-label="Rechercher un cours"
+                               form="search-form">
+                    </div>
+                    <div class="col-md-3">
+                        <select name="promotion" class="form-select" aria-label="Filtrer par promotion"
+                                form="search-form" onchange="document.getElementById('search-form').submit()">
+                            <option value="">Toutes les promotions</option>
+                            {% for p in filter_promotions %}
+                                <option value="{{ p.pk }}" {% if filters.promotion == p.pk %}selected{% endif %}>{{ p.nom }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select name="enseignant" class="form-select" aria-label="Filtrer par enseignant"
+                                form="search-form" onchange="document.getElementById('search-form').submit()">
+                            <option value="">Tous les enseignants</option>
+                            {% for e in filter_enseignants %}
+                                <option value="{{ e.pk }}" {% if filters.enseignant == e.pk %}selected{% endif %}>{{ e.nom }} {{ e.prenom }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex gap-2">
+                        <button type="submit" form="search-form" class="btn btn-primary" title="Rechercher">
+                            <i class="bi bi-search"></i>
+                        </button>
+                        {% if filters %}
+                            <a href="{% url 'cours_list' %}" class="btn btn-outline-secondary" title="Réinitialiser les filtres">
+                                <i class="bi bi-x-lg"></i>
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if filters %}
+            <p class="text-muted">
+                {{ paginator.count }} cours sur {{ total_cours }} correspondent aux filtres.
+            </p>
+        {% endif %}
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;">
+                                    <input type="checkbox" class="form-check-input" id="select-all" aria-label="Sélectionner tous les cours">
+                                </th>
+                                <th>Nom du Cours</th>
+                                <th>Coefficient</th>
+                                <th>Enseignant</th>
+                                <th>Promotion</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in cours_list %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" name="cours_ids" value="{{ c.pk }}" class="form-check-input cours-checkbox" aria-label="Sélectionner {{ c.nom }}">
+                                </td>
+                                <td class="fw-semibold"><a href="{% url 'cours_detail' c.pk %}">{{ c.nom }}</a></td>
+                                <td>{{ c.coefficient }}</td>
+                                <td>{{ c.enseignant|default:"—" }}</td>
+                                <td>{{ c.promotion }}</td>
+                                <td class="text-end">
+                                    <a href="{% url 'cours_detail' c.pk %}" class="btn btn-sm btn-outline-primary" title="Détail du cours"><i class="bi bi-eye me-1"></i>Détail</a>
+                                    <a href="{% url 'cours_update' c.pk %}" class="btn btn-sm btn-outline-secondary">Modifier</a>
+                                    <a href="{% url 'cours_delete' c.pk %}" class="btn btn-sm btn-outline-danger">Supprimer</a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-4">
+                                    {% if filters %}Aucun cours ne correspond aux filtres.{% else %}Aucun cours enregistré.{% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <!-- Formulaire GET séparé pour les filtres et recherches -->
+    <form method="get" id="search-form" action="{% url 'cours_list' %}"></form>
+
     {% include 'app/_pagination.html' %}
+{% endblock %}
+
+{% block extra_script %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const selectAll = document.getElementById('select-all');
+    const checkboxes = document.querySelectorAll('.cours-checkbox');
+    const btnDelete = document.getElementById('btn-bulk-delete');
+    const countSpan = document.getElementById('selected-count');
+
+    function updateState() {
+        const checked = document.querySelectorAll('.cours-checkbox:checked');
+        const count = checked.length;
+        countSpan.textContent = count;
+        btnDelete.disabled = count === 0;
+        if (selectAll) {
+            selectAll.checked = checkboxes.length > 0 && count === checkboxes.length;
+            selectAll.indeterminate = count > 0 && count < checkboxes.length;
+        }
+    }
+
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            checkboxes.forEach(cb => cb.checked = selectAll.checked);
+            updateState();
+        });
+    }
+
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', updateState);
+    });
+});
+</script>
 {% endblock %}

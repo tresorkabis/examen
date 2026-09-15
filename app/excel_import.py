@@ -6,6 +6,27 @@ from app.models import Etudiant, Enseignant, Cours, Promotion
 
 NUM_RE = re.compile(r'^\d{1,3}$')
 
+PROMOTION_ALIASES = {
+    'L3 INFO': 'L3 INFO A',
+    'L3 INFO LMD': 'L3 INFO A',
+    'L3 INFO LMD A': 'L3 INFO A',
+    'L2 TS LMD A': 'L2 SDA',
+    'L2 TS A': 'L2 SDA',
+    'L2 SD A': 'L2 SDA',
+    'L3 TS LMD A': 'L3 SDA',
+    'L3 TS A': 'L3 SDA',
+    'L3 SD A': 'L3 SDA',
+}
+
+
+def normalize_promotion_name(name):
+    """Mappe les variations et alias des noms de promotions vers un nom officiel unique."""
+    if not name:
+        return name
+    clean_name = str(name).strip()
+    return PROMOTION_ALIASES.get(clean_name, clean_name)
+
+
 
 def slugify(text):
     """Convertit un texte en minuscules, sans accents ni caractères spéciaux."""
@@ -126,14 +147,14 @@ def import_etudiants_excel(file_obj, default_promotion_id=None):
                         # Promotion
                         promo_obj = default_promotion
                         if promo_col and not pd.isna(row[promo_col]):
-                            promo_name = str(row[promo_col]).strip()
+                            promo_name = normalize_promotion_name(str(row[promo_col]).strip())
                             if promo_name:
                                 promo_obj, _ = Promotion.objects.get_or_create(nom=promo_name)
 
                         if not promo_obj:
                             # Utiliser le nom de la feuille comme promotion si valide
                             if sheet_name and not sheet_name.lower().startswith('sheet'):
-                                promo_obj, _ = Promotion.objects.get_or_create(nom=sheet_name.strip())
+                                promo_obj, _ = Promotion.objects.get_or_create(nom=normalize_promotion_name(sheet_name.strip()))
                             else:
                                 promo_obj, _ = Promotion.objects.get_or_create(nom='Promotion Générale')
 
@@ -172,7 +193,8 @@ def import_etudiants_excel(file_obj, default_promotion_id=None):
                 df_raw = excel_file.parse(sheet_name, header=None)
                 promo_obj = default_promotion
                 if not promo_obj:
-                    promo_obj, _ = Promotion.objects.get_or_create(nom=sheet_name.strip())
+                    promo_obj, _ = Promotion.objects.get_or_create(nom=normalize_promotion_name(sheet_name.strip()))
+
 
                 promo_slug = slugify(promo_obj.nom).upper() or 'ETU'
                 seen_names = set()
@@ -372,15 +394,16 @@ def import_cours_excel(file_obj, default_promotion_id=None):
                     # Promotion
                     promo_obj = default_promotion
                     if promo_col and not pd.isna(row[promo_col]):
-                        promo_name = str(row[promo_col]).strip()
+                        promo_name = normalize_promotion_name(str(row[promo_col]).strip())
                         if promo_name:
                             promo_obj, _ = Promotion.objects.get_or_create(nom=promo_name)
 
                     if not promo_obj:
                         if sheet_name and not sheet_name.lower().startswith('sheet'):
-                            promo_obj, _ = Promotion.objects.get_or_create(nom=sheet_name.strip())
+                            promo_obj, _ = Promotion.objects.get_or_create(nom=normalize_promotion_name(sheet_name.strip()))
                         else:
                             promo_obj, _ = Promotion.objects.get_or_create(nom='Promotion Générale')
+
 
                     # Enseignant
                     enseignant_obj = None

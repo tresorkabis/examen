@@ -1346,3 +1346,37 @@ class PromotionBulkDeleteTests(TestCase):
         self.assertEqual(Promotion.objects.count(), 3)
 
 
+class CoursBulkDeleteTests(TestCase):
+    """Tests pour la suppression en groupe de cours."""
+
+    def setUp(self):
+        self.user = User.objects.create_user('admin_cours_bulk', 'coursbulk@example.com', 'pass12345')
+        self.promo = Promotion.objects.create(nom='Promotion Cours Test')
+        self.c1 = Cours.objects.create(nom='Cours Test 1', promotion=self.promo)
+        self.c2 = Cours.objects.create(nom='Cours Test 2', promotion=self.promo)
+        self.c3 = Cours.objects.create(nom='Cours Test 3', promotion=self.promo)
+
+    def test_bulk_delete_anonyme_redirige(self):
+        url = reverse('cours_bulk_delete')
+        response = self.client.post(url, {'cours_ids': [self.c1.pk, self.c2.pk]})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+    def test_bulk_delete_connecte_succes(self):
+        self.client.force_login(self.user)
+        url = reverse('cours_bulk_delete')
+        response = self.client.post(url, {'cours_ids': [str(self.c1.pk), str(self.c2.pk)]})
+        self.assertRedirects(response, reverse('cours_list'))
+        self.assertFalse(Cours.objects.filter(pk=self.c1.pk).exists())
+        self.assertFalse(Cours.objects.filter(pk=self.c2.pk).exists())
+        self.assertTrue(Cours.objects.filter(pk=self.c3.pk).exists())
+
+    def test_bulk_delete_aucun_selectionne(self):
+        self.client.force_login(self.user)
+        url = reverse('cours_bulk_delete')
+        response = self.client.post(url, {'cours_ids': []})
+        self.assertRedirects(response, reverse('cours_list'))
+        self.assertEqual(Cours.objects.filter(promotion=self.promo).count(), 3)
+
+
+
