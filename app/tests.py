@@ -633,6 +633,41 @@ class ExamenImpressionTests(BaseDataMixin, TestCase):
         self.assertIn('Le Secrétaire du Jury', contenu)
         self.assertIn('Le Président du Jury', contenu)
 
+    def test_trie_par_enseignant(self):
+        """La liste imprimée est triée par nom d'enseignant (puis prénom)."""
+        for nom, prenom, email in [
+                ('ZZZ', 'Ulysse', 'z.ulysse@example.com'),
+                ('AAA', 'Premier', 'a.premier@example.com')]:
+            ens = Enseignant.objects.create(
+                nom=nom, prenom=prenom, email=email)
+            cours = Cours.objects.create(
+                nom=f'Cours de {nom}', coefficient=1,
+                enseignant=ens, promotion=self.promotion)
+            Examen.objects.create(
+                cours=cours, session=self.session,
+                date_examen=timezone.make_aware(datetime(2026, 5, 1, 8, 0)))
+        reponse = self.client.get(reverse('examen_non_notes_print'))
+        self.assertEqual(reponse.status_code, 200)
+        examens = list(reponse.context['examens'])
+        self.assertEqual(len(examens), 3)  # examen de base + les deux ajoutés
+        # L'examen de base est rattaché à l'enseignant KABISAYI.
+        noms = [e.cours.enseignant.nom for e in examens]
+        self.assertEqual(noms, ['AAA', 'KABISAYI', 'ZZZ'])
+
+    def test_cours_sans_enseignant_en_dernier(self):
+        """Les cours sans titulaire sont rejetés en fin de liste."""
+        cours = Cours.objects.create(
+            nom='Cours sans titulaire', coefficient=1,
+            promotion=self.promotion)
+        Examen.objects.create(
+            cours=cours, session=self.session,
+            date_examen=timezone.make_aware(datetime(2026, 5, 2, 8, 0)))
+        reponse = self.client.get(reverse('examen_non_notes_print'))
+        examens = list(reponse.context['examens'])
+        # Seul l'examen de base (KABISAYI) le précède.
+        self.assertEqual(examens[-1].cours.nom, 'Cours sans titulaire')
+        self.assertIsNone(examens[-1].cours.enseignant)
+
 
 class DashboardSessionActiveTests(TestCase):
     """Les statistiques du tableau de bord sont liées à la session en cours."""

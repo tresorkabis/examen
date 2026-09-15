@@ -7,7 +7,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
 from django.core.exceptions import ValidationError
 from django.core.cache import cache
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, F, Prefetch, Q
 from django.http import FileResponse, Http404, HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse_lazy
@@ -1047,7 +1047,8 @@ def examen_marquer_notee(request, pk):
 
 def examen_non_notes_impression(request):
     """Page imprimable : liste des cours (examens) dont les copies ne sont
-    pas encore corrigées (est_note=False), tous confondus, triés par cours.
+    pas encore corrigées (est_note=False), tous confondus, triés par
+    enseignant (nom puis prénom), les cours sans titulaire en dernier.
 
     Document de suivi pour le secrétariat / chef de département : tableau
     compact, total et zone de signature, conçu pour l'impression (même
@@ -1056,7 +1057,8 @@ def examen_non_notes_impression(request):
     examens = (Examen.objects
                .select_related('cours__promotion', 'cours__enseignant', 'session')
                .filter(est_note=False)
-               .order_by('cours__nom', 'cours__promotion__nom',
-                         'session__date_debut', 'date_examen'))
+               .order_by(F('cours__enseignant__nom').asc(nulls_last=True),
+                         F('cours__enseignant__prenom').asc(nulls_last=True),
+                         'cours__nom', 'cours__promotion__nom'))
     return render(request, 'app/examen_non_notes_print.html',
                   {'examens': examens, 'total': examens.count()})
