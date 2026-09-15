@@ -1,0 +1,194 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Importation Excel{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-file-earmark-excel text-success me-2"></i>Importation Excel</h2>
+        <p class="text-muted mb-0">Importez facilement des Étudiants, Enseignants ou Cours à partir de fichiers Excel (.xlsx, .xls).</p>
+    </div>
+</div>
+
+<!-- Onglets de sélection du type d'importation -->
+<ul class="nav nav-pills nav-fill mb-4 bg-white p-2 rounded shadow-sm border">
+    <li class="nav-item">
+        <a class="nav-link {% if type_active == 'etudiants' %}active{% endif %}" href="?type=etudiants">
+            <i class="bi bi-people-fill me-2"></i>Étudiants
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if type_active == 'enseignants' %}active{% endif %}" href="?type=enseignants">
+            <i class="bi bi-person-vcard me-2"></i>Enseignants
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if type_active == 'cours' %}active{% endif %}" href="?type=cours">
+            <i class="bi bi-book me-2"></i>Cours
+        </a>
+    </li>
+</ul>
+
+<div class="row g-4">
+    <!-- Formulaire d'importation -->
+    <div class="col-lg-7">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white py-3">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-upload me-2 text-primary"></i>
+                    Importer des 
+                    {% if type_active == 'etudiants' %}Étudiants{% elif type_active == 'enseignants' %}Enseignants{% else %}Cours{% endif %}
+                </h5>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    
+                    <input type="hidden" name="type_import" value="{{ type_active }}">
+
+                    <div class="mb-4">
+                        <label for="{{ form.fichier_excel.id_for_label }}" class="form-label fw-semibold">
+                            Sélectionner le fichier Excel (.xlsx, .xls) <span class="text-danger">*</span>
+                        </label>
+                        {{ form.fichier_excel }}
+                        {% if form.fichier_excel.errors %}
+                            <div class="text-danger small mt-1">{{ form.fichier_excel.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    {% if type_active == 'etudiants' or type_active == 'cours' %}
+                    <div class="mb-4">
+                        <label for="{{ form.promotion.id_for_label }}" class="form-label fw-semibold">
+                            Promotion par défaut (optionnel)
+                        </label>
+                        {{ form.promotion }}
+                        <div class="form-text">
+                            Si le fichier ne contient pas de colonne « Promotion », cette promotion sera appliquée automatiquement.
+                        </div>
+                        {% if form.promotion.errors %}
+                            <div class="text-danger small mt-1">{{ form.promotion.errors }}</div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    <div class="d-grid mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-cloud-arrow-up-fill me-2"></i>Lancer l'importation
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Instructions et formats acceptés -->
+    <div class="col-lg-5">
+        <div class="card shadow-sm border-0 bg-light h-100">
+            <div class="card-body p-4">
+                <h5 class="card-title mb-3">
+                    <i class="bi bi-info-circle me-2 text-info"></i>Format de fichier attendu
+                </h5>
+
+                {% if type_active == 'etudiants' %}
+                <p class="small text-muted">Vous pouvez importer les étudiants de 2 manières :</p>
+                
+                <div class="mb-3">
+                    <span class="badge text-bg-primary mb-2">Option A : Tableau standard</span>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered bg-white text-center small mb-1">
+                            <thead class="table-light">
+                                <tr><th>Nom</th><th>Prénom</th><th>N° Étudiant</th><th>Promotion</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr><td>KABISAYI</td><td>Trésor</td><td>L3INFO-001</td><td>L3 INFO A</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div>
+                    <span class="badge text-bg-secondary mb-2">Option B : Grille de délibération LMD</span>
+                    <p class="small text-muted mb-1">Fichier avec colonne 1 = N° d'ordre, colonne 2 = NOM POSTNOM PRÉNOM (nom de la feuille = promotion).</p>
+                </div>
+
+                {% elif type_active == 'enseignants' %}
+                <p class="small text-muted">Format recommandé pour l'importation des enseignants :</p>
+                
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm table-bordered bg-white text-center small mb-1">
+                        <thead class="table-light">
+                            <tr><th>Nom</th><th>Prénom</th><th>Email</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>BABANEMI</td><td>Jean</td><td>j.babanemi@example.com</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted"><i class="bi bi-check-circle me-1"></i>L'email sera généré automatiquement s'il n'est pas renseigné.</p>
+
+                {% else %}
+                <p class="small text-muted">Format recommandé pour l'importation des cours :</p>
+                
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm table-bordered bg-white text-center small mb-1">
+                        <thead class="table-light">
+                            <tr><th>Cours</th><th>Promotion</th><th>Enseignant</th><th>Coefficient</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Programmation Web</td><td>L3 INFO A</td><td>BABANEMI Jean</td><td>2</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted"><i class="bi bi-check-circle me-1"></i>Prend aussi en charge les fiches de charge horaire (ex: <code>Charge_Horaire.xlsx</code>).</p>
+                {% endif %}
+
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if resultats %}
+<div class="card shadow-sm border-0 mt-4">
+    <div class="card-header bg-white py-3">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-clipboard-data me-2 text-success"></i>Rapport d'importation
+        </h5>
+    </div>
+    <div class="card-body p-4">
+        <div class="row text-center g-3 mb-3">
+            <div class="col-md-4">
+                <div class="p-3 bg-success bg-opacity-10 border border-success border-opacity-25 rounded">
+                    <div class="display-6 fw-bold text-success">{{ resultats.created }}</div>
+                    <div class="text-success small fw-semibold">Élément(s) créé(s)</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 bg-primary bg-opacity-10 border border-primary border-opacity-25 rounded">
+                    <div class="display-6 fw-bold text-primary">{{ resultats.updated }}</div>
+                    <div class="text-primary small fw-semibold">Élément(s) mis à jour</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 bg-secondary bg-opacity-10 border border-secondary border-opacity-25 rounded">
+                    <div class="display-6 fw-bold text-secondary">{{ resultats.skipped }}</div>
+                    <div class="text-secondary small fw-semibold">Ignoré(s) / Doublons</div>
+                </div>
+            </div>
+        </div>
+
+        {% if resultats.errors %}
+        <div class="alert alert-warning mb-0">
+            <h6 class="alert-heading fw-bold"><i class="bi bi-exclamation-triangle me-2"></i>Avertissements & Erreurs ({{ resultats.errors|length }})</h6>
+            <ul class="mb-0 ps-3 small">
+                {% for err in resultats.errors %}
+                    <li>{{ err }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+

@@ -17,8 +17,10 @@ from django.views.generic import (ListView, CreateView, UpdateView, DeleteView,
                                   DetailView)
 
 from .forms import (PromotionForm, EnseignantForm, EtudiantForm, CoursForm,
-                    SessionForm, ExamenForm)
+                    SessionForm, ExamenForm, ExcelImportForm)
 from .models import Etudiant, Cours, Session, Enseignant, Promotion, Examen, Inscription
+from .excel_import import (import_etudiants_excel, import_enseignants_excel,
+                          import_cours_excel)
 
 
 def _calcul_compteurs(session):
@@ -1062,3 +1064,58 @@ def examen_non_notes_impression(request):
                          'cours__nom', 'cours__promotion__nom'))
     return render(request, 'app/examen_non_notes_print.html',
                   {'examens': examens, 'total': examens.count()})
+
+
+@login_required
+def import_excel_view(request):
+    """Vue pour l'importation de fichiers Excel (Étudiants, Enseignants, Cours)."""
+    type_param = request.GET.get('type', 'etudiants')
+    if type_param not in ['etudiants', 'enseignants', 'cours']:
+        type_param = 'etudiants'
+
+    resultats = None
+
+    if request.method == 'POST':
+        form = ExcelImportForm(request.POST, request.FILES)
+        if form.is_valid():
+            type_import = form.cleaned_data['type_import']
+            fichier = form.cleaned_data['fichier_excel']
+            promotion = form.cleaned_data.get('promotion')
+            promo_id = promotion.pk if promotion else None
+
+            if type_import == 'etudiants':
+                res = import_etudiants_excel(fichier, default_promotion_id=promo_id)
+                libelle = "étudiants"
+            elif type_import == 'enseignants':
+                res = import_enseignants_excel(fichier)
+                libelle = "enseignants"
+            elif type_import == 'cours':
+                res = import_cours_excel(fichier, default_promotion_id=promo_id)
+                libelle = "cours"
+            else:
+                res = {'success': False, 'created': 0, 'updated': 0, 'skipped': 0, 'errors': ["Type d'import invalide."]}
+                libelle = "éléments"
+
+            resultats = res
+            if res['success']:
+                msg = f"Import {libelle} terminé : {res['created']} créé(s), {res['updated']} mis à jour, {res['skipped']} ignoré(s)."
+                if res['errors']:
+                    msg += f" ({len(res['errors'])} avertissement(s)/erreur(s))."
+                    messages.warning(request, msg)
+                else:
+                    messages.success(request, msg)
+            else:
+                messages.error(request, f"Erreur lors de l'import : {', '.join(res['errors'])}")
+
+            type_param = type_import
+    else:
+        form = ExcelImportForm(initial={'type_import': type_param})
+
+    context = {
+        'form': form,
+        'type_active': type_param,
+        'resultats': resultats,
+        'promotions': Promotion.objects.all(),
+    }
+    return render(request, 'app/import_excel.html', context)
+

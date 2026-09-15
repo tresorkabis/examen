@@ -213,6 +213,11 @@
                 <i class="bi bi-file-earmark-text"></i><span>Examens</span>
             </a>
 
+            <span class="sidebar-group">Données</span>
+            <a class="nav-link {% if 'import' in current_url_name|default:'' %}active{% endif %}" href="{% url 'import_excel' %}">
+                <i class="bi bi-file-earmark-excel"></i><span>Import Excel</span>
+            </a>
+
             <div class="sidebar-footer mt-auto">
                 {% if user.is_authenticated %}
                 <div class="mb-2 small text-white-50">

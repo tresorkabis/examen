@@ -1225,3 +1225,91 @@ class CoursDetailViewTest(BaseDataMixin, TestCase):
         reponse = self.client.get(reverse('cours_list'))
         self.assertEqual(reponse.status_code, 200)
         self.assertContains(reponse, reverse('cours_detail', args=[cours.pk]))
+
+
+class ExcelImportTests(TestCase):
+    """Tests pour les fonctionnalités d'importation Excel."""
+
+    def setUp(self):
+        self.user = User.objects.create_user('admin_import', 'import@example.com', 'pass12345')
+
+    def _creer_excel_bytes(self, df_dict, sheet_name='Sheet1'):
+        import pandas as pd
+        bio = BytesIO()
+        with pd.ExcelWriter(bio, engine='openpyxl') as writer:
+            if isinstance(df_dict, dict):
+                df = pd.DataFrame(df_dict)
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+            elif isinstance(df_dict, pd.DataFrame):
+                df_dict.to_excel(writer, sheet_name=sheet_name, index=False)
+        bio.seek(0)
+        return bio
+
+    def test_import_etudiants_excel(self):
+        from app.excel_import import import_etudiants_excel
+        bio = self._creer_excel_bytes({
+            'Nom': ['KABISAYI'],
+            'Prénom': ['Trésor'],
+            'N° Étudiant': ['L3INFO-001'],
+            'Promotion': ['L3 INFO A']
+        })
+        res = import_etudiants_excel(bio)
+        self.assertTrue(res['success'])
+        self.assertEqual(res['created'], 1)
+        self.assertTrue(Etudiant.objects.filter(numero_etudiant='L3INFO-001').exists())
+
+    def test_import_enseignants_excel(self):
+        from app.excel_import import import_enseignants_excel
+        bio = self._creer_excel_bytes({
+            'Nom': ['BABANEMI'],
+            'Prénom': ['Jean'],
+            'Email': ['jean.babanemi@example.com']
+        })
+        res = import_enseignants_excel(bio)
+        self.assertTrue(res['success'])
+        self.assertEqual(res['created'], 1)
+        self.assertTrue(Enseignant.objects.filter(email='jean.babanemi@example.com').exists())
+
+    def test_import_cours_excel(self):
+        from app.excel_import import import_cours_excel
+        bio = self._creer_excel_bytes({
+            'Cours': ['Programmation Web'],
+            'Promotion': ['L3 INFO A'],
+            'Enseignant': ['BABANEMI Jean'],
+            'Coefficient': [2]
+        })
+        res = import_cours_excel(bio)
+        self.assertTrue(res['success'])
+        self.assertEqual(res['created'], 1)
+        self.assertTrue(Cours.objects.filter(nom='Programmation Web').exists())
+
+    def test_vue_import_anonyme_redirige(self):
+        url = reverse('import_excel')
+        reponse = self.client.get(url)
+        self.assertEqual(reponse.status_code, 302)
+
+    def test_vue_import_connecte(self):
+        self.client.force_login(self.user)
+        url = reverse('import_excel')
+        reponse = self.client.get(url)
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'Importation Excel')
+
+    def test_vue_import_post_etudiants(self):
+        self.client.force_login(self.user)
+        bio = self._creer_excel_bytes({
+            'Nom': ['MUKENDI'],
+            'Prénom': ['Alain'],
+            'N° Étudiant': ['L2INFO-002'],
+            'Promotion': ['L2 INFO']
+        })
+        bio.name = 'etudiants_test.xlsx'
+        url = reverse('import_excel')
+        reponse = self.client.post(url, {
+            'type_import': 'etudiants',
+            'fichier_excel': bio
+        })
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'Import étudiants terminé')
+        self.assertTrue(Etudiant.objects.filter(numero_etudiant='L2INFO-002').exists())
+

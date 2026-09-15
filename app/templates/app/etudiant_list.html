@@ -15,9 +15,13 @@
                     <a href="{% url 'etudiant_list' %}" class="btn btn-outline-secondary" title="Effacer la recherche">&times;</a>
                 {% endif %}
             </form>
+            <a href="{% url 'import_excel' %}?type=etudiants" class="btn btn-outline-success">
+                <i class="bi bi-file-earmark-excel me-1"></i>Importer (Excel)
+            </a>
             <a href="{% url 'etudiant_create' %}" class="btn btn-primary">
                 <i class="bi bi-person-plus me-1"></i>Ajouter
             </a>
+
         </div>
     </div>
 

@@ -1,12 +1,30 @@
 import os
 import django
 import pandas as pd
+import re
+import unicodedata
+from pathlib import Path
 
 # Configuration de l'environnement Django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
 from app.models import Promotion, Enseignant, Cours
+
+BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_FILE_PATH = BASE_DIR / 'data' / 'Charge_Horaire_2025_2026.xlsx'
+
+
+def slugify(text):
+    text = unicodedata.normalize('NFKD', str(text))
+    text = ''.join(c for c in text if not unicodedata.combining(c))
+    return re.sub(r'[^a-z0-9]', '', text.lower())
+
+
+def teacher_email(full_name):
+    parts = [slugify(part) for part in str(full_name).split()]
+    base = '.'.join(part for part in parts if part) or 'enseignant'
+    return f'{base}@example.com'
 
 def import_excel_data(file_path):
     print(f"🚀 Démarrage de l'importation depuis : {file_path}")
@@ -47,19 +65,27 @@ def import_excel_data(file_path):
                     prenom = name_parts[1] if len(name_parts) > 1 else ""
                     
                     enseignant, _ = Enseignant.objects.get_or_create(
-                        email=f"{full_name.lower().replace(' ', '.')}@example.com", 
+                        email=teacher_email(full_name),
                         defaults={'nom': nom, 'prenom': prenom}
                     )
                     
                     # 3. Gestion du Cours
                     cours_nom = str(row['COURS']).strip()
-                    # Le cours est unique pour une promotion et un enseignant
-                    cours, created = Cours.objects.get_or_create(
-                        nom=cours_nom,
-                        promotion=promotion,
-                        enseignant=enseignant,
-                        defaults={'coefficient': 1} # Valeur par défaut
-                    )
+                    cours = (Cours.objects
+                             .filter(nom=cours_nom, promotion=promotion)
+                             .order_by('id')
+                             .first())
+                    created = cours is None
+                    if created:
+                        cours = Cours.objects.create(
+                            nom=cours_nom,
+                            promotion=promotion,
+                            enseignant=enseignant,
+                            coefficient=1,
+                        )
+                    elif cours.enseignant_id != enseignant.id:
+                        cours.enseignant = enseignant
+                        cours.save(update_fields=['enseignant'])
                     
                     count_imported += 1
                 except Exception as e:
@@ -73,5 +99,5 @@ def import_excel_data(file_path):
         print(f"💥 Erreur critique lors de l'importation : {e}")
 
 if __name__ == "__main__":
-    FILE_PATH = '/Users/tresorkabis/dev/examen/Charge_Horaire_2025_2026.xlsx'
+    FILE_PATH = DEFAULT_FILE_PATH
     import_excel_data(FILE_PATH)

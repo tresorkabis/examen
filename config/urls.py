@@ -3,7 +3,7 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 from app.forms import LoginForm
 from app.views import (
-    dashboard, 
+    dashboard, import_excel_view,
     EtudiantListView, EtudiantDetailView, EtudiantCreateView, EtudiantUpdateView, EtudiantDeleteView,
     PromotionListView, PromotionCreateView, PromotionDetailView, PromotionUpdateView, PromotionDeleteView,
     EnseignantListView, EnseignantDetailView, EnseignantCreateView, EnseignantUpdateView, EnseignantDeleteView,
@@ -22,6 +22,7 @@ urlpatterns = [
         template_name='registration/login.html'), name='login'),
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
     path('', dashboard, name='dashboard'),
+    path('imports/', import_excel_view, name='import_excel'),
     
     # URLs Etudiant
     path('etudiants/', EtudiantListView.as_view(), name='etudiant_list'),

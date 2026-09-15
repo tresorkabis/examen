@@ -93,3 +93,36 @@ class ExamenForm(BootstrapModelForm):
             active = Session.objects.filter(est_active=True).first()
             if active:
                 self.fields['session'].initial = active.pk
+
+
+class ExcelImportForm(forms.Form):
+    TYPE_CHOICES = [
+        ('etudiants', 'Étudiants'),
+        ('enseignants', 'Enseignants'),
+        ('cours', 'Cours'),
+    ]
+
+    type_import = forms.ChoiceField(
+        choices=TYPE_CHOICES,
+        label="Type de données à importer",
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    fichier_excel = forms.FileField(
+        label="Fichier Excel (.xlsx, .xls)",
+        widget=forms.FileInput(attrs={'class': 'form-control', 'accept': '.xlsx, .xls'})
+    )
+    promotion = forms.ModelChoiceField(
+        queryset=Promotion.objects.all(),
+        required=False,
+        label="Promotion par défaut (optionnel)",
+        help_text="Attribuée si la promotion n'est pas spécifiée dans le fichier.",
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+
+    def clean_fichier_excel(self):
+        f = self.cleaned_data.get('fichier_excel')
+        if f:
+            ext = f.name.split('.')[-1].lower()
+            if ext not in ['xlsx', 'xls']:
+                raise forms.ValidationError("Le fichier doit être au format Excel (.xlsx ou .xls).")
+        return f
