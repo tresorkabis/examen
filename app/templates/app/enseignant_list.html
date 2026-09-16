@@ -21,8 +21,7 @@
                 <table class="table table-hover align-middle">
                     <thead>
                         <tr>
-                            <th>Nom</th>
-                            <th>Prénom</th>
+                            <th>Noms</th>
                             <th>Email</th>
                             <th class="text-end">Actions</th>
                         </tr>
@@ -30,8 +29,7 @@
                     <tbody>
                         {% for ens in enseignants %}
                         <tr>
-                            <td><a href="{% url 'enseignant_detail' ens.pk %}" class="fw-semibold text-decoration-none">{{ ens.nom }}</a></td>
-                            <td><a href="{% url 'enseignant_detail' ens.pk %}" class="text-decoration-none text-body">{{ ens.prenom }}</a></td>
+                            <td><a href="{% url 'enseignant_detail' ens.pk %}" class="fw-semibold text-decoration-none">{{ ens.noms }}</a></td>
                             <td>{{ ens.email }}</td>
                             <td class="text-end">
                                 <a href="{% url 'enseignant_detail' ens.pk %}" class="btn btn-sm btn-outline-primary">Détail</a>
@@ -41,7 +39,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="4" class="text-center text-muted py-4">Aucun enseignant enregistré.</td>
+                            <td colspan="3" class="text-center text-muted py-4">Aucun enseignant enregistré.</td>
                         </tr>
                         {% endfor %}
                     </tbody>

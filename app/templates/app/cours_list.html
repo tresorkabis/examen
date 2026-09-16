@@ -43,7 +43,7 @@
                                 form="search-form" onchange="document.getElementById('search-form').submit()">
                             <option value="">Tous les enseignants</option>
                             {% for e in filter_enseignants %}
-                                <option value="{{ e.pk }}" {% if filters.enseignant == e.pk %}selected{% endif %}>{{ e.nom }} {{ e.prenom }}</option>
+                                <option value="{{ e.pk }}" {% if filters.enseignant == e.pk %}selected{% endif %}>{{ e.noms }}</option>
                             {% endfor %}
                         </select>
                     </div>

@@ -96,7 +96,7 @@
                             onchange="this.form.submit()">
                         <option value="">Tous les enseignants</option>
                         {% for e in filter_enseignants %}
-                            <option value="{{ e.pk }}" {% if filters.enseignant == e.pk %}selected{% endif %}>{{ e.nom }} {{ e.prenom }}</option>
+                            <option value="{{ e.pk }}" {% if filters.enseignant == e.pk %}selected{% endif %}>{{ e.noms }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -175,7 +175,7 @@
                     <tbody>
                         {% for e in examens %}
                         <tr>
-                            <td class="fw-semibold">{{ e.cours.nom }}{% if e.cours.enseignant %} ({{ e.cours.enseignant.nom }}){% endif %}</td>
+                            <td class="fw-semibold">{{ e.cours.nom }}{% if e.cours.enseignant %} ({{ e.cours.enseignant.noms }}){% endif %}</td>
                             <td>{{ e.cours.promotion }}</td>
                             <td>{{ e.session }}</td>
                             <td>{{ e.date_examen|date:"d/m/Y" }}</td>

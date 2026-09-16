@@ -25,16 +25,15 @@ class Promotion(models.Model):
 
 
 class Enseignant(models.Model):
-    nom = models.CharField(max_length=100)
-    prenom = models.CharField(max_length=100)
+    noms = models.CharField(max_length=200, default='')
     email = models.EmailField(unique=True)
 
     def __str__(self):
-        return f"{self.nom} {self.prenom}"
+        return self.noms
 
     class Meta:
-        ordering = ['nom', 'prenom']
-        indexes = [models.Index(fields=['nom', 'prenom'])]
+        ordering = ['noms']
+        indexes = [models.Index(fields=['noms'])]
 
 
 class Etudiant(models.Model):

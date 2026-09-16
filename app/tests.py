@@ -26,7 +26,7 @@ class BaseDataMixin:
     def setUpTestData(cls):
         cls.promotion = Promotion.objects.create(nom='L3 INFO A')
         cls.enseignant = Enseignant.objects.create(
-            nom='KABISAYI', prenom='TRESOR',
+            noms='KABISAYI TRESOR',
             email='tkabisayi@example.com')
         cls.cours = Cours.objects.create(
             nom='Langage de programmation mobile',
@@ -198,7 +198,7 @@ class PaginationTests(TestCase):
         Promotion.objects.create(nom='L3 INFO A')
         for i in range(30):  # 30 > paginate_by=25 -> 2 pages
             Enseignant.objects.create(
-                nom=f'NOM{i}', prenom='P',
+                noms=f'NOM{i} P',
                 email=f'ens{i}@example.com')
         url = reverse('enseignant_list')
         response = self.client.get(url, {'page': 99})
@@ -214,7 +214,7 @@ class AuthAccessTests(TestCase):
     def setUpTestData(cls):
         cls.promotion = Promotion.objects.create(nom='L3 INFO A')
         cls.enseignant = Enseignant.objects.create(
-            nom='KABISAYI', prenom='TRESOR',
+            noms='KABISAYI TRESOR',
             email='t.kabisayi@example.com')
         cls.cours = Cours.objects.create(
             nom='Algorithmique', coefficient=1,
@@ -297,10 +297,10 @@ class ExamenListFilterTests(TestCase):
         cls.promo1 = Promotion.objects.create(nom='L3 INFO A')
         cls.promo2 = Promotion.objects.create(nom='L3 SCF')
         cls.ens1 = Enseignant.objects.create(
-            nom='KABISAYI', prenom='TRESOR',
+            noms='KABISAYI TRESOR',
             email='filter.ens1@example.com')
         cls.ens2 = Enseignant.objects.create(
-            nom='MUJINGA', prenom='MAGUY',
+            noms='MUJINGA MAGUY',
             email='filter.ens2@example.com')
         cls.cours1 = Cours.objects.create(
             nom='Langage de programmation mobile', coefficient=1,
@@ -343,8 +343,8 @@ class ExamenListFilterTests(TestCase):
         response = self._liste({})
         self.assertEqual(response.status_code, 200)
         contenu = response.content.decode()
-        self.assertIn('Langage de programmation mobile (KABISAYI)', contenu)
-        self.assertIn('Ethique &amp; Deontologie (MUJINGA)', contenu)
+        self.assertIn('Langage de programmation mobile (KABISAYI TRESOR)', contenu)
+        self.assertIn('Ethique &amp; Deontologie (MUJINGA MAGUY)', contenu)
 
     def test_cours_sans_enseignant_sans_parentheses(self):
         cours = Cours.objects.create(
@@ -634,12 +634,12 @@ class ExamenImpressionTests(BaseDataMixin, TestCase):
         self.assertIn('Le Président du Jury', contenu)
 
     def test_trie_par_enseignant(self):
-        """La liste imprimée est triée par nom d'enseignant (puis prénom)."""
+        """La liste imprimée est triée par noms d'enseignant."""
         for nom, prenom, email in [
                 ('ZZZ', 'Ulysse', 'z.ulysse@example.com'),
                 ('AAA', 'Premier', 'a.premier@example.com')]:
             ens = Enseignant.objects.create(
-                nom=nom, prenom=prenom, email=email)
+                noms=f'{nom} {prenom}', email=email)
             cours = Cours.objects.create(
                 nom=f'Cours de {nom}', coefficient=1,
                 enseignant=ens, promotion=self.promotion)
@@ -650,9 +650,9 @@ class ExamenImpressionTests(BaseDataMixin, TestCase):
         self.assertEqual(reponse.status_code, 200)
         examens = list(reponse.context['examens'])
         self.assertEqual(len(examens), 3)  # examen de base + les deux ajoutés
-        # L'examen de base est rattaché à l'enseignant KABISAYI.
-        noms = [e.cours.enseignant.nom for e in examens]
-        self.assertEqual(noms, ['AAA', 'KABISAYI', 'ZZZ'])
+        # L'examen de base est rattaché à l'enseignant KABISAYI TRESOR.
+        noms = [e.cours.enseignant.noms for e in examens]
+        self.assertEqual(noms, ['AAA Premier', 'KABISAYI TRESOR', 'ZZZ Ulysse'])
 
     def test_cours_sans_enseignant_en_dernier(self):
         """Les cours sans titulaire sont rejetés en fin de liste."""
@@ -684,9 +684,9 @@ class DashboardSessionActiveTests(TestCase):
         cls.promo1 = Promotion.objects.create(nom='L1')
         cls.promo2 = Promotion.objects.create(nom='L2')
         cls.ens1 = Enseignant.objects.create(
-            nom='KARIM', prenom='Ali', email='a.karim@example.com')
+            noms='KARIM Ali', email='a.karim@example.com')
         cls.ens2 = Enseignant.objects.create(
-            nom='LAMBER', prenom='Benoit', email='b.lamber@example.com')
+            noms='LAMBER Benoit', email='b.lamber@example.com')
         cls.cours1 = Cours.objects.create(
             nom='Cours ancien', coefficient=1,
             enseignant=cls.ens1, promotion=cls.promo1)
@@ -759,7 +759,7 @@ class ExamensSessionEnCoursTests(TestCase):
             est_active=True)
         cls.promo = Promotion.objects.create(nom='L3 SCF')
         cls.ens = Enseignant.objects.create(
-            nom='KALALA', prenom='Paul', email='p.kalala@example.com')
+            noms='KALALA Paul', email='p.kalala@example.com')
         cls.cours_actif = Cours.objects.create(
             nom='Cours actif', coefficient=1,
             enseignant=cls.ens, promotion=cls.promo)
@@ -914,7 +914,7 @@ class MergePromotionsCommandTest(TestCase):
 
     def setUp(self):
         self.enseignant = Enseignant.objects.create(
-            nom='ENSEIGNANT', prenom='TEST',
+            noms='ENSEIGNANT TEST',
             email='enseignant.merge@example.com')
         self.promo_a = Promotion.objects.create(nom='L2 SD A')
         self.promo_b = Promotion.objects.create(nom='L2 TS A')
@@ -984,7 +984,7 @@ class SessionDetailViewTest(BaseDataMixin, TestCase):
         promo1 = Promotion.objects.create(nom='L1 INFO A')
         promo2 = Promotion.objects.create(nom='L1 SCF LMD')
         enseignant = Enseignant.objects.create(
-            nom='KABISAYI', prenom='TRESOR',
+            noms='KABISAYI TRESOR',
             email='session.detail@example.com')
         self.cours1 = Cours.objects.create(
             nom='Mathématiques', coefficient=1,
@@ -1107,7 +1107,7 @@ class EnseignantDetailViewTest(BaseDataMixin, TestCase):
 
     def test_detail_enseignant_sans_cours(self):
         enseignant = Enseignant.objects.create(
-            nom='SANS', prenom='COURS', email='sans.cours@example.com')
+            noms='SANS COURS', email='sans.cours@example.com')
         reponse = self.client.get(reverse(
             'enseignant_detail', args=[enseignant.pk]))
         self.assertEqual(reponse.status_code, 200)

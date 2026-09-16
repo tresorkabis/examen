@@ -1,10 +1,10 @@
 {% extends 'app/base.html' %}
 
-{% block title %}{{ enseignant.nom }} {{ enseignant.prenom }}{% endblock %}
+{% block title %}{{ enseignant.noms }}{% endblock %}
 
 {% block content %}
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>{{ enseignant.nom }} {{ enseignant.prenom }}</h2>
+        <h2>{{ enseignant.noms }}</h2>
         <div class="d-flex gap-2">
             <a href="{% url 'enseignant_update' enseignant.pk %}" class="btn btn-outline-secondary">
                 <i class="bi bi-pencil me-1"></i>Modifier

@@ -285,39 +285,57 @@ def import_enseignants_excel(file_obj):
                     if nom_col and not pd.isna(row[nom_col]):
                         nom = str(row[nom_col]).strip()
                         prenom = str(row[prenom_col]).strip() if prenom_col and not pd.isna(row[prenom_col]) else ''
+                        noms_val = f"{nom} {prenom}".strip()
+                        noms_val = ' '.join(noms_val.split())
                     elif full_name_col and not pd.isna(row[full_name_col]):
-                        full_name = str(row[full_name_col]).strip()
-                        if 'total' in full_name.lower():
+                        noms_val = str(row[full_name_col]).strip()
+                        noms_val = ' '.join(noms_val.split())
+                        if 'total' in noms_val.lower():
                             skipped_count += 1
                             continue
-                        parts = full_name.split(' ', 1)
-                        nom = parts[0]
-                        prenom = parts[1] if len(parts) > 1 else ''
                     else:
                         skipped_count += 1
                         continue
 
-                    if not nom:
+                    if not noms_val:
                         skipped_count += 1
                         continue
 
                     if email_col and not pd.isna(row[email_col]):
                         email = str(row[email_col]).strip()
                     else:
-                        full_name_str = f"{nom} {prenom}".strip()
-                        email = generate_unique_teacher_email(full_name_str)
+                        email = None
 
-                    ens, created = Enseignant.objects.get_or_create(
-                        email=email,
-                        defaults={'nom': nom, 'prenom': prenom}
-                    )
-                    if created:
+                    # Anti-doublons : même noms (insensible casse/accents) =
+                    # un seul enseignant. L'email reste unique mais n'est plus
+                    # la clé de déduplication (chaque import générait
+                    # babanemi.albert, babanemi.albert2, ...).
+                    ens = (Enseignant.objects
+                           .filter(noms__iexact=noms_val)
+                           .order_by('id')
+                           .first())
+                    if ens is None:
+                        if not email:
+                            email = generate_unique_teacher_email(noms_val)
+                        ens = Enseignant.objects.create(
+                            noms=noms_val, email=email)
                         created_count += 1
                     else:
-                        ens.nom = nom
-                        ens.prenom = prenom
-                        ens.save()
-                        updated_count += 1
+                        updated = False
+                        if email and ens.email != email:
+                            # Ne prend le nouvel email que s'il est libre.
+                            if not Enseignant.objects.filter(email=email)\
+                                    .exclude(pk=ens.pk).exists():
+                                ens.email = email
+                                updated = True
+                        if ens.noms != noms_val:
+                            ens.noms = noms_val
+                            updated = True
+                        if updated:
+                            ens.save()
+                            updated_count += 1
+                        else:
+                            skipped_count += 1
 
                 except Exception as row_err:
                     errors.append(f"Feuille '{sheet_name}', ligne {line_num} : {row_err}")
@@ -404,16 +422,18 @@ def import_cours_excel(file_obj, default_promotion_id=None):
                     # Enseignant
                     enseignant_obj = None
                     if ens_col and not pd.isna(row[ens_col]):
-                        full_name = str(row[ens_col]).strip()
-                        if full_name and 'total' not in full_name.lower():
-                            parts = full_name.split(' ', 1)
-                            nom = parts[0]
-                            prenom = parts[1] if len(parts) > 1 else ''
-                            email = generate_unique_teacher_email(full_name)
-                            enseignant_obj, _ = Enseignant.objects.get_or_create(
-                                email=email,
-                                defaults={'nom': nom, 'prenom': prenom}
-                            )
+                        noms_val = str(row[ens_col]).strip()
+                        noms_val = ' '.join(noms_val.split())
+                        if noms_val and 'total' not in noms_val.lower():
+                            email = generate_unique_teacher_email(noms_val)
+                            enseignant_obj = (
+                                Enseignant.objects
+                                .filter(noms__iexact=noms_val)
+                                .order_by('id')
+                                .first())
+                            if enseignant_obj is None:
+                                enseignant_obj = Enseignant.objects.create(
+                                    noms=noms_val, email=email)
 
                     # Coefficient
                     coefficient = 1

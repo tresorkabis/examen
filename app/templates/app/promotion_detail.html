@@ -207,7 +207,7 @@
                 {% for ens in enseignants %}
                     <div class="list-group-item d-flex justify-content-between align-items-center">
                         <div>
-                            <span class="fw-semibold">{{ ens.nom }} {{ ens.prenom }}</span>
+                            <span class="fw-semibold">{{ ens.noms }}</span>
                             <div class="small text-muted">{{ ens.email }}</div>
                         </div>
                         <a href="{% url 'enseignant_detail' ens.pk %}" class="badge text-bg-primary rounded-pill text-decoration-none" title="Voir sa fiche">{{ ens.nb_cours }} cours</a>

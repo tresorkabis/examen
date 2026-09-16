@@ -7,6 +7,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
 from django.core.exceptions import ValidationError
 from django.core.cache import cache
+from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import Count, F, Prefetch, Q
 from django.http import FileResponse, Http404, HttpResponseRedirect
@@ -158,13 +159,15 @@ class EtudiantListView(ListView):
     """Étudiants : cartes des promotions, puis liste d'une promotion au clic.
 
     Sans paramètre : grille de cartes (une par promotion non vide, avec
-    effectif annoté). Avec « ?promotion=<pk> » : liste des étudiants de
-    cette promotion. Une recherche « ?q= » filtre les étudiants par nom /
-    prénom / numéro / email et n'affiche que les promotions concernées.
+    effectifs annotés — sans charger aucun étudiant). Avec
+    « ?promotion=<pk> » : liste paginée (50/page) des étudiants de cette
+    promotion. Une recherche « ?q= » filtre les étudiants par nom /
+    numéro / email et n'affiche que les promotions concernées.
     """
     model = Promotion
     template_name = "app/etudiant_list.html"
     context_object_name = "promotions"
+    ETUDIANTS_PAR_PAGE = 50
 
     def get_queryset(self):
         q = self.request.GET.get('q', '').strip()
@@ -192,12 +195,10 @@ class EtudiantListView(ListView):
                               nb_cours=Count('cours', distinct=True))
                     .order_by('nom'))
         if self.request.GET.get('toutes') == '1':
+            # Cartes seules : compteurs annotés, aucun étudiant chargé.
             return (Promotion.objects
                     .annotate(nb_etudiants_total=Count('etudiants', distinct=True),
                               nb_cours=Count('cours', distinct=True))
-                    .prefetch_related(Prefetch(
-                        'etudiants',
-                        queryset=Etudiant.objects.order_by('noms')))
                     .order_by('nom'))
         # Par défaut : seules les promotions non vides (EXISTS, sans tout charger).
         return (Promotion.objects
@@ -205,9 +206,6 @@ class EtudiantListView(ListView):
                 .distinct()
                 .annotate(nb_etudiants_total=Count('etudiants', distinct=True),
                           nb_cours=Count('cours', distinct=True))
-                .prefetch_related(Prefetch(
-                    'etudiants',
-                    queryset=Etudiant.objects.order_by('noms')))
                 .order_by('nom'))
 
     def get_context_data(self, **kwargs):
@@ -215,36 +213,67 @@ class EtudiantListView(ListView):
         q = self.request.GET.get('q', '').strip()
         promo_pk = self.request.GET.get('promotion', '').strip()
         groups = list(context['promotions'])
-        for promotion in groups:
-            # Déjà filtré/trié en base via le Prefetch du get_queryset.
-            promotion.filtered_etudiants = list(promotion.etudiants.all())
-            # Nombre de résultats dans cette carte lors d'une recherche.
-            promotion.nb_match = len(promotion.filtered_etudiants) if q else 0
+        if q:
+            for promotion in groups:
+                # Déjà filtré/trié en base via le Prefetch du get_queryset.
+                promotion.filtered_etudiants = list(promotion.etudiants.all())
+                # Nombre de résultats dans cette carte lors d'une recherche.
+                promotion.nb_match = len(promotion.filtered_etudiants)
+        else:
+            for promotion in groups:
+                promotion.filtered_etudiants = []
+                promotion.nb_match = 0
         context['groups'] = groups
         context['q'] = q
         context['toutes'] = self.request.GET.get('toutes') == '1'
         context['nb_etudiants_trouves'] = sum(p.nb_match for p in groups) if q else 0
         context['promotion_param'] = promo_pk
-        # Promotion sélectionnée au clic sur une carte : sa liste d'étudiants.
+        # Promotion sélectionnée au clic : liste paginée (50/page),
+        # sans recharger les autres promotions.
         promotion_active = None
+        page_obj = None
         if promo_pk.isdigit():
+            promo_id = int(promo_pk)
             promotion_active = next(
-                (p for p in groups if p.pk == int(promo_pk)), None)
-            if promotion_active is None and not q:
-                # Promotion vide ou filtrée hors queryset : on la charge quand
-                # même pour afficher sa liste (vide) plutôt qu'une 404.
+                (p for p in groups if p.pk == promo_id), None)
+            if promotion_active is None:
                 promotion_active = (
                     Promotion.objects
-                    .filter(pk=int(promo_pk))
-                    .prefetch_related(Prefetch(
-                        'etudiants',
-                        queryset=Etudiant.objects.order_by('noms')))
+                    .filter(pk=promo_id)
+                    .annotate(nb_etudiants_total=Count('etudiants', distinct=True),
+                              nb_cours=Count('cours', distinct=True))
                     .first())
-        if promotion_active is not None and not q:
-            promotion_active.filtered_etudiants = list(
-                promotion_active.etudiants.all())
+            if promotion_active is not None:
+                qs_etudiants = Etudiant.objects.filter(promotion_id=promo_id)
+                if q:
+                    qs_etudiants = qs_etudiants.filter(
+                        Q(noms__icontains=q)
+                        | Q(numero_etudiant__icontains=q)
+                        | Q(email__icontains=q))
+                qs_etudiants = (qs_etudiants
+                                .select_related('promotion')
+                                .order_by('noms'))
+                paginator = Paginator(qs_etudiants, self.ETUDIANTS_PAR_PAGE)
+                page_obj = self._page_obj(paginator)
+                promotion_active.filtered_etudiants = list(page_obj.object_list)
+                promotion_active.nb_match = paginator.count if q else 0
+                if q:
+                    context['nb_etudiants_trouves'] = paginator.count
         context['promotion_active'] = promotion_active
+        context['page_obj'] = page_obj
+        # Conserve les paramètres GET (filtres…) dans les liens de pagination.
+        params = self.request.GET.copy()
+        params.pop('page', None)
+        context['qs'] = f"&{params.urlencode()}" if params else ""
         return context
+
+    def _page_obj(self, paginator):
+        """Page demandée, rabattue sur la dernière page valide si hors bornes."""
+        page_arg = self.request.GET.get('page')
+        try:
+            return paginator.page(page_arg or 1)
+        except (PageNotAnInteger, EmptyPage):
+            return paginator.page(paginator.num_pages or 1)
 
 
 class EtudiantCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
@@ -343,7 +372,7 @@ class PromotionDetailView(DetailView):
                        .annotate(nb_cours=Count('cours',
                                                 filter=Q(cours__promotion=promotion),
                                                 distinct=True))
-                       .order_by('nom', 'prenom'))
+                       .order_by('noms'))
         nb_noted = Inscription.objects.filter(
             etudiant__promotion=promotion).count()
         ctx.update({
@@ -410,7 +439,7 @@ class EnseignantCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     form_class = EnseignantForm
     template_name = "app/enseignant_form.html"
     success_url = reverse_lazy("enseignant_list")
-    success_message = "L'enseignant « %(prenom)s %(nom)s » a été créé."
+    success_message = "L'enseignant « %(noms)s » a été créé."
 
 
 class EnseignantUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
@@ -418,7 +447,7 @@ class EnseignantUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     form_class = EnseignantForm
     template_name = "app/enseignant_form.html"
     success_url = reverse_lazy("enseignant_list")
-    success_message = "L'enseignant « %(prenom)s %(nom)s » a été modifié."
+    success_message = "L'enseignant « %(noms)s » a été modifié."
 
 
 class EnseignantDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
@@ -751,7 +780,7 @@ class CoursListView(SafePaginationMixin, ListView):
                                         .distinct().order_by('nom'))
         context['filter_enseignants'] = (Enseignant.objects
                                          .filter(cours__isnull=False)
-                                         .distinct().order_by('nom', 'prenom'))
+                                         .distinct().order_by('noms'))
         context['filters'] = self.filters
         context['total_cours'] = Cours.objects.count()
         return context
@@ -800,8 +829,7 @@ class ExamenListView(SafePaginationMixin, ListView):
         if q:
             qs = qs.filter(Q(cours__nom__icontains=q)
                            | Q(cours__promotion__nom__icontains=q)
-                           | Q(cours__enseignant__nom__icontains=q)
-                           | Q(cours__enseignant__prenom__icontains=q)
+                           | Q(cours__enseignant__noms__icontains=q)
                            | Q(session__nom__icontains=q))
             self.filters['q'] = q
 
@@ -878,7 +906,7 @@ class ExamenListView(SafePaginationMixin, ListView):
                                         .distinct().order_by('nom'))
         context['filter_enseignants'] = (Enseignant.objects
                                          .filter(cours__examens__isnull=False)
-                                         .distinct().order_by('nom', 'prenom'))
+                                         .distinct().order_by('noms'))
         context['filter_sessions'] = (Session.objects
                                       .filter(examens__isnull=False)
                                       .distinct().order_by('date_debut', 'nom'))
@@ -914,7 +942,7 @@ class ExamenCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
                                  .select_related('promotion', 'enseignant')
                                  .order_by('promotion__nom', 'nom')
                                  .values_list('id', 'nom', 'promotion__nom',
-                                              'enseignant__nom', 'enseignant__prenom'))
+                                              'enseignant__noms'))
         return ctx
 
 
@@ -931,7 +959,7 @@ class ExamenUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
                                  .select_related('promotion', 'enseignant')
                                  .order_by('promotion__nom', 'nom')
                                  .values_list('id', 'nom', 'promotion__nom',
-                                              'enseignant__nom', 'enseignant__prenom'))
+                                              'enseignant__noms'))
         examen = self.object
         ctx['inscriptions'] = (examen.inscriptions
                                .select_related('etudiant')
@@ -1087,7 +1115,7 @@ def examen_marquer_notee(request, pk):
 def examen_non_notes_impression(request):
     """Page imprimable : liste des cours (examens) dont les copies ne sont
     pas encore corrigées (est_note=False), tous confondus, triés par
-    enseignant (nom puis prénom), les cours sans titulaire en dernier.
+    enseignant (noms), les cours sans titulaire en dernier.
 
     Document de suivi pour le secrétariat / chef de département : tableau
     compact, total et zone de signature, conçu pour l'impression (même
@@ -1096,8 +1124,7 @@ def examen_non_notes_impression(request):
     examens = (Examen.objects
                .select_related('cours__promotion', 'cours__enseignant', 'session')
                .filter(est_note=False)
-               .order_by(F('cours__enseignant__nom').asc(nulls_last=True),
-                         F('cours__enseignant__prenom').asc(nulls_last=True),
+               .order_by(F('cours__enseignant__noms').asc(nulls_last=True),
                          'cours__nom', 'cours__promotion__nom'))
     return render(request, 'app/examen_non_notes_print.html',
                   {'examens': examens, 'total': examens.count()})

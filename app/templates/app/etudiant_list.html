@@ -44,7 +44,7 @@
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
             <h2 class="mb-0">
                 <i class="bi bi-people-fill me-2 text-primary"></i>{{ promotion_active.nom }}
-                <span class="badge text-bg-primary ms-2">{{ promotion_active.filtered_etudiants|length }} étudiant{{ promotion_active.filtered_etudiants|length|pluralize }}</span>
+                <span class="badge text-bg-primary ms-2">{% if page_obj %}{{ page_obj.paginator.count }}{% else %}{{ promotion_active.filtered_etudiants|length }}{% endif %} étudiant{{ page_obj.paginator.count|pluralize }}</span>
             </h2>
             <div class="d-flex gap-2">
                 <a href="{% url 'etudiant_list' %}" class="btn btn-outline-secondary">
@@ -58,6 +58,11 @@
                 </a>
             </div>
         </div>
+        {% if page_obj and page_obj.paginator.num_pages > 1 %}
+        <p class="text-muted small mb-2">
+            Page {{ page_obj.number }} sur {{ page_obj.paginator.num_pages }} — {{ page_obj.paginator.count }} étudiant{{ page_obj.paginator.count|pluralize }} au total.
+        </p>
+        {% endif %}
         <div class="card shadow-sm">
             <div class="list-group list-group-flush">
                 {% for e in promotion_active.filtered_etudiants %}
@@ -91,6 +96,11 @@
                 {% endfor %}
             </div>
         </div>
+        {% if page_obj and page_obj.paginator.num_pages > 1 %}
+        <div class="mt-3">
+            {% include 'app/_pagination.html' with is_paginated=True %}
+        </div>
+        {% endif %}
     {% else %}
     {# Grille de cartes des promotions : un clic affiche la liste #}
     <div class="row g-3 g-md-4">
