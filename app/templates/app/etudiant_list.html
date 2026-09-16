@@ -10,17 +10,19 @@
             <form method="get" class="d-flex gap-2">
                 <input type="search" name="q" value="{{ q }}" class="form-control"
                        placeholder="Rechercher un étudiant…" aria-label="Rechercher un étudiant">
-                {% if promotion_param %}<input type="hidden" name="promotion" value="{{ promotion_param }}">{% endif %}
+                                {% if promotion_param %}<input type="hidden" name="promotion" value="{{ promotion_param }}">{% endif %}
                 {% if q %}
                     <a href="{% url 'etudiant_list' %}" class="btn btn-outline-secondary" title="Effacer la recherche">&times;</a>
                 {% endif %}
             </form>
+            {% if not promotion_active %}
             <a href="{% url 'import_excel' %}?type=etudiants" class="btn btn-outline-success">
                 <i class="bi bi-file-earmark-excel me-1"></i>Importer (Excel)
             </a>
             <a href="{% url 'etudiant_create' %}" class="btn btn-primary">
-                <i class="bi bi-person-plus me-1"></i>Ajouter
+                <i class="bi bi-person-plus me-1"></i>Ajouter un étudiant
             </a>
+            {% endif %}
 
         </div>
     </div>

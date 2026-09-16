@@ -97,15 +97,16 @@
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered bg-white text-center small mb-1">
                             <thead class="table-light">
-                                <tr><th>Nom</th><th>Prénom</th><th>N° Étudiant</th><th>Promotion</th></tr>
+                                                                <tr><th>Noms</th><th>N° Étudiant</th><th>Email</th><th>Promotion</th></tr>
                             </thead>
                             <tbody>
-                                <tr><td>KABISAYI</td><td>Trésor</td><td>L3INFO-001</td><td>L3 INFO A</td></tr>
+                                                                <tr><td>KABISAYI TRESOR</td><td>L3INFO-001</td><td>tresor.kabisayi@etu.univ.cd</td><td>L3 INFO A</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
+                                <p class="small text-muted"><i class="bi bi-info-circle me-1"></i>Le modèle possède un seul champ texte <code>noms</code> : indiquez le <strong>nom et le prénom dans une seule colonne</strong> (ex. <code>KABISAYI TRESOR</code>). Le matricule est généré automatiquement quand celui-ci est omis.</p>
                 <div>
                     <span class="badge text-bg-secondary mb-2">Option B : Grille de délibération LMD</span>
                     <p class="small text-muted mb-1">Fichier avec colonne 1 = N° d'ordre, colonne 2 = NOM POSTNOM PRÉNOM (nom de la feuille = promotion).</p>
@@ -117,10 +118,10 @@
                 <div class="table-responsive mb-3">
                     <table class="table table-sm table-bordered bg-white text-center small mb-1">
                         <thead class="table-light">
-                            <tr><th>Nom</th><th>Prénom</th><th>Email</th></tr>
+                                                            <tr><th>Noms</th><th>Email</th></tr>
                         </thead>
                         <tbody>
-                            <tr><td>BABANEMI</td><td>Jean</td><td>j.babanemi@example.com</td></tr>
+                                                            <tr><td>BABANEMI Jean</td><td>j.babanemi@example.com</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -137,9 +138,8 @@
                         <tbody>
                             <tr><td>Programmation Web</td><td>L3 INFO A</td><td>BABANEMI Jean</td><td>2</td></tr>
                         </tbody>
-                    </table>
+                                        </table>
                 </div>
-                <p class="small text-muted"><i class="bi bi-check-circle me-1"></i>Prend aussi en charge les fiches de charge horaire (ex: <code>Charge_Horaire.xlsx</code>).</p>
                 {% endif %}
 
             </div>
