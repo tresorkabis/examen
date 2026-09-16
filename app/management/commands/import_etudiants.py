@@ -21,7 +21,8 @@ import pandas as pd
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from app.models import Etudiant, Promotion
+from app.excel_import import ReferentielImport, _numero_ordre
+from app.models import Etudiant
 
 DATA_DIR = Path(__file__).resolve().parents[3] / 'data'
 
@@ -36,9 +37,6 @@ PROMO_MAP = {
     'L3 SCF_LMD 2025_2026.xlsx': 'L3 SCF LMD',
     'L3 TS_LMD A 2025_2026.xlsx': 'L3 SDA',  # = « L3 SD A » de la charge horaire
 }
-
-
-NUM_RE = re.compile(r'^\d{1,3}$')
 
 
 def slugify(text):
@@ -59,10 +57,14 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **options):
         dry_run = options['dry_run']
-        created_total, updated_total = 0, 0
+        created_total, updated_total, unchanged_total = 0, 0, 0
 
         if dry_run:
             self.stdout.write(self.style.WARNING('MODE SIMULATION (--dry-run)'))
+
+        # Cache des référentiels : évite ~4 requêtes SQL par étudiant, y compris
+        # en mode simulation (où il rend l'aperçu quasi instantané).
+        referentiel = ReferentielImport()
 
         for filename, promo_name in PROMO_MAP.items():
             path = DATA_DIR / filename
@@ -70,18 +72,20 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR(f'❌ {filename} introuvable, ignoré'))
                 continue
 
-            promotion, promo_created = Promotion.objects.get_or_create(nom=promo_name)
-            if promo_created:
+            promo_existait = promo_name in referentiel.promotions
+            promotion = referentiel.promotion(promo_name)
+            if not promo_existait:
                 self.stdout.write(self.style.NOTICE(f'➕ Promotion créée : {promo_name}'))
 
             df = pd.ExcelFile(path).parse(0, header=None)
             promo_slug = slugify(promo_name).upper()
-            created_file, updated_file, seen_names = 0, 0, set()
+            created_file, updated_file, unchanged_file = 0, 0, 0
+            seen_names = set()
 
             for i in range(df.shape[0]):
-                num = str(df.iat[i, 0]).strip() if not pd.isna(df.iat[i, 0]) else ''
+                rang = _numero_ordre(df.iat[i, 0])
                 full_name = str(df.iat[i, 1]).strip() if not pd.isna(df.iat[i, 1]) else ''
-                if not NUM_RE.match(num) or not full_name:
+                if rang is None or not 0 < rang < 1000 or not full_name:
                     continue  # en-têtes, totaux, signatures, cellules vides
 
                 full_name = re.sub(r'\s+', ' ', full_name)
@@ -92,44 +96,45 @@ class Command(BaseCommand):
                 seen_names.add(full_name.upper())
 
                 noms_val = full_name
-                numero = f'{promo_slug}-{int(num):03d}'
+                numero = f'{promo_slug}-{rang:03d}'
 
                 if dry_run:
-                    created_file += 1
+                    # Le cache répond sans aucune requête SQL.
+                    if referentiel.etudiant(promotion, numero=numero) is None:
+                        created_file += 1
+                    else:
+                        updated_file += 1
                     continue
 
-                etu, was_created = Etudiant.objects.get_or_create(
-                    numero_etudiant=numero,
-                    defaults={'noms': noms_val, 'email': None,
-                              'promotion': promotion},
-                )
-                if was_created:
+                etu = referentiel.etudiant(promotion, numero=numero)
+                if etu is None:
+                    etu = Etudiant.objects.create(
+                        numero_etudiant=numero, noms=noms_val,
+                        promotion=promotion)
+                    referentiel.ajouter_etudiant(etu)
                     created_file += 1
-                else:
-                    etu.noms, etu.promotion = noms_val, promotion
-                    etu.save()
+                elif referentiel.maj_etudiant(etu, noms_val, promotion):
                     updated_file += 1
+                else:
+                    unchanged_file += 1
 
 
             created_total += created_file
             updated_total += updated_file
-            self.stdout.write(
-                f'{filename} → {promo_name} : {created_file} créé(s)'
-                + (f', {updated_file} mis à jour' if updated_file else ''))
+            unchanged_total += unchanged_file
+            resume = f'{created_file} créé(s)'
+            if updated_file:
+                resume += f', {updated_file} mis à jour'
+            if unchanged_file:
+                resume += f', {unchanged_file} inchangé(s)'
+            self.stdout.write(f'{filename} → {promo_name} : {resume}')
 
         if dry_run:
             self.stdout.write(self.style.SUCCESS(
-                f'Simulation terminée : {created_total} étudiant(s) seraient importés'))
+                f'Simulation terminée : {created_total} étudiant(s) seraient '
+                f'importés, {updated_total} mis à jour'))
             transaction.set_rollback(True)
         else:
             self.stdout.write(self.style.SUCCESS(
-                f'✨ Import terminé : {created_total} créé(s), {updated_total} mis à jour'))
-
-    def _unique_email(self, nom, prenom):
-        """Génère un email unique prenom.nom@example.com (suffixe si collision)."""
-        base = f'{slugify(prenom)}.{slugify(nom)}' or 'etudiant'
-        email, n = f'{base}@example.com', 2
-        while Etudiant.objects.filter(email=email).exists():
-            email = f'{base}{n}@example.com'
-            n += 1
-        return email
+                f'✨ Import terminé : {created_total} créé(s), '
+                f'{updated_total} mis à jour, {unchanged_total} inchangé(s)'))

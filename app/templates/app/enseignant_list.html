@@ -23,6 +23,7 @@
                         <tr>
                             <th>Noms</th>
                             <th>Email</th>
+                            <th class="text-center">Nbre de cours</th>
                             <th class="text-end">Actions</th>
                         </tr>
                     </thead>
@@ -31,6 +32,13 @@
                         <tr>
                             <td><a href="{% url 'enseignant_detail' ens.pk %}" class="fw-semibold text-decoration-none">{{ ens.noms }}</a></td>
                             <td>{{ ens.email }}</td>
+                            <td class="text-center">
+                                {% if ens.nb_cours %}
+                                    <span class="badge text-bg-primary">{{ ens.nb_cours }}</span>
+                                {% else %}
+                                    <span class="badge text-bg-light text-muted border">0</span>
+                                {% endif %}
+                            </td>
                             <td class="text-end">
                                 <a href="{% url 'enseignant_detail' ens.pk %}" class="btn btn-sm btn-outline-primary">Détail</a>
                                 <a href="{% url 'enseignant_update' ens.pk %}" class="btn btn-sm btn-outline-secondary">Modifier</a>
@@ -39,7 +47,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="3" class="text-center text-muted py-4">Aucun enseignant enregistré.</td>
+                            <td colspan="4" class="text-center text-muted py-4">Aucun enseignant enregistré.</td>
                         </tr>
                         {% endfor %}
                     </tbody>

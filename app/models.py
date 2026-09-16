@@ -5,7 +5,14 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 
 
 def generate_numero_etudiant():
-    """Génère un numéro d'étudiant aléatoire et unique (ex: ETU-84920153)."""
+    """Génère un numéro d'étudiant aléatoire et unique (ex: ETU-84920153).
+
+    Appelée uniquement par `Etudiant.save()` quand le numéro est vide : ce
+    n'est *pas* un `default=` de champ, car Django évalue les `default`
+    appelables à chaque instanciation du modèle — un import de N étudiants
+    aurait alors déclenché N SELECT inutiles, même quand le numéro est fourni
+    par le fichier Excel.
+    """
     chars = string.digits
     while True:
         code = f"ETU-{''.join(random.choices(chars, k=8))}"
@@ -14,14 +21,17 @@ def generate_numero_etudiant():
 
 
 class Promotion(models.Model):
-    nom = models.CharField(max_length=100)
+    # `unique=True` : les imports Excel s'appuient sur
+    # `get_or_create(nom=...)`, qui doit être sûr (une même promotion ne peut
+    # pas être créée deux fois). L'index unique généré remplace l'ancien
+    # `Index(fields=['nom'])`, devenu redondant.
+    nom = models.CharField(max_length=100, unique=True)
 
     def __str__(self):
         return self.nom
 
     class Meta:
         ordering = ['nom']
-        indexes = [models.Index(fields=['nom'])]
 
 
 class Enseignant(models.Model):
@@ -41,8 +51,7 @@ class Etudiant(models.Model):
 
     email = models.EmailField(blank=True, null=True)
     numero_etudiant = models.CharField(
-        max_length=20, unique=True, default=generate_numero_etudiant, blank=True
-    )
+        max_length=20, unique=True, blank=True)
     promotion = models.ForeignKey(Promotion, on_delete=models.CASCADE, related_name='etudiants')
 
     def save(self, *args, **kwargs):
@@ -72,9 +81,19 @@ class Cours(models.Model):
 
     class Meta:
         ordering = ['nom']
-        indexes = [
-            models.Index(fields=['nom']),
-            models.Index(fields=['promotion', 'nom']),
+        # Contrainte d'unicité *et* index de recherche : (promotion, nom)
+        # sert à la fois `filter(promotion=...)` (trié par nom) et
+        # `filter(nom=..., promotion=...)` utilisé par l'import Excel. Les
+        # index `['nom']` et `['promotion', 'nom']` qu'elle remplace étaient
+        # donc redondants — et chaque index inutile ralentit les INSERT.
+        constraints = [
+            models.UniqueConstraint(
+                fields=['promotion', 'nom'],
+                name='unique_cours_promotion_nom',
+                violation_error_message=(
+                    'Ce cours existe déjà pour cette promotion.'
+                ),
+            ),
         ]
 
 class Session(models.Model):
@@ -164,7 +183,11 @@ class Inscription(models.Model):
                                help_text="Moyenne sur 20 (calculée)")
 
     class Meta:
-        ordering = ['etudiant__noms']
+        # Volontairement *aucun* `ordering` : trier par une FK jointe
+        # (« etudiant__noms ») faisait ajouter par Django une jointure
+        # `JOIN app_etudiant` + `ORDER BY` à *toutes* les requêtes Inscription,
+        # même un simple `filter(examen_id=...)` ou un `count()`. Les vues qui
+        # ont besoin d'un tri l'expriment explicitement (`order_by`).
         constraints = [
             models.UniqueConstraint(
                 fields=['etudiant', 'examen'],

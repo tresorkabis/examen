@@ -300,7 +300,6 @@ class EtudiantUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     success_message = "L'étudiant « %(noms)s » a été modifié."
 
 
-
 class EtudiantDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     model = Etudiant
     template_name = "app/etudiant_confirm_delete.html"
@@ -432,6 +431,11 @@ class EnseignantListView(SafePaginationMixin, ListView):
     template_name = "app/enseignant_list.html"
     context_object_name = "enseignants"
     paginate_by = 25
+
+    def get_queryset(self):
+        return (super().get_queryset()
+                .annotate(nb_cours=Count('cours', distinct=True))
+                .order_by('noms'))
 
 
 class EnseignantCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):

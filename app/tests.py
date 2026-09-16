@@ -106,6 +106,41 @@ class ModelMoyenneTests(TestCase):
         self.assertEqual(ins.note, 10)  # 5 + 5 + 0
 
 
+class ModelesOptimisationTests(TestCase):
+    """Invariants de modèle ajoutés pour sécuriser et accélérer les imports."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.promotion = Promotion.objects.create(nom='L1 INFO A')
+
+    def test_cours_homonyme_meme_promotion_interdit(self):
+        """Contrainte (promotion, nom) : un cours ne se duplique pas dans une promo."""
+        from django.db import IntegrityError, transaction
+        Cours.objects.create(nom='Anglais', promotion=self.promotion)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Cours.objects.create(nom='Anglais', promotion=self.promotion)
+
+    def test_requete_inscription_sans_jointure_implicite(self):
+        """Sans `ordering` sur une FK, Inscription ne joint plus Etudiant."""
+        sql = str(Inscription.objects.filter(examen_id=1).query)
+        self.assertNotIn('JOIN', sql)
+        self.assertNotIn('ORDER BY', sql)
+
+    def test_numero_etudiant_non_genere_a_l_instanciation(self):
+        """Le matricule n'est plus un `default=` : aucune requête à l'instanciation."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as ctx:
+            etudiant = Etudiant(noms='SANS NUMERO', promotion=self.promotion)
+
+        self.assertEqual(len(ctx), 0)
+        self.assertEqual(etudiant.numero_etudiant, '')
+        etudiant.save()
+        self.assertRegex(etudiant.numero_etudiant, r'^ETU-\d{8}$')
+
+
 class FicheCoteTests(BaseDataMixin, TestCase):
     """Endpoint /examens/<pk>/fiche/."""
 
@@ -960,6 +995,81 @@ class MergePromotionsCommandTest(TestCase):
         self.assertEqual(Promotion.objects.filter(nom__in=['L2 SD A', 'L2 TS A']).count(), 0)
         self.assertEqual(Etudiant.objects.filter(promotion__nom='L2 SDA').count(), 2)
 
+    def test_fusion_cours_homonymes_et_examens(self):
+        """Un cours présent dans la source ET la cible doit être fusionné.
+
+        Sans cette fusion, la contrainte d'unicité (promotion, nom) ferait
+        échouer le déplacement groupé vers la promotion cible.
+        """
+        cible = Promotion.objects.create(nom='L2 SDA')
+        # Cours homonyme des deux côtés + un cours propre à chaque côté.
+        cours_cible = self._cours(cible, 'ANGLAIS')
+        cours_source = self._cours(self.promo_a, 'ANGLAIS')
+        self._cours(self.promo_a, 'STENO')
+        self._cours(cible, 'ARCHIVAGE 2')
+
+        session = Session.objects.create(
+            nom='S1', semestre=1, type_session='normale',
+            date_debut=date(2026, 1, 5), date_fin=date(2026, 1, 20))
+        etu_source = self._etudiant(self.promo_a, 1)
+        etu_cible = self._etudiant(cible, 2)
+        # Même session pour les deux examens : les inscriptions fusionnent.
+        examen_cible = Examen.objects.create(
+            cours=cours_cible, session=session,
+            date_examen=timezone.make_aware(datetime(2026, 1, 6, 8, 0)))
+        examen_source = Examen.objects.create(
+            cours=cours_source, session=session,
+            date_examen=timezone.make_aware(datetime(2026, 1, 6, 10, 0)))
+        Inscription.objects.create(examen=examen_source, etudiant=etu_source)
+        Inscription.objects.create(examen=examen_cible, etudiant=etu_cible)
+
+        call_command('merge_promotions',
+                     target='L2 SDA',
+                     sources=['L2 SD A', 'L2 TS A'])
+
+        # Un seul cours « ANGLAIS » subsiste, dans la promotion cible.
+        cible = Promotion.objects.get(nom='L2 SDA')
+        self.assertEqual(Cours.objects.filter(nom='ANGLAIS').count(), 1)
+        self.assertEqual(
+            Cours.objects.filter(promotion=cible, nom='ANGLAIS').count(), 1)
+        # Un seul examen (session identique) et aucune inscription perdue.
+        self.assertEqual(
+            Examen.objects.filter(cours__nom='ANGLAIS').count(), 1)
+        examen = Examen.objects.get(cours__nom='ANGLAIS')
+        self.assertEqual(examen.inscriptions.count(), 2)
+        # Les cours non homonymes ont bien suivi le déplacement.
+        self.assertEqual(
+            Cours.objects.filter(promotion=cible).count(), 3)
+
+    def test_fusion_cours_homonyme_sessions_differentes(self):
+        """Des examens sur des sessions distinctes sont conservés séparément."""
+        cible = Promotion.objects.create(nom='L2 SDA')
+        cours_cible = self._cours(cible, 'ANGLAIS')
+        cours_source = self._cours(self.promo_b, 'ANGLAIS')
+        s1 = Session.objects.create(
+            nom='S1', semestre=1, type_session='normale',
+            date_debut=date(2026, 1, 5), date_fin=date(2026, 1, 20))
+        s2 = Session.objects.create(
+            nom='S2', semestre=2, type_session='normale',
+            date_debut=date(2026, 6, 1), date_fin=date(2026, 6, 15))
+        Examen.objects.create(
+            cours=cours_cible, session=s1,
+            date_examen=timezone.make_aware(datetime(2026, 1, 6, 8, 0)))
+        Examen.objects.create(
+            cours=cours_source, session=s2,
+            date_examen=timezone.make_aware(datetime(2026, 6, 2, 8, 0)))
+
+        call_command('merge_promotions',
+                     target='L2 SDA',
+                     sources=['L2 TS A'])
+
+        self.assertEqual(Cours.objects.filter(nom='ANGLAIS').count(), 1)
+        self.assertEqual(
+            Examen.objects.filter(cours__nom='ANGLAIS').count(), 2)
+        self.assertEqual(
+            Cours.objects.filter(promotion__nom='L2 SDA',
+                                 nom='ANGLAIS').count(), 1)
+
     def test_dry_run_ne_modifie_pas_la_base(self):
         self._etudiant(self.promo_a, 1)
         self._cours(self.promo_a, 'ANGLAIS')
@@ -1245,6 +1355,42 @@ class ExcelImportTests(TestCase):
         bio.seek(0)
         return bio
 
+    def test_import_grille_deliberation_avec_colonne_numerique_float(self):
+        """Grille (n° d'ordre + nom, sans en-tête) : les numéros doivent être lus.
+
+        Régression : dès qu'une cellule de la colonne 0 était vide, pandas la
+        typait en `float` (« 1.0 ») et *toute* la grille était ignorée.
+        """
+        import pandas as pd
+        from app.excel_import import import_etudiants_excel
+
+        bio = BytesIO()
+        with pd.ExcelWriter(bio, engine='openpyxl') as writer:
+            pd.DataFrame([
+                [1, 'KABISAYI TRESOR'],
+                [None, 'Total général'],      # force le typage float
+                [2, 'MUJINGA MAGUY'],
+            ]).to_excel(writer, sheet_name='L3 INFO A', index=False,
+                        header=False)
+        bio.seek(0)
+
+        res = import_etudiants_excel(bio)
+
+        self.assertTrue(res['success'], res['errors'])
+        self.assertEqual(res['created'], 2)
+        self.assertEqual(
+            list(Etudiant.objects.filter(promotion__nom='L3 INFO A')
+                 .order_by('numero_etudiant')
+                 .values_list('numero_etudiant', 'noms')),
+            [('L3INFOA-001', 'KABISAYI TRESOR'),
+             ('L3INFOA-002', 'MUJINGA MAGUY')])
+
+        # Ré-import : aucune écriture (ni création, ni mise à jour).
+        bio.seek(0)
+        res = import_etudiants_excel(bio)
+        self.assertEqual((res['created'], res['updated']), (0, 0))
+        self.assertEqual(res['skipped'], 2)
+
     def test_import_etudiants_excel(self):
         from app.excel_import import import_etudiants_excel
         bio = self._creer_excel_bytes({
@@ -1282,6 +1428,193 @@ class ExcelImportTests(TestCase):
         self.assertTrue(res['success'])
         self.assertEqual(res['created'], 1)
         self.assertTrue(Cours.objects.filter(nom='Programmation Web').exists())
+
+    # --- Idempotence et optimisation des imports -------------------------
+
+    def _excel_etudiants(self, noms_prenoms, promo='L2 INFO', prefixe='IMP'):
+        return self._creer_excel_bytes({
+            'Nom': [n for n, _ in noms_prenoms],
+            'Prénom': [p for _, p in noms_prenoms],
+            'N° Étudiant': [f'{prefixe}-{i:03d}'
+                            for i in range(len(noms_prenoms))],
+            'Promotion': [promo] * len(noms_prenoms),
+        })
+
+    def test_reimport_etudiants_identiques_est_ignore(self):
+        """Ré-importer le même fichier ne doit générer aucune écriture."""
+        from app.excel_import import import_etudiants_excel
+        donnees = [('KABISAYI', 'Trésor'), ('MUKENDI', 'Alain')]
+
+        premier = import_etudiants_excel(self._excel_etudiants(donnees))
+        self.assertEqual(premier['created'], 2)
+
+        second = import_etudiants_excel(self._excel_etudiants(donnees))
+        self.assertEqual(second['created'], 0)
+        self.assertEqual(second['updated'], 0)
+        self.assertEqual(second['skipped'], 2)
+        self.assertEqual(Etudiant.objects.filter(noms__icontains='KABISAYI')
+                         .count(), 1)
+
+    def test_reimport_etudiant_modifie_le_nom(self):
+        """Un nom corrigé dans le fichier doit être appliqué."""
+        from app.excel_import import import_etudiants_excel
+        import_etudiants_excel(self._excel_etudiants([('KABISAYI', 'Tresor')]))
+        res = import_etudiants_excel(
+            self._excel_etudiants([('KABISAYI', 'Trésor')]))
+        self.assertEqual(res['created'], 0)
+        self.assertEqual(res['updated'], 1)
+        self.assertTrue(Etudiant.objects.filter(noms='KABISAYI Trésor')
+                        .exists())
+
+    def test_reimport_enseignants_ne_cree_pas_de_doublon(self):
+        """La déduplication se fait sur les noms, pas sur l'email."""
+        from app.excel_import import import_enseignants_excel
+        bio = lambda: self._creer_excel_bytes({
+            'Nom': ['BABANEMI'], 'Prénom': ['Albert'],
+        })
+        premier = import_enseignants_excel(bio())
+        self.assertEqual(premier['created'], 1)
+        second = import_enseignants_excel(bio())
+        self.assertEqual(second['created'], 0)
+        self.assertEqual(second['skipped'], 1)
+        self.assertEqual(
+            Enseignant.objects.filter(noms__iexact='BABANEMI Albert').count(),
+            1)
+
+    def test_reimport_cours_ne_cree_pas_de_doublon(self):
+        """Un cours (promotion, nom) déjà présent n'est pas recréé."""
+        from app.excel_import import import_cours_excel
+        bio = lambda: self._creer_excel_bytes({
+            'Cours': ['Programmation Web'],
+            'Promotion': ['L2 INFO'],
+            'Enseignant': ['BABANEMI Albert'],
+        })
+        import_cours_excel(bio())
+        res = import_cours_excel(bio())
+        self.assertEqual(res['created'], 0)
+        self.assertEqual(
+            Cours.objects.filter(nom='Programmation Web').count(), 1)
+
+    def test_meme_cours_dans_deux_promotions(self):
+        """La contrainte (promotion, nom) ne doit pas gêner deux promotions."""
+        from app.excel_import import import_cours_excel
+        bio = self._creer_excel_bytes({
+            'Cours': ['Programmation Web', 'Programmation Web'],
+            'Promotion': ['L2 INFO', 'L3 SCF LMD'],
+            'Enseignant': ['BABANEMI Albert', 'BABANEMI Albert'],
+        })
+        res = import_cours_excel(bio)
+        self.assertEqual(res['created'], 2)
+        self.assertEqual(
+            Cours.objects.filter(nom='Programmation Web').count(), 2)
+
+    def test_promotion_nom_unique(self):
+        """Deux promotions de même nom sont interdites en base."""
+        from django.db import IntegrityError
+        Promotion.objects.create(nom='Promo Unique Test')
+        with self.assertRaises(IntegrityError):
+            Promotion.objects.create(nom='Promo Unique Test')
+
+    def test_import_etudiant_sans_numero_genere_un_matricule(self):
+        """Sans colonne matricule, un numéro ETU-######## est attribué."""
+        from app.excel_import import import_etudiants_excel
+        bio = self._creer_excel_bytes({
+            'Nom': ['KALALA'], 'Prénom': ['Joseph'], 'Promotion': ['L2 INFO'],
+        })
+        res = import_etudiants_excel(bio)
+        self.assertEqual(res['created'], 1)
+        etudiant = Etudiant.objects.get(noms='KALALA Joseph')
+        self.assertRegex(etudiant.numero_etudiant, r'^ETU-\d{8}$')
+
+    def test_import_etudiants_sans_requete_par_etudiant(self):
+        """Garde-fou anti N+1 : l'import ne coûte pas ~5 requêtes par ligne."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from app.excel_import import import_etudiants_excel
+
+        nb = 50
+        donnees = [(f'NOM{i}', f'Prenom{i}') for i in range(nb)]
+        bio = self._excel_etudiants(donnees, promo='L2 SINFO',
+                                    prefixe='PLUR')
+
+        with CaptureQueriesContext(connection) as ctx:
+            res = import_etudiants_excel(bio)
+
+        self.assertEqual(res['created'], nb)
+        # Référentiel (promotion, enseignants, cours) + étudiantes de la
+        # promotion + 1 INSERT par étudiant : on reste sous 1,5 requête/ligne,
+        # là où un import naïf en consommerait 4 à 5.
+        self.assertLess(len(ctx), int(nb * 1.5))
+
+    def test_reimport_etudiants_ne_modifie_rien(self):
+        """Un 2e import du même fichier ne doit produire ni création ni UPDATE."""
+        from app.excel_import import import_etudiants_excel
+        donnees = {
+            'Nom': ['KABISAYI'],
+            'Prénom': ['Trésor'],
+            'N° Étudiant': ['L3INFO-777'],
+            'Promotion': ['L3 INFO A'],
+        }
+        premier = import_etudiants_excel(self._creer_excel_bytes(donnees))
+        self.assertEqual((premier['created'], premier['updated']),
+                         (1, 0))
+
+        second = import_etudiants_excel(self._creer_excel_bytes(donnees))
+        self.assertEqual(second['created'], 0)
+        self.assertEqual(second['updated'], 0)
+        self.assertEqual(second['skipped'], 1)
+        self.assertEqual(Etudiant.objects.count(), 1)
+
+    def test_import_etudiant_conserve_le_matricule_fourni(self):
+        """Le matricule du fichier n'est pas écrasé par un numéro généré."""
+        from app.excel_import import import_etudiants_excel
+        bio = self._creer_excel_bytes({
+            'Nom': ['MUJINGA'],
+            'Prénom': ['Kabongo'],
+            'N° Étudiant': ['L3INFOB-042'],
+            'Promotion': ['L3 INFO A'],
+        })
+        import_etudiants_excel(bio)
+        etudiant = Etudiant.objects.get()
+        self.assertEqual(etudiant.numero_etudiant, 'L3INFOB-042')
+        self.assertEqual(etudiant.noms, 'MUJINGA Kabongo')
+
+    def test_import_grille_etudiants_est_idempotent(self):
+        """Commande `import_etudiants` : grille -> matricules -> 2e passage neutre."""
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        import pandas as pd
+        from app.management.commands import import_etudiants as commande
+
+        dossier = Path(tempfile.mkdtemp())
+        # Grille de délibération : col 0 = n° d'ordre, col 1 = « NOMS PRÉNOM »
+        grille = pd.DataFrame({
+            0: [1, 2, 'Total'],
+            1: ['KABISAYI TRESOR', 'MUJINGA KABONGO', ''],
+        })
+        grille.to_excel(
+            dossier / 'L1 INFO LMD A_2025_2026.xlsx', header=False, index=False)
+
+        ancien_dossier = commande.DATA_DIR
+        commande.DATA_DIR = dossier
+        try:
+            call_command('import_etudiants')
+            self.assertEqual(Etudiant.objects.count(), 2)
+            self.assertEqual(
+                set(Etudiant.objects.values_list('numero_etudiant', flat=True)),
+                {'L1INFOA-001', 'L1INFOA-002'})
+
+            # Deuxième exécution : aucun doublon, aucune modification.
+            call_command('import_etudiants')
+            self.assertEqual(Etudiant.objects.count(), 2)
+            self.assertEqual(
+                set(Etudiant.objects.values_list('noms', flat=True)),
+                {'KABISAYI TRESOR', 'MUJINGA KABONGO'})
+        finally:
+            commande.DATA_DIR = ancien_dossier
+            shutil.rmtree(dossier, ignore_errors=True)
 
     def test_vue_import_anonyme_redirige(self):
         url = reverse('import_excel')
@@ -1377,6 +1710,3 @@ class CoursBulkDeleteTests(TestCase):
         response = self.client.post(url, {'cours_ids': []})
         self.assertRedirects(response, reverse('cours_list'))
         self.assertEqual(Cours.objects.filter(promotion=self.promo).count(), 3)
-
-
-

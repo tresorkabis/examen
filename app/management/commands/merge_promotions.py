@@ -16,7 +16,61 @@ Usage :
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from app.models import Cours, Etudiant, Promotion
+from app.models import Cours, Etudiant, Examen, Promotion
+
+
+def _fusionner_inscriptions(cible, source):
+    """Déplace les inscriptions de l'examen `source` vers l'examen `cible`.
+
+    Les étudiants déjà inscrits à l'examen conservé sont ignorés (la
+    contrainte unique (étudiant, examen) l'impose). Retourne le nombre
+    d'inscriptions déplacées.
+    """
+    deja_inscrits = set(
+        cible.inscriptions.values_list('etudiant_id', flat=True))
+    deplaces = 0
+    for inscription in source.inscriptions.all():
+        if inscription.etudiant_id in deja_inscrits:
+            continue
+        inscription.examen = cible
+        inscription.save(update_fields=['examen'])
+        deja_inscrits.add(inscription.etudiant_id)
+        deplaces += 1
+    return deplaces
+
+
+def _fusionner_cours_homonymes(target, sources):
+    """Fusionne les cours de même nom présents à la fois dans une source et
+    dans la cible.
+
+    Sans cette étape, le déplacement groupé `update(promotion_id=target_id)`
+    violerait la contrainte d'unicité (promotion, nom). Les examens du cours
+    en doublon sont ré-affectés au cours conservé ; lorsque les deux cours
+    ont un examen dans la même session, les inscriptions sont fusionnées puis
+    l'examen surnuméraire est supprimé.
+
+    Retourne (nb_cours_fusionnes, nb_examens_traites).
+    """
+    cours_fusionnes = examens_traites = 0
+    doublons = (Cours.objects
+                .filter(promotion__nom__in=sources,
+                        nom__in=target.cours.values('nom'))
+                .select_related('promotion'))
+    for doublon in doublons:
+        survivant = target.cours.filter(nom=doublon.nom).first()
+        for examen in doublon.examens.select_related('session'):
+            equivalent = Examen.objects.filter(
+                cours=survivant, session=examen.session).first()
+            if equivalent is None:
+                examen.cours = survivant
+                examen.save(update_fields=['cours'])
+            else:
+                _fusionner_inscriptions(equivalent, examen)
+                examen.delete()
+            examens_traites += 1
+        doublon.delete()
+        cours_fusionnes += 1
+    return cours_fusionnes, examens_traites
 
 
 class Command(BaseCommand):
@@ -50,6 +104,11 @@ class Command(BaseCommand):
         target, target_created = Promotion.objects.get_or_create(nom=target_name)
         total_etudiants, total_cours = 0, 0
 
+        # Cours homonymes (même nom dans une source et dans la cible) :
+        # fusionnés *avant* le déplacement groupé, sinon la contrainte
+        # d'unicité (promotion, nom) ferait échouer l'UPDATE ci-dessous.
+        nb_fusion, nb_examens = _fusionner_cours_homonymes(target, sources)
+
         # Mise à jour synthétique des sources vers la cible (1 UPDATE par source).
         target_id = target.pk
         n_etudiants = (Etudiant.objects
@@ -70,6 +129,10 @@ class Command(BaseCommand):
 
         if target_created:
             self.stdout.write(self.style.NOTICE(f'➕ Promotion cible créée : {target_name}'))
+        if nb_fusion:
+            self.stdout.write(
+                f'🔀 {nb_fusion} cours homonyme(s) fusionné(s) '
+                f'({nb_examens} examen(s) ré-affecté(s))')
         self.stdout.write(
             self.style.SUCCESS(
                 f'✅ {target_name} : {total_etudiants} étudiant(s) et '
