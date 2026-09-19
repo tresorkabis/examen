@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.core.cache import cache
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
+from django.http import HttpResponseNotAllowed
 from django.db.models import Count, F, Prefetch, Q
 from django.http import FileResponse, Http404, HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404, redirect
@@ -787,6 +788,28 @@ def session_grille_apercu(request, pk, grille_pk):
         'session': session,
         **_donnees_grille(grille),
     })
+
+
+@login_required
+def session_grille_retirer(request, pk, grille_pk):
+    """Retire la grille d'une promotion de la session (POST uniquement).
+
+    La suppression cascade vers les UE, les lignes étudiants et les notes.
+    Le GET est refusé : retirer une grille délibérée doit être un geste
+    explicite, jamais un crawler ni un préchargement de lien.
+    """
+    session = get_object_or_404(Session, pk=pk)
+    grille = get_object_or_404(
+        Grille, pk=grille_pk, session=session)
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    promotion_nom = grille.promotion.nom
+    grille.delete()
+    messages.success(
+        request,
+        f"La grille de {promotion_nom} a été retirée de la session "
+        f"« {session.nom} ».")
+    return redirect('session_detail', pk=pk)
 
 
 class SessionCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):

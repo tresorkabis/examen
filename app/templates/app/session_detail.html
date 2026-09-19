@@ -195,6 +195,13 @@
                                 <a href="{% url 'import_excel' %}?type=grilles&amp;session={{ session.pk }}&amp;promotion={{ item.promotion.pk }}" class="btn btn-sm btn-outline-secondary" title="Remplacer la grille {{ item.promotion.nom }}">
                                     <i class="bi bi-upload me-1"></i>Importer
                                 </a>
+                                <form method="post" action="{% url 'session_grille_retirer' session.pk item.grille.grille.pk %}" class="d-inline"
+                                      onsubmit="return confirm('Retirer la grille de {{ item.promotion.nom }} ? Les UE, étudiants et notes de la grille seront supprimés.');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Retirer la grille {{ item.promotion.nom }} de la session">
+                                        <i class="bi bi-trash me-1"></i>Retirer
+                                    </button>
+                                </form>
                             </span>
                             {% else %}
                             <span class="badge text-bg-warning text-dark">Sans grille</span>

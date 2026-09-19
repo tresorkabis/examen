@@ -14,6 +14,9 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
+from decimal import Decimal
+
+from .excel_import import _alerte_decisions
 
 from .models import (Promotion, Enseignant, Etudiant, Cours, Session,
                      Examen, Inscription, Grille, GrilleUE, GrilleEtudiant,
@@ -1959,6 +1962,196 @@ class GrilleModelesTests(TestCase):
         self.assertEqual(ligne.moyenne_affichee, '')
 
 
+class ControlesGrilleTests(TestCase):
+    """Contrôles d'intégrité `_alerte_decisions` : codes d'échec équivalents."""
+
+    @staticmethod
+    def _donnees():
+        """2 UE (une par semestre) et une ligne étudiant en échec."""
+        ues = [
+            {'colonne': 'C', 'intitule': 'UE S1', 'credits': 3,
+             'semestre': 1, 'groupe': '', 'ordre': 1},
+            {'colonne': 'R', 'intitule': 'UE S2', 'credits': 2,
+             'semestre': 2, 'groupe': '', 'ordre': 2},
+        ]
+        # Notes 8 et 9 : 0 crédit validé, 2 UE à reprendre,
+        # total pondéré 3×8+2×9=42 → curseur 42/13 ≈ 3,23 < 9,5 → NV.
+        ligne = {
+            'noms': 'ETUDIANT ESSAI', 'notes': {'C': Decimal(8), 'R': Decimal(9)},
+            'credits_s1': 0, 'credits_s2': 0, 'credits_total': 0,
+            'nb_ue_reprendre': 2, 'total_pondere': 42,
+            'moyenne': Decimal('3.23'), 'pourcentage': Decimal('0.16'),
+            'decision': 'NV', 'mention': '',
+        }
+        return ues, [ligne], 13
+
+    def test_decision_ajourne_n_est_pas_un_ecart(self):
+        """« AJOURNE » (variante en toutes lettres) = même verdict que NV."""
+        self.assertIsNone(self._ligne_decision('AJOURNE'))
+
+    def _ligne_decision(self, decision):
+        ues, lignes, total = self._donnees()
+        lignes[0]['decision'] = decision
+        return _alerte_decisions(lignes, ues, total)
+
+    def test_decision_a_n_est_pas_un_ecart(self):
+        """« A » (Ajourné, grille L3 INFO) = même verdict que NV : pas d'alerte."""
+        self.assertIsNone(self._ligne_decision('A'))
+
+    def test_decision_aj_n_est_pas_un_ecart(self):
+        """« AJ » (variante d'écriture) = même verdict que NV : pas d'alerte."""
+        self.assertIsNone(self._ligne_decision('AJ'))
+
+    def test_decision_nv_n_est_pas_un_ecart(self):
+        """« NV » conforme au barème recalculé : pas d'alerte."""
+        self.assertIsNone(self._ligne_decision('NV'))
+
+    def test_decision_v_face_a_un_echec_est_un_ecart(self):
+        """« V » alors que des UE restent à reprendre : vrai écart, signalé."""
+        alerte = self._ligne_decision('V')
+        self.assertIsNotNone(alerte)
+        self.assertIn('décision V au lieu de NV', alerte)
+
+
+class LireGrilleFeuilleTests(TestCase):
+    """Parseur `lire_grille_feuille` : layouts réels des grilles Excel."""
+
+    @staticmethod
+    def _feuille_synthese_sur_ligne_ue():
+        """Classeur où les libellés de synthèse sont sur la ligne des UE.
+
+        Reproduit le layout de `L2 SCF_LMD 2025_2026.xlsx` : les libellés
+        (« Total Général crédit », « Décision »…) sont posés sur la même ligne
+        que les intitulés d'UE, et la ligne de crédits porte dessous le total
+        général (13 ici, 69 dans le fichier réel). Sans exclusion de ces
+        colonnes, « Total Général crédit » devenait une fausse UE de 13
+        crédits et gonflait les contrôles de délibération.
+        """
+        import openpyxl
+
+        feuille = openpyxl.Workbook().active
+        ligne_ue = [
+            '', "UNITES D'ENSEIGNEMENT",
+            'Informatique Générale', 'Bureautique',          # S1
+            'Total crédit validé',
+            'Langage C', 'Base des données',                 # S2
+            'Total crédit validé',
+            'Total Général crédit', 'Nbre UE à reprendre',
+            'Total pondéré', 'Moyenne /20', 'Pourcentage',
+            'Décision', 'Mention', 'FIN',
+        ]
+        ligne_credits = [   # le piège : 13 en colonne « Total Général crédit »
+            '', 'Crédits', 4, 4, 12, 3, 2, 38, 13, 3, 13, '', '', '', '', '',
+        ]
+        feuille.append(ligne_ue)
+        feuille.append(ligne_credits)
+        feuille.append(['', 'N°', 'NOMS'] + [''] * 13)
+        # Étudiant : notes S1 (12, 14), crédits validés 12 ; S2 (15, 12),
+        # crédits validés 27 ; total pondéré = 12×4+14×4+15×3+12×2 = 173.
+        feuille.append([1, 'KATANGA TSHIKUNGA FISTON', 12, 14, 12,
+                        15, 12, 27, 39, 2, 173, 13.31, 0.6653, 'V', 'Bien'])
+        return feuille
+
+    def test_synthese_sur_la_ligne_des_ue_n_est_pas_une_ue(self):
+        """Les colonnes de synthèse posées sur la ligne des UE sont exclues."""
+        from app.excel_import import lire_grille_feuille
+
+        entete, ues, lignes = lire_grille_feuille(
+            self._feuille_synthese_sur_ligne_ue())
+
+        self.assertEqual(
+            [ue['intitule'] for ue in ues],
+            ['Informatique Générale', 'Bureautique', 'Langage C',
+             'Base des données'])
+        self.assertEqual(sum(ue['credits'] for ue in ues), 13)
+        self.assertEqual({ue['semestre'] for ue in ues}, {1, 2})
+        self.assertTrue(
+            all('total' not in ue['intitule'].lower() for ue in ues))
+
+    def test_synthese_sur_la_ligne_des_ue_lit_les_valeurs_etudiant(self):
+        """La synthèse étudiant reste lue malgré l'exclusion des colonnes."""
+        from app.excel_import import lire_grille_feuille
+
+        _, _, lignes = lire_grille_feuille(
+            self._feuille_synthese_sur_ligne_ue())
+
+        self.assertEqual(len(lignes), 1)
+        ligne = lignes[0]
+        self.assertEqual(ligne['noms'], 'KATANGA TSHIKUNGA FISTON')
+        self.assertEqual(ligne['credits_s1'], 12)
+        self.assertEqual(ligne['credits_s2'], 27)
+        self.assertEqual(ligne['total_pondere'], 173)
+        self.assertEqual(ligne['decision'], 'V')
+
+
+class ImportGrilleRemplacementTests(TestCase):
+    """Le bouton « Importer » d'une grille supprime les anciennes données.
+
+    `import_grille_excel` ne se contente pas de remplacer la grille de la
+    session visée : toutes les grilles antérieures de la promotion (toute
+    session, y compris sans session) sont purgées avant l'écriture, UE,
+    lignes et notes comprises — sinon des données périmées survivraient.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.promotion = Promotion.objects.create(nom='L1 INFO A')
+        cls.session_normale = Session.objects.create(
+            nom='Normale SEMESTRE 2 2025 - 2026', semestre=2,
+            date_debut=date(2026, 5, 1), date_fin=date(2026, 5, 31))
+        cls.session_rattrapage = Session.objects.create(
+            nom='Rattrapage SEMESTRE 2 2025 - 2026', semestre=2,
+            type_session='rattrapage',
+            date_debut=date(2026, 6, 1), date_fin=date(2026, 6, 30))
+        Etudiant.objects.create(
+            noms='KATANGA TSHIKUNGA FISTON', numero_etudiant='L1INFOA-001',
+            promotion=cls.promotion)
+
+    def _fichier_grille(self):
+        feuille = LireGrilleFeuilleTests._feuille_synthese_sur_ligne_ue()
+        tampon = BytesIO()
+        feuille.parent.save(tampon)
+        tampon.seek(0)
+        tampon.name = 'L1 INFO LMD A_2025_2026.xlsx'
+        return tampon
+
+    def test_re_import_purge_les_grilles_anterieures_toutes_sessions(self):
+        from app.excel_import import import_grille_excel
+
+        res1 = import_grille_excel(
+            self._fichier_grille(), self.promotion, self.session_normale)
+        self.assertTrue(res1['success'], res1['errors'])
+        self.assertEqual(Grille.objects.count(), 1)
+
+        # Ré-import sur une AUTRE session : l'ancienne grille (session
+        # normale) doit disparaître avec ses UE, lignes et notes.
+        res2 = import_grille_excel(
+            self._fichier_grille(), self.promotion, self.session_rattrapage)
+        self.assertTrue(res2['success'], res2['errors'])
+        self.assertEqual((res2['created'], res2['updated']), (0, 1))
+
+        grilles = Grille.objects.all()
+        self.assertEqual(grilles.count(), 1)
+        grille = grilles.get()
+        self.assertEqual(grille.session_id, self.session_rattrapage.pk)
+        self.assertEqual(grille.ues.count(), 4)
+        self.assertEqual(grille.lignes.count(), 1)
+        self.assertEqual(GrilleUE.objects.count(), 4)
+        self.assertEqual(GrilleEtudiant.objects.count(), 1)
+        self.assertEqual(
+            GrilleNote.objects.count(),
+            grille.lignes.get().notes.count())
+
+    def test_re_import_meme_session_ne_duplique_pas(self):
+        from app.excel_import import import_grille_excel
+
+        import_grille_excel(
+            self._fichier_grille(), self.promotion, self.session_rattrapage)
+        import_grille_excel(
+            self._fichier_grille(), self.promotion, self.session_rattrapage)
+        self.assertEqual(Grille.objects.count(), 1)
+
+
 class GrilleSessionDetailTests(TestCase):
     """Onglet « Grilles » du détail de session (sessions/4/)."""
 
@@ -2045,4 +2238,31 @@ class GrilleSessionDetailTests(TestCase):
         self._grille()
         ctx = self._contexte()
         self.assertNotIn(self.promotion, ctx['promotions_sans_grille'])
+
+    def test_retirer_grille_supprime_toutes_les_donnees(self):
+        """Le bouton Retirer (POST) supprime grille, UE, lignes et notes."""
+        grille = self._grille()
+        self.client.force_login(
+            User.objects.create_user('resp', password='pass12345'))
+        reponse = self.client.post(
+            reverse('session_grille_retirer',
+                    args=[self.session.pk, grille.pk]))
+        self.assertRedirects(
+            reponse, reverse('session_detail', args=[self.session.pk]),
+            fetch_redirect_response=False)
+        self.assertFalse(Grille.objects.filter(pk=grille.pk).exists())
+        self.assertEqual(GrilleUE.objects.count(), 0)
+        self.assertEqual(GrilleEtudiant.objects.count(), 0)
+        self.assertEqual(GrilleNote.objects.count(), 0)
+
+    def test_retirer_grille_refuse_le_get(self):
+        """Retirer est un geste explicite : le GET ne supprime rien."""
+        grille = self._grille()
+        self.client.force_login(
+            User.objects.create_user('resp2', password='pass12345'))
+        reponse = self.client.get(
+            reverse('session_grille_retirer',
+                    args=[self.session.pk, grille.pk]))
+        self.assertEqual(reponse.status_code, 405)
+        self.assertTrue(Grille.objects.filter(pk=grille.pk).exists())
 

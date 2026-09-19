@@ -104,12 +104,40 @@ CORRESPONDANCES_L2_SCF = {
     'Projet tutoré 1': None,
 }
 
+# UE de la grille L3 SCF (intitulé exact) -> cours en base. `None` = à créer.
+# Décision métier : GESTION DE PROJETS, BUREAUTIQUE 2 et MRS ne font pas partie
+# de la grille (cours hors grille, laissés intacts). TEI couvre
+# « Opérations de banques et de bourses ».
+CORRESPONDANCES_L3_SCF = {
+    'Cpté des Eses à succursales multiples': 'CPTE SUC MULTIPLES',
+    'Normes comptables internationales (IFRS)': 'NORMES IFRS',
+    'Logiciels de comptabilité': 'COMPTABILITE INFORMATISE',
+    'Gestion de la trésorerie': 'GESTION DE LA TRESORERIE',
+    'Opérations de banques et de bourses': 'TEI',
+    'Eléments de FinTech': 'FIN TECH',
+    'Ethique et déontologie professionnelles': 'ETHIQUE ET DEONTOLOGIE',
+    'Management': 'MANAGEMENT',
+    'Anglais des affaires 2': 'ANGLAIS DES AFFAIRES',
+    'Communication et correspondance administrative': 'CCA',
+    'Comptabilité agricole': 'COMPTABILITE AGRICOLE',
+    'Comptabilité bancaire et des assurances': 'COMPTE BANCAIRE & ASSURANCE',
+    'Comptabilité du secteur public': 'COMPTABILITE PUBLIQUE',
+    'Organisation comptable': 'ORGANISATION COMPTABLE',
+    'Contrôle de gestion et gestion bugdetaire': None,  # déjà au nom exact
+    'Audit comptable et financier': 'AUDIT COMPTABLE & FIN',
+    'Pratique professionnelle 3': 'PRATIQUE PROFESSIONNELLE',
+    'Stage de responsabilité': None,
+    'Projet tutoré': None,
+}
+
 # Fichier -> (promotion, correspondances, corrections).
 CONFIGS = {
     'L1 INFO LMD A_2025_2026.xlsx': (
         'L1 INFO A', CORRESPONDANCES_L1, CORRECTIONS_L1),
     'L2 SCF_LMD 2025_2026.xlsx': (
         'L2 SCF LMD', CORRESPONDANCES_L2_SCF, {}),
+    'L3 SCF_LMD 2025_2026.xlsx': (
+        'L3 SCF LMD', CORRESPONDANCES_L3_SCF, {}),
 }
 
 

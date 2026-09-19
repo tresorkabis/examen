@@ -20,6 +20,10 @@ PROMOTION_ALIASES = {
     'L3 SD A': 'L3 SDA',
 }
 
+# Codes de décision d'échec selon les grilles : « NV » (non validé),
+# « A » (Ajourné, ex. L3 INFO), « AJ ». Même verdict, graphies différentes.
+DECISIONS_ECHEC = {'NV', 'A', 'AJ', 'AJOURNE'}
+
 
 def normalize_promotion_name(name):
     """Mappe les variations et alias des noms de promotions vers un nom officiel unique."""
@@ -709,6 +713,11 @@ def _alerte_decisions(lignes, ues, total_credits):
     Barème du fichier : crédits validés (note ≥ 10) par semestre, décision
     `V` si toutes les UE sont acquises, sinon `VC` au-delà de 9,5/20 pondéré,
     `NV` en dessous ; mention calculée sur la moyenne.
+
+    Les grilles notent l'échec sous plusieurs codes — `NV` (L1 INFO),
+    `A` (Ajourné, L3 INFO), `AJ`… — qui désignent le même verdict : aucune
+    alerte entre eux. En revanche `V` ou `VC` face à un échec attendu reste
+    un vrai écart.
     """
     ecarts = []
     for ligne in lignes:
@@ -736,9 +745,14 @@ def _alerte_decisions(lignes, ues, total_credits):
         elif ligne['nb_ue_reprendre'] != reprises:
             ecarts.append(f"{ligne['noms']} : UE à reprendre "
                           f"{ligne['nb_ue_reprendre']} au lieu de {reprises}")
-        elif ligne['decision'] and ligne['decision'] != attendu:
-            ecarts.append(f"{ligne['noms']} : décision {ligne['decision']} "
-                          f"au lieu de {attendu}")
+        else:
+            decision = (ligne['decision'] or '').strip().upper()
+            # « A » / « AJ » / « NV » : même verdict d'échec, peu importe
+            # la graphie utilisée par la grille.
+            meme_echec = attendu == 'NV' and decision in DECISIONS_ECHEC
+            if decision and decision != attendu and not meme_echec:
+                ecarts.append(f"{ligne['noms']} : décision {ligne['decision']} "
+                              f"au lieu de {attendu}")
     if not ecarts:
         return None
     if len(ecarts) == 1:
@@ -844,25 +858,12 @@ def lire_grille_feuille(feuille):
             'incomplète ou dans un format non pris en charge.')
     groupes = _groupes_par_colonne(feuille, ligne_ue - 1)
 
-    ues = []
-    for colonne in range(3, feuille.max_column + 1):
-        intitule = _texte(feuille.cell(ligne_ue, colonne).value)
-        if not intitule:
-            continue           # colonnes de synthèse, zone annexe
-        credits = _entier(feuille.cell(ligne_credits, colonne).value, None)
-        if credits is None:
-            continue           # marqueur de fin de tableau (« FIN »)
-        ues.append({
-            'colonne': colonne,
-            'intitule': intitule,
-            'credits': credits,
-            'semestre': 1 if colonne < colonnes_credits[0] else 2,
-            'groupe': groupes.get(colonne, ''),
-            'ordre': len(ues) + 1,
-        })
-    if not ues:
-        raise ValueError('Aucune UE lue dans la grille.')
-
+    # Les libellés de synthèse ne sont pas toujours au-dessus des UE : dans
+    # certaines grilles ils sont posés sur la ligne même des UE (L2 SCF :
+    # « Total Général crédit » en AA7 avec 69 en AA8). Ils sont identifiés
+    # d'abord et exclus des UE — sinon la colonne deviendrait une fausse UE
+    # de 69 crédits, gonflerait le total et fausserait les contrôles de
+    # total pondéré et de crédits validés.
     synthese = {
         'credits_s1': colonnes_credits[0],
         'credits_s2': (colonnes_credits[1]
@@ -876,6 +877,28 @@ def lire_grille_feuille(feuille):
         'decision': _colonne_de(feuille, 'Décision', ligne_ue),
         'mention': _colonne_de(feuille, 'Mention', ligne_ue),
     }
+    colonnes_synthese = {colonne for colonne in synthese.values() if colonne}
+
+    ues = []
+    for colonne in range(3, feuille.max_column + 1):
+        intitule = _texte(feuille.cell(ligne_ue, colonne).value)
+        if not intitule:
+            continue           # colonnes de synthèse, zone annexe
+        if colonne in colonnes_synthese or 'total' in intitule.lower():
+            continue           # synthèse posée sur la ligne des UE
+        credits = _entier(feuille.cell(ligne_credits, colonne).value, None)
+        if credits is None:
+            continue           # marqueur de fin de tableau (« FIN »)
+        ues.append({
+            'colonne': colonne,
+            'intitule': intitule,
+            'credits': credits,
+            'semestre': 1 if colonne < colonnes_credits[0] else 2,
+            'groupe': groupes.get(colonne, ''),
+            'ordre': len(ues) + 1,
+        })
+    if not ues:
+        raise ValueError('Aucune UE lue dans la grille.')
 
     lignes = []
     for ligne in range(ligne_credits + 1, feuille.max_row + 1):
@@ -934,11 +957,14 @@ def import_grille_excel(file_obj, promotion, session=None,
     (`success`, `created`, `updated`, `skipped`, `errors`), enrichi du
     récapitulatif de la grille (`grille`, `nb_ue`, `nb_lignes`, `nb_notes`).
 
-    Le ré-import d'une même grille (même promotion, session et année)
-    *remplace* l'ancienne : tout est dérivé du fichier, la conserver en double
-    n'aurait aucun sens. Les notes sont insérées par lots (`bulk_create`) :
-    une grille de 30 UE × 1 000 étudiants représente 30 000 lignes, qu'une
-    insertion unitaire rendrait impraticable.
+    Le bouton « Importer » *remplace* : toutes les grilles antérieures de la
+    promotion pour cette année académique sont supprimées — quelle que soit
+    leur session, y compris sans session — avant d'écrire la nouvelle. Tout
+    est dérivé du fichier ; garder une ancienne version (UE, notes,
+    délibération) à côté de la nouvelle laisserait des données périmées.
+    Les notes sont insérées par lots (`bulk_create`) : une grille de 30 UE ×
+    1 000 étudiants représente 30 000 lignes, qu'une insertion unitaire
+    rendrait impraticable.
     """
     resultat = {
         'success': False, 'created': 0, 'updated': 0, 'skipped': 0,
@@ -959,14 +985,15 @@ def import_grille_excel(file_obj, promotion, session=None,
     annee = annee_academique or entete['annee_academique']
 
     with transaction.atomic():
-        ancienne = Grille.objects.filter(
-            promotion=promotion, session=session,
-            annee_academique=annee).first()
-        if ancienne is not None:
-            ancienne.delete()
-            resultat['updated'] = 1
-        else:
-            resultat['created'] = 1
+        # Purge complète des anciennes grilles de la promotion pour cette
+        # année (UE, lignes et notes supprimées en cascade) — pas seulement
+        # celle de la session courante : un fichier grille est la source de
+        # vérité annuelle de la promotion, aucune version antérieure ne doit
+        # lui survivre.
+        supprimees, _ = Grille.objects.filter(
+            promotion=promotion, annee_academique=annee).delete()
+        resultat['updated'] = 1 if supprimees else 0
+        resultat['created'] = 0 if supprimees else 1
 
         grille = Grille.objects.create(
             promotion=promotion, session=session, annee_academique=annee,
