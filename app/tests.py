@@ -1710,3 +1710,120 @@ class CoursBulkDeleteTests(TestCase):
         response = self.client.post(url, {'cours_ids': []})
         self.assertRedirects(response, reverse('cours_list'))
         self.assertEqual(Cours.objects.filter(promotion=self.promo).count(), 3)
+
+
+class AlignerCoursGrilleCommandTest(TestCase):
+    """Commande `aligner_cours_grille` : intitulés + crédits depuis la grille."""
+
+    @staticmethod
+    def _ecrire_grille(dossier, ues):
+        """Écrit une grille de délibération minimale (lignes 7 et 8).
+
+        `ues` : liste de tuples (intitulé, crédits). Un marqueur « FIN » est
+        ajouté en fin de ligne d'en-tête, comme dans le fichier réel : il ne
+        doit pas être pris pour une UE.
+        """
+        import pandas as pd
+        largeur = 4 + len(ues)
+        lignes = [
+            ['ESFORCA/INPP'],
+            ['2EME SEMESTRE'],
+            ['GRILLE DE DELIBERATION 2025 - 2026'],
+            [],
+            ['', '', 'PREMIER SEMESTRE'] + [''] * (largeur - 3),
+            ['', 'GROUPE'] + [''] * (largeur - 2),
+            ['', "UNITES D'ENSEIGNEMENT"] + [n for n, _ in ues] + ['FIN'],
+            ['', 'Crédits'] + [c for _, c in ues] + [''],
+            ['', 'N°', 'NOMS'] + [''] * (largeur - 3),
+        ]
+        # Toutes les lignes doivent avoir la même largeur pour pandas.
+        lignes = [ligne + [''] * (largeur - len(ligne) + 1) for ligne in lignes]
+        chemin = dossier / 'L1 INFO LMD A_2025_2026.xlsx'
+        pd.DataFrame(lignes).to_excel(chemin, header=False, index=False)
+        return chemin
+
+    def _contexte(self, ues, cours_existants):
+        """Prépare une promo L1 INFO A + sa grille et patche DATA_DIR.
+
+        Retourne la promotion créée.
+        """
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        from app.management.commands import aligner_cours_grille as commande
+
+        dossier = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, dossier, ignore_errors=True)
+        self._ecrire_grille(dossier, ues)
+
+        promotion = Promotion.objects.create(nom='L1 INFO A')
+        for nom, coefficient in cours_existants:
+            Cours.objects.create(nom=nom, coefficient=coefficient,
+                                 promotion=promotion)
+
+        dossier_initial = commande.DATA_DIR
+        self.addCleanup(setattr, commande, 'DATA_DIR', dossier_initial)
+        commande.DATA_DIR = dossier
+        return promotion
+
+    def test_renomme_et_applique_les_credits(self):
+        """Les cours sont renommés et leur coefficient prend le crédit."""
+        self._contexte(
+            ues=[('Informatique Générale', 4), ('Bureautique', 4),
+                 ("Stage d'observation", 2)],
+            cours_existants=[('INFO GENERALE', 1), ('LABORATOIRE', 1)])
+
+        call_command('aligner_cours_grille')
+
+        self.assertEqual(
+            sorted(Cours.objects.values_list('nom', 'coefficient')),
+            sorted([('Informatique Générale', 4), ('Bureautique', 4),
+                    ("Stage d'observation", 2)]))
+
+    def test_dry_run_ne_modifie_pas_la_base(self):
+        """--dry-run affiche sans écrire : intitulés et crédits intacts."""
+        self._contexte(
+            ues=[('Informatique Générale', 4)],
+            cours_existants=[('INFO GENERALE', 1)])
+
+        call_command('aligner_cours_grille', dry_run=True)
+
+        cours = Cours.objects.get()
+        self.assertEqual((cours.nom, cours.coefficient), ('INFO GENERALE', 1))
+        self.assertEqual(Cours.objects.count(), 1)
+
+    def test_commande_est_idempotente(self):
+        """Un second passage ne crée aucun doublon ni modification."""
+        self._contexte(
+            ues=[('Informatique Générale', 4), ('Stage d\'observation', 2)],
+            cours_existants=[('INFO GENERALE', 1)])
+
+        call_command('aligner_cours_grille')
+        call_command('aligner_cours_grille')
+
+        self.assertEqual(Cours.objects.count(), 2)
+        self.assertEqual(
+            sorted(Cours.objects.values_list('nom', flat=True)),
+            ['Informatique Générale', "Stage d'observation"])
+
+    def test_promotion_absente_leve_une_erreur(self):
+        """Sans la promotion cible, la commande échoue explicitement."""
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        from django.core.management.base import CommandError
+
+        from app.management.commands import aligner_cours_grille as commande
+
+        dossier = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, dossier, ignore_errors=True)
+        self._ecrire_grille(dossier, [('Informatique Générale', 4)])
+        dossier_initial = commande.DATA_DIR
+        self.addCleanup(setattr, commande, 'DATA_DIR', dossier_initial)
+        commande.DATA_DIR = dossier
+
+        with self.assertRaises(CommandError):
+            call_command('aligner_cours_grille')
+
