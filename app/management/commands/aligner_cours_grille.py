@@ -34,6 +34,7 @@ ENTETE_UE = "UNITES D'ENSEIGNEMENT"
 GRILLES = {
     'L1 INFO LMD A_2025_2026.xlsx': 'L1 INFO A',
     'L2 SCF_LMD 2025_2026.xlsx': 'L2 SCF LMD',
+    'L3 TS_LMD A 2025_2026.xlsx': 'L3 SD A',
 }
 
 # UE de la grille (intitulé exact) -> nom du cours créé par la charge horaire.
@@ -130,6 +131,57 @@ CORRESPONDANCES_L3_SCF = {
     'Projet tutoré': None,
 }
 
+# UE de la grille L3 TS (fichier « L3 TS_LMD A 2025_2026.xlsx ») -> cours en
+# base pour la promotion L3 SD A. Le fichier porte le nom « L3 TS » mais la
+# promotion dans l'application est « L3 SD A » : ce sont le même programme
+# (comptabilité / gestion), les 22 UE s'apparient aux 22 cours existants.
+#
+# Deux intitulés de la grille sont **tronqués dans le fichier Excel même** (la
+# largeur de colonne ne tient pas le texte complet) : ils sont corrigés dans
+# `CORRECTIONS_L3_SD` pour restituer le libellé officiel et retrouver le bon
+# cours par son ancien nom.
+CORRESPONDANCES_L3_SD = {
+    # S5
+    'Organisation comptable': 'ORGANISATION COMPTABLE',
+    'Comptabilité Informatisé': 'COMPTABILITE INFORMATISE',
+    'Eléments de gestion budgétaire': 'GESTION BUDGETAIRE',
+    'Cpté des charges sociales et ass': 'COMPTE DES CHARGES SOC ASS',
+    'Communication des organisations': 'COMMUNICATION DES ORGA',
+    'Composition et rédaction française': 'COMPOSITION ET RED FR',
+    'An. Syntax. et stylistiques en français': 'ANALYSE SYNTAXIQUE ET STYLISTIQUE',
+    'Ethique et déontologie professionnelles': 'ETHIQUE ET DEONTOLOGIE',
+    'Méthode de recherche scientifique': 'MRS',
+    'Composition et rédaction anglaise': 'ANGLAIS COMPOSITION',
+    "Anglais d'affaires": 'ANGLAIS AFFAIRES',
+    # S6
+    'Eléments de gestion de la trésorerie': 'GESTION DE TRESORERIE',
+    'Eléments de pratique fiscale': 'LEGISLATION FISCALE',
+    'Eléments de gestion des assurances': 'GESTION DES ASSURANCES',
+    "Gestion de l'événementiel": 'GESTION EVENEMENTIELLE',
+    'Communication et réseaux sociaux': 'COM & RESEAUX SOCIAUX',
+    'Eléments de gestion de la logistique com': 'LOGISTIQUE',
+    'Protocole et ethiquette': 'PROTOCOLE ET ETIQUETTE',
+    'Infographie': 'INFOGRAPHIE',
+    'Pratique professionnelle 3': 'PRATIQUE PROFESSIONNELLE',
+    'Stage de responsabilité': 'STAGE',
+    'Projet tutoré': 'PROJET TUTORE 2',
+}
+
+# Fautes de frappe / titres tronqués présents dans la grille L3 TS : le cours
+# prendra le libellé corrigé ci-dessous (valeur) au lieu du libellé brut (clé)
+# lu dans le fichier.
+CORRECTIONS_L3_SD = {
+    # Titres tronqués dans le fichier Excel (restitués à l'orthographe
+    # officielle du programme) :
+    'Cpté des charges sociales et ass':
+        'Cpté des charges sociales et assurances',
+    'Eléments de gestion de la logistique com':
+        'Eléments de gestion de la logistique commerciale',
+    # Graphèmes manquants / casse :
+    'Protocole et ethiquette': 'Protocole et étiquette',
+    'Méthode de recherche scientifique': 'Méthode de Recherche Scientifique',
+}
+
 # Fichier -> (promotion, correspondances, corrections).
 CONFIGS = {
     'L1 INFO LMD A_2025_2026.xlsx': (
@@ -138,6 +190,8 @@ CONFIGS = {
         'L2 SCF LMD', CORRESPONDANCES_L2_SCF, {}),
     'L3 SCF_LMD 2025_2026.xlsx': (
         'L3 SCF LMD', CORRESPONDANCES_L3_SCF, {}),
+    'L3 TS_LMD A 2025_2026.xlsx': (
+        'L3 SD A', CORRESPONDANCES_L3_SD, CORRECTIONS_L3_SD),
 }
 
 

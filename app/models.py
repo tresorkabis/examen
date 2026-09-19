@@ -381,10 +381,10 @@ class GrilleEtudiant(models.Model):
     def moyenne_affichee(self):
         """Moyenne prête à afficher : arrondie à l'entier, sans décimale.
 
-        Contrairement aux notes (`GrilleNote.note_affichee`, valeurs entières
-        brutes), la moyenne délibérée est un calcul (ex. ``7.45``) : l'aperçu
-        l'arrondit à l'entier le plus proche (``7.45`` -> ``7``) pour une
-        lecture rapide, sans jamais de virgule.
+        Contrairement aux notes (`GrilleNote.note_affichee`, arrondies à
+        l'entier à l'affichage), la moyenne délibérée est un calcul
+        (ex. ``7.45``) : l'aperçu l'arrondit à l'entier le plus proche
+        (``7.45`` -> ``7``) pour une lecture rapide, sans jamais de virgule.
         """
         if self.moyenne is None or self.moyenne == '':
             return ''
@@ -443,17 +443,19 @@ class GrilleNote(models.Model):
 
     @property
     def note_affichee(self):
-        """Note prête à afficher : entier sans décimale superflue.
+        """Note prête à afficher : arrondie à l'entier, sans décimale.
 
-        Le fichier Excel ne contient que des entiers (``12``, pas
-        ``12,50``) : afficher ``{{ note.note }}`` forcerait le format
-        ``12,00`` (localisation fr). Cette propriété retire les zéros
-        inutiles — ``Decimal('12.00')`` -> ``'12'`` — sans jamais
-        ajouter de séparateur décimal.
+        La plupart des grilles ne contiennent que des entiers (``12``, pas
+        ``12,50``) ; afficher ``{{ note.note }}`` forcerait le format
+        ``12,00`` (localisation fr). Certaines UE sont notées en décimal
+        (ex. « Projet tutoré » en L3 SCF : ``16.20``) : l'aperçu arrondit
+        à l'entier le plus proche (``16.20`` -> ``16``) comme pour la
+        moyenne, sans jamais de virgule. La valeur exacte reste en base.
         """
         if self.note is None or self.note == '':
             return ''
-        valeur = Decimal(self.note).normalize()
+        valeur = Decimal(self.note).quantize(
+            Decimal('1'), rounding=ROUND_HALF_UP)
         return format(valeur, 'f')
 
     @property
