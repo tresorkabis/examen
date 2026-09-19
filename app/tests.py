@@ -10,12 +10,14 @@ from io import BytesIO
 from django.core.cache import cache
 from django.core.management import call_command
 from django.contrib.auth.models import User
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from .models import (Promotion, Enseignant, Etudiant, Cours, Session,
-                     Examen, Inscription)
+                     Examen, Inscription, Grille, GrilleUE, GrilleEtudiant,
+                     GrilleNote)
 from .forms import ExamenForm
 
 
@@ -1826,4 +1828,120 @@ class AlignerCoursGrilleCommandTest(TestCase):
 
         with self.assertRaises(CommandError):
             call_command('aligner_cours_grille')
+
+
+class GrilleModelesTests(TestCase):
+    """Modèles de grille de délibération : structure, contraintes, barème."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.promotion = Promotion.objects.create(nom='L1 INFO A')
+        cls.session = Session.objects.create(
+            nom='Rattrapage SEMESTRE 2 2025 - 2026', semestre=2,
+            type_session='rattrapage',
+            date_debut=date(2026, 6, 1), date_fin=date(2026, 6, 30))
+        cls.cours = Cours.objects.create(
+            nom='Informatique Générale', coefficient=4,
+            promotion=cls.promotion)
+        cls.etudiant = Etudiant.objects.create(
+            noms='KATANGA TSHIKUNGA FISTON', numero_etudiant='L1INFOA-001',
+            promotion=cls.promotion)
+
+    def _grille(self, **kwargs):
+        defauts = {
+            'promotion': self.promotion,
+            'session': self.session,
+            'annee_academique': '2025-2026',
+            'etablissement': 'ESFORCA/INPP',
+            'total_credits': 76,
+            'fichier_source': 'L1 INFO LMD A_2025_2026.xlsx',
+        }
+        defauts.update(kwargs)
+        return Grille.objects.create(**defauts)
+
+    def _ue(self, grille, **kwargs):
+        defauts = {
+            'grille': grille, 'cours': self.cours,
+            'intitule': 'Informatique Générale', 'credits': 4,
+            'semestre': 1, 'groupe': 'IBA', 'ordre': 1,
+        }
+        defauts.update(kwargs)
+        return GrilleUE.objects.create(**defauts)
+
+    def _ligne(self, grille, **kwargs):
+        defauts = {
+            'grille': grille, 'etudiant': self.etudiant, 'rang': 1,
+            'credits_s1': 16, 'credits_s2': 17, 'credits_total': 33,
+            'nb_ue_reprendre': 15, 'total_pondere': 566,
+            'moyenne': '7.45', 'pourcentage': '37.24', 'decision': 'NV',
+        }
+        defauts.update(kwargs)
+        return GrilleEtudiant.objects.create(**defauts)
+
+    def test_bareme_est_le_total_pondere_maximal(self):
+        """Le dénominateur du fichier vaut « crédits × 20 » (1520 ici)."""
+        self.assertEqual(self._grille().bareme, 76 * 20)
+
+    def test_ue_est_validee_a_partir_de_dix(self):
+        """Seuil de validation du fichier : note >= 10 (case vide = échec)."""
+        ligne = self._ligne(self._grille())
+        ue = self._ue(ligne.grille)
+
+        validee = GrilleNote.objects.create(ligne=ligne, ue=ue, note='10')
+        juste_echouee = GrilleNote.objects.create(
+            ligne=ligne, ue=self._ue(ligne.grille, intitule='Bureautique',
+                                     ordre=2), note='9.99')
+        vide = GrilleNote.objects.create(
+            ligne=ligne, ue=self._ue(ligne.grille, intitule='Algorithmique 1',
+                                     ordre=3), note=None)
+
+        self.assertTrue(validee.est_validee)
+        self.assertFalse(juste_echouee.est_validee)
+        self.assertFalse(vide.est_validee)
+
+    def test_une_seule_grille_par_promotion_session_annee(self):
+        """Rejouer le même import ne doit pas dupliquer la grille."""
+        self._grille()
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self._grille()
+
+    def test_ue_non_dupliquee_dans_une_grille(self):
+        grille = self._grille()
+        self._ue(grille)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self._ue(grille, ordre=2)
+
+    def test_rang_unique_dans_une_grille(self):
+        grille = self._grille()
+        self._ligne(grille)
+        autre = Etudiant.objects.create(
+            noms='MABANGI WAMABANGI', numero_etudiant='L1INFOA-002',
+            promotion=self.promotion)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self._ligne(grille, etudiant=autre)
+
+    def test_une_seule_note_par_etudiant_et_ue(self):
+        grille = self._grille()
+        ligne = self._ligne(grille)
+        ue = self._ue(grille)
+        GrilleNote.objects.create(ligne=ligne, ue=ue, note='12')
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            GrilleNote.objects.create(ligne=ligne, ue=ue, note='14')
+
+    def test_note_hors_bornes_rejetee(self):
+        """La note est bornée 0-20, comme dans la grille."""
+        from django.core.exceptions import ValidationError
+        ligne = self._ligne(self._grille())
+        note = GrilleNote(ligne=ligne, ue=self._ue(ligne.grille), note='25')
+        with self.assertRaises(ValidationError):
+            note.full_clean()
+
+    def test_supprimer_un_cours_detache_l_ue_de_la_grille(self):
+        """La grille reste lisible si le cours est supprimé du référentiel."""
+        grille = self._grille()
+        ue = self._ue(grille)
+        self.cours.delete()
+        ue.refresh_from_db()
+        self.assertIsNone(ue.cours)
+        self.assertEqual(ue.intitule, 'Informatique Générale')
 

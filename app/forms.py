@@ -100,6 +100,7 @@ class ExcelImportForm(forms.Form):
         ('etudiants', 'Étudiants'),
         ('enseignants', 'Enseignants'),
         ('cours', 'Cours'),
+        ('grilles', 'Grille de délibération'),
     ]
 
     type_import = forms.ChoiceField(
@@ -118,6 +119,16 @@ class ExcelImportForm(forms.Form):
         help_text="Attribuée si la promotion n'est pas spécifiée dans le fichier.",
         widget=forms.Select(attrs={'class': 'form-select'})
     )
+    # Une grille est annuelle alors qu'une session est ponctuelle : le lien
+    # reste facultatif, mais c'est lui qui fait apparaître la grille dans le
+    # détail de la session.
+    session = forms.ModelChoiceField(
+        queryset=Session.objects.all(),
+        required=False,
+        label="Session d'examens (grilles)",
+        help_text="Session dans laquelle la grille sera consultable.",
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
 
     def clean_fichier_excel(self):
         f = self.cleaned_data.get('fichier_excel')
@@ -126,3 +137,18 @@ class ExcelImportForm(forms.Form):
             if ext not in ['xlsx', 'xls']:
                 raise forms.ValidationError("Le fichier doit être au format Excel (.xlsx ou .xls).")
         return f
+
+    def clean(self):
+        """Une grille est *par promotion* : elle ne peut pas s'en passer.
+
+        Les autres imports s'en passent (la promotion est lue dans le fichier
+        ou déduite du nom de la feuille).
+        """
+        donnees = super().clean()
+        if (donnees.get('type_import') == 'grilles'
+                and not donnees.get('promotion')):
+            self.add_error(
+                'promotion',
+                "Pour une grille de délibération, la promotion est obligatoire "
+                "(une grille couvre une seule promotion).")
+        return donnees

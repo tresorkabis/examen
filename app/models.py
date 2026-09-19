@@ -1,5 +1,7 @@
 import random
 import string
+from decimal import Decimal
+
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 
@@ -210,4 +212,233 @@ class Inscription(models.Model):
 
     def __str__(self):
         return f"{self.etudiant} -> {self.examen}"
+
+
+class Grille(models.Model):
+    """Grille de délibération d'une promotion (un fichier Excel archivé).
+
+    Les grilles (data/L*.xlsx) récapitulent, pour une promotion : les UE des
+    deux semestres avec leurs crédits, les notes /20 de chaque étudiant et la
+    synthèse de délibération (crédits validés, total pondéré, moyenne,
+    décision, mention).
+
+    Ce modèle ne recalcule rien : il recopie la grille, qui est une pièce
+    délibérée. `total_credits` (somme des crédits des UE) est le dénominateur
+    de la moyenne du fichier — `moyenne = total_pondéré / total_credits`, la
+    cellule « total crédits × 20 » n'étant que l'écriture ×20 du même rapport.
+
+    Structure : `Grille` (en-tête) -> `GrilleUE` (colonnes) et
+    `GrilleEtudiant` (lignes) -> `GrilleNote` (cellules).
+    """
+
+    promotion = models.ForeignKey(
+        Promotion, on_delete=models.CASCADE, related_name='grilles')
+    # Session facultative : une grille est annuelle alors qu'une session
+    # d'examens est ponctuelle. Le lien sert à afficher la grille dans le
+    # détail d'une session ; `SET_NULL` la conserve si la session disparaît.
+    session = models.ForeignKey(
+        Session, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='grilles',
+        help_text="Session d'examens où la grille est consultée.")
+    annee_academique = models.CharField(max_length=20, default='2025-2026')
+    etablissement = models.CharField(
+        max_length=100, blank=True, default='', verbose_name='Établissement')
+    intitule = models.CharField(max_length=200, blank=True, default='')
+    total_credits = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Somme des crédits des UE (dénominateur de la moyenne).")
+    fichier_source = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text="Nom du fichier Excel d'origine (traçabilité).")
+    importe_le = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'{self.promotion.nom} — {self.annee_academique}'
+
+    @property
+    def bareme(self):
+        """Total pondéré maximal (crédits × 20) : dénominateur du fichier."""
+        return self.total_credits * 20
+
+    class Meta:
+        # Tri par date seule : un `ordering` sur une FK jointe ferait ajouter
+        # une jointure + ORDER BY à *toutes* les requêtes (cf. Inscription).
+        ordering = ['-importe_le']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['promotion', 'session', 'annee_academique'],
+                name='unique_grille_promotion_session_annee',
+                violation_error_message=(
+                    'Une grille existe déjà pour cette promotion dans cette '
+                    'session et cette année académique.'
+                ),
+            ),
+        ]
+        indexes = [models.Index(fields=['promotion', 'annee_academique'])]
+
+
+class GrilleUE(models.Model):
+    """Colonne « UE » d'une grille : intitulé, crédits, semestre et groupe.
+
+    `cours` relie l'UE au référentiel de l'application (renseigné à l'import
+    quand l'intitulé correspond). Il est nullifiable : la grille est une pièce
+    archivée, elle doit rester lisible même si le cours est supprimé — et son
+    intitulé est de toute façon recopié dans `intitule`.
+    """
+
+    SEMESTRE_CHOICES = [
+        (1, 'Semestre 1'),
+        (2, 'Semestre 2'),
+    ]
+
+    grille = models.ForeignKey(
+        Grille, on_delete=models.CASCADE, related_name='ues')
+    cours = models.ForeignKey(
+        Cours, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='grille_ues')
+    intitule = models.CharField(max_length=100)
+    credits = models.PositiveSmallIntegerField(default=1)
+    semestre = models.IntegerField(choices=SEMESTRE_CHOICES)
+    groupe = models.CharField(
+        max_length=20, blank=True, default='',
+        help_text="Code du groupe d'UE du fichier (IBA, LAN, MIF…).")
+    ordre = models.PositiveSmallIntegerField(
+        default=0, help_text='Position de la colonne dans le fichier.')
+
+    def __str__(self):
+        return f'{self.intitule} (S{self.semestre}, {self.credits} cr)'
+
+    class Meta:
+        # `ordre` reconstitue l'ordre des colonnes du fichier ; l'intitulé
+        # sert de départage si deux UE partagent une position.
+        ordering = ['semestre', 'ordre', 'intitule']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['grille', 'intitule'],
+                name='unique_grilleue_grille_intitule',
+                violation_error_message=(
+                    'Cette UE figure déjà deux fois dans la grille.'
+                ),
+            ),
+        ]
+
+
+class GrilleEtudiant(models.Model):
+    """Ligne « étudiant » d'une grille, avec sa synthèse de délibération.
+
+    Les colonnes de synthèse (crédits validés par semestre, total pondéré,
+    moyenne, décision, mention) recopient les colonnes calculées du fichier
+    (Q à AN) : ce sont les résultats *délibérés*, ils ne doivent pas être
+    recalculés à l'affichage. `total_pondere` est même saisi en dur dans le
+    fichier, ce qui justifie de le conserver plutôt que de le déduire des
+    notes — la comparaison des deux sert de contrôle d'intégrité.
+    """
+
+    DECISION_CHOICES = [
+        ('V', 'Validé'),
+        ('VC', 'Validé avec complément'),
+        ('NV', 'Non validé'),
+    ]
+    MENTION_CHOICES = [
+        ('Passable', 'Passable'),
+        ('Assez Bien', 'Assez Bien'),
+        ('Bien', 'Bien'),
+        ('Très Bien', 'Très Bien'),
+        ('Excellent', 'Excellent'),
+    ]
+
+    grille = models.ForeignKey(
+        Grille, on_delete=models.CASCADE, related_name='lignes')
+    etudiant = models.ForeignKey(
+        Etudiant, on_delete=models.CASCADE, related_name='grille_lignes')
+    rang = models.PositiveSmallIntegerField(
+        help_text="N° d'ordre de l'étudiant dans la grille.")
+    credits_s1 = models.PositiveSmallIntegerField(default=0)
+    credits_s2 = models.PositiveSmallIntegerField(default=0)
+    credits_total = models.PositiveSmallIntegerField(default=0)
+    nb_ue_reprendre = models.PositiveSmallIntegerField(
+        default=0, verbose_name='UE à reprendre')
+    total_pondere = models.PositiveIntegerField(default=0)
+    moyenne = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        help_text='Moyenne /20 délibérée (null si non calculable).')
+    pourcentage = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text='Réussite en pourcentage (0-100).')
+    decision = models.CharField(
+        max_length=2, choices=DECISION_CHOICES, blank=True, default='')
+    mention = models.CharField(
+        max_length=20, choices=MENTION_CHOICES, blank=True, default='')
+
+    def __str__(self):
+        return f'{self.rang}. {self.etudiant.noms}'
+
+    class Meta:
+        ordering = ['rang']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['grille', 'etudiant'],
+                name='unique_grilleetudiant_grille_etudiant',
+                violation_error_message=(
+                    'Cet étudiant figure déjà dans la grille.'
+                ),
+            ),
+            models.UniqueConstraint(
+                fields=['grille', 'rang'],
+                name='unique_grilleetudiant_grille_rang',
+                violation_error_message=(
+                    'Ce numéro d\'ordre est déjà utilisé dans la grille.'
+                ),
+            ),
+        ]
+
+
+class GrilleNote(models.Model):
+    """Note /20 d'un étudiant dans une UE : une cellule de la grille.
+
+    `note` à NULL signifie « case vide », pas « zéro » : le fichier compte ces
+    cases comme des échecs (COUNTBLANK), mais la distinction reste nécessaire
+    pour afficher — et corriger — ce qui n'a pas été noté.
+    """
+
+    SEUIL_VALIDATION = 10
+
+    ligne = models.ForeignKey(
+        GrilleEtudiant, on_delete=models.CASCADE, related_name='notes')
+    ue = models.ForeignKey(
+        GrilleUE, on_delete=models.CASCADE, related_name='notes')
+    note = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(20)],
+        help_text='Note /20 (null = case vide dans la grille).')
+
+    def __str__(self):
+        return f'{self.ligne.etudiant.noms} — {self.ue.intitule}'
+
+    @property
+    def est_validee(self):
+        """L'UE est-elle acquise ? Critère du fichier : note >= 10.
+
+        La valeur est convertie explicitement : après un `create()`/`save()`
+        non suivi de `refresh_from_db()`, l'attribut porte encore ce qui a été
+        passé à l'ORM (souvent la chaîne lue dans Excel), et non le `Decimal`
+        relu depuis la base.
+        """
+        if self.note is None or self.note == '':
+            return False
+        return Decimal(self.note) >= self.SEUIL_VALIDATION
+
+    class Meta:
+        # Volontairement aucun `ordering` : trier par une FK jointe ajouterait
+        # une jointure à *toutes* les requêtes (cf. Inscription).
+        constraints = [
+            models.UniqueConstraint(
+                fields=['ligne', 'ue'],
+                name='unique_grillenote_ligne_ue',
+                violation_error_message=(
+                    'Cette note existe déjà pour cet étudiant et cette UE.'
+                ),
+            ),
+        ]
+        indexes = [models.Index(fields=['ue', 'ligne'])]
 

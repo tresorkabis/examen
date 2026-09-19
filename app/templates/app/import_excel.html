@@ -27,6 +27,11 @@
             <i class="bi bi-book me-2"></i>Cours
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link {% if type_active == 'grilles' %}active{% endif %}" href="?type=grilles">
+            <i class="bi bi-table me-2"></i>Grilles de délibération
+        </a>
+    </li>
 </ul>
 
 <div class="row g-4">
@@ -37,7 +42,7 @@
                 <h5 class="card-title mb-0">
                     <i class="bi bi-upload me-2 text-primary"></i>
                     Importer des 
-                    {% if type_active == 'etudiants' %}Étudiants{% elif type_active == 'enseignants' %}Enseignants{% else %}Cours{% endif %}
+                    {% if type_active == 'etudiants' %}Étudiants{% elif type_active == 'enseignants' %}Enseignants{% elif type_active == 'grilles' %}Grilles de délibération{% else %}Cours{% endif %}
                 </h5>
             </div>
             <div class="card-body p-4">
@@ -56,17 +61,36 @@
                         {% endif %}
                     </div>
 
-                    {% if type_active == 'etudiants' or type_active == 'cours' %}
+                    {% if type_active == 'etudiants' or type_active == 'cours' or type_active == 'grilles' %}
                     <div class="mb-4">
                         <label for="{{ form.promotion.id_for_label }}" class="form-label fw-semibold">
-                            Promotion par défaut (optionnel)
+                            {% if type_active == 'grilles' %}Promotion <span class="text-danger">*</span>{% else %}Promotion par défaut (optionnel){% endif %}
                         </label>
                         {{ form.promotion }}
                         <div class="form-text">
-                            Si le fichier ne contient pas de colonne « Promotion », cette promotion sera appliquée automatiquement.
+                            {% if type_active == 'grilles' %}
+                                La grille couvre une seule promotion : elle doit être choisie.
+                            {% else %}
+                                Si le fichier ne contient pas de colonne « Promotion », cette promotion sera appliquée automatiquement.
+                            {% endif %}
                         </div>
                         {% if form.promotion.errors %}
                             <div class="text-danger small mt-1">{{ form.promotion.errors }}</div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    {% if type_active == 'grilles' %}
+                    <div class="mb-4">
+                        <label for="{{ form.session.id_for_label }}" class="form-label fw-semibold">
+                            Session d'examens
+                        </label>
+                        {{ form.session }}
+                        <div class="form-text">
+                            La grille apparaîtra dans l'onglet « Grilles » du détail de cette session.
+                        </div>
+                        {% if form.session.errors %}
+                            <div class="text-danger small mt-1">{{ form.session.errors }}</div>
                         {% endif %}
                     </div>
                     {% endif %}
@@ -127,7 +151,7 @@
                 </div>
                 <p class="small text-muted"><i class="bi bi-check-circle me-1"></i>L'email sera généré automatiquement s'il n'est pas renseigné.</p>
 
-                {% else %}
+                {% elif type_active == 'cours' %}
                 <p class="small text-muted">Format recommandé pour l'importation des cours :</p>
                 
                 <div class="table-responsive mb-3">
@@ -140,6 +164,15 @@
                         </tbody>
                                         </table>
                 </div>
+
+                {% else %}
+                <p class="small text-muted">Fichier <strong>grille de délibération LMD</strong> d'une promotion :</p>
+                <ul class="small text-muted ps-3">
+                    <li>ligne <code>UNITES D'ENSEIGNEMENT</code> : les UE, la ligne suivante leurs <strong>crédits</strong> ;</li>
+                    <li>colonnes de synthèse : crédits validés, total pondéré, moyenne, décision, mention ;</li>
+                    <li>une ligne par étudiant : <strong>N° d'ordre</strong> en colonne A, <strong>nom</strong> en colonne B, puis les notes /20.</li>
+                </ul>
+                <p class="small text-muted mb-0"><i class="bi bi-info-circle me-1"></i>Les notes, les crédits et la délibération sont recopiés tels quels. Les étudiants sont reconnus par leur matricule généré à partir du N° d'ordre.</p>
                 {% endif %}
 
             </div>

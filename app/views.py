@@ -20,9 +20,10 @@ from django.views.generic import (ListView, CreateView, UpdateView, DeleteView,
 
 from .forms import (PromotionForm, EnseignantForm, EtudiantForm, CoursForm,
                     SessionForm, ExamenForm, ExcelImportForm)
-from .models import Etudiant, Cours, Session, Enseignant, Promotion, Examen, Inscription
+from .models import (Etudiant, Cours, Session, Enseignant, Promotion, Examen,
+                     Inscription, Grille, GrilleUE, GrilleEtudiant, GrilleNote)
 from .excel_import import (import_etudiants_excel, import_enseignants_excel,
-                          import_cours_excel)
+                          import_cours_excel, import_grille_excel)
 
 
 def _calcul_compteurs(session):
@@ -603,6 +604,45 @@ def _donnees_participants_session(session):
     return examens, list(groupes.items()), nb_inscriptions, len(participants_ids)
 
 
+def _grilles_session(session):
+    """Grilles d'une session, préparées pour l'affichage.
+
+    Les structures sont construites ici plutôt que dans le gabarit : un
+    traducteur Django ne peut pas indexer un dictionnaire de notes, et un
+    accès `ligne.notes.get(ue)` en template déclencherait une requête par
+    cellule (30 UE × N étudiants). Trois requêtes par grille suffisent.
+
+    Retourne une liste de dictionnaires : `grille`, `ues` (triées),
+    `ues_s1`, `ues_s2` et `lignes` — chaque ligne portant ses notes dans
+    l'ordre exact des colonnes.
+    """
+    grilles = (Grille.objects
+               .filter(session=session)
+               .select_related('promotion')
+               .order_by('promotion__nom'))
+    resultat = []
+    for grille in grilles:
+        ues = list(grille.ues.order_by('semestre', 'ordre', 'intitule'))
+        notes = {
+            (note.ligne_id, note.ue_id): note
+            for note in GrilleNote.objects.filter(ligne__grille=grille)
+        }
+        lignes = []
+        for ligne in grille.lignes.select_related('etudiant'):
+            lignes.append({
+                'ligne': ligne,
+                'notes': [notes.get((ligne.pk, ue.pk)) for ue in ues],
+            })
+        resultat.append({
+            'grille': grille,
+            'ues': ues,
+            'ues_s1': [ue for ue in ues if ue.semestre == 1],
+            'ues_s2': [ue for ue in ues if ue.semestre == 2],
+            'lignes': lignes,
+        })
+    return resultat
+
+
 class SessionDetailView(DetailView):
     """Détail d'une session : examens programmés et participants.
 
@@ -622,12 +662,28 @@ class SessionDetailView(DetailView):
             _donnees_participants_session(session)
         participants = [etu for _, etus in groupes for etu in etus]
 
+        # Les grilles sont rattachées à la session à l'import ; les promotions
+        # de la session qui n'en ont pas encore sont listées pour proposer
+        # l'import directement depuis la page.
+        grilles = _grilles_session(session)
+        avec_grille = {element['grille'].promotion_id for element in grilles}
+        promotions_sans_grille = [
+            promotion for promotion in
+            (Promotion.objects
+             .filter(cours__examens__session=session)
+             .distinct().order_by('nom'))
+            if promotion.pk not in avec_grille
+        ]
+
         ctx.update({
             'examens': examens,
             'nb_inscriptions': nb_inscriptions,
             'nb_participants': nb_participants,
             'participants': participants,
             'participants_par_promotion': groupes,
+            'grilles': grilles,
+            'nb_grilles': len(grilles),
+            'promotions_sans_grille': promotions_sans_grille,
         })
         return ctx
 
@@ -1136,9 +1192,10 @@ def examen_non_notes_impression(request):
 
 @login_required
 def import_excel_view(request):
-    """Vue pour l'importation de fichiers Excel (Étudiants, Enseignants, Cours)."""
+    """Vue pour l'importation de fichiers Excel (Étudiants, Enseignants, Cours,
+    Grilles de délibération)."""
     type_param = request.GET.get('type', 'etudiants')
-    if type_param not in ['etudiants', 'enseignants', 'cours']:
+    if type_param not in ['etudiants', 'enseignants', 'cours', 'grilles']:
         type_param = 'etudiants'
 
     resultats = None
@@ -1160,13 +1217,27 @@ def import_excel_view(request):
             elif type_import == 'cours':
                 res = import_cours_excel(fichier, default_promotion_id=promo_id)
                 libelle = "cours"
+            elif type_import == 'grilles':
+                # Une grille est rattachée à *une* promotion et, si elle est
+                # fournie, à *une* session : c'est ce lien qui l'affiche dans
+                # le détail de la session.
+                res = import_grille_excel(
+                    fichier, promotion, form.cleaned_data.get('session'))
+                libelle = "grilles"
             else:
                 res = {'success': False, 'created': 0, 'updated': 0, 'skipped': 0, 'errors': ["Type d'import invalide."]}
                 libelle = "éléments"
 
             resultats = res
             if res['success']:
-                msg = f"Import {libelle} terminé : {res['created']} créé(s), {res['updated']} mis à jour, {res['skipped']} ignoré(s)."
+                if type_import == 'grilles':
+                    msg = (f"Import de la grille {promotion} terminé : "
+                           f"{res['nb_ue']} UE, {res['nb_lignes']} étudiant(s), "
+                           f"{res['nb_notes']} note(s)")
+                    msg += (". Grille mise à jour." if res['updated']
+                            else ". Nouvelle grille enregistrée.")
+                else:
+                    msg = f"Import {libelle} terminé : {res['created']} créé(s), {res['updated']} mis à jour, {res['skipped']} ignoré(s)."
                 if res['errors']:
                     msg += f" ({len(res['errors'])} avertissement(s)/erreur(s))."
                     messages.warning(request, msg)
@@ -1177,7 +1248,16 @@ def import_excel_view(request):
 
             type_param = type_import
     else:
-        form = ExcelImportForm(initial={'type_import': type_param})
+        initial = {'type_import': type_param}
+        # Arrivée depuis le détail d'une session ou d'une promotion :
+        # la grille est pré-ciblée sur ce contexte.
+        session_id = request.GET.get('session')
+        if session_id:
+            initial['session'] = session_id
+        promotion_id = request.GET.get('promotion')
+        if promotion_id:
+            initial['promotion'] = promotion_id
+        form = ExcelImportForm(initial=initial)
 
     context = {
         'form': form,

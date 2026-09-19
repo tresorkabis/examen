@@ -1,10 +1,12 @@
 from django.contrib import admin
 
 from .models import (Promotion, Enseignant, Etudiant, Cours, Session,
-                     Examen, Inscription)
+                     Examen, Inscription, Grille, GrilleUE, GrilleEtudiant,
+                     GrilleNote)
 
 admin.site.register([Promotion, Enseignant, Etudiant, Cours, Session,
-                     Inscription])
+                     Inscription, Grille, GrilleUE, GrilleEtudiant,
+                     GrilleNote])
 
 
 @admin.register(Examen)

@@ -1,8 +1,12 @@
 import re
 import unicodedata
+from decimal import Decimal, InvalidOperation
+
+import openpyxl
 import pandas as pd
 from django.db import transaction
-from app.models import Etudiant, Enseignant, Cours, Promotion
+from app.models import (Etudiant, Enseignant, Cours, Promotion,
+                        Grille, GrilleUE, GrilleEtudiant, GrilleNote)
 
 PROMOTION_ALIASES = {
     'L3 INFO': 'L3 INFO A',
@@ -629,3 +633,412 @@ def import_cours_excel(file_obj, default_promotion_id=None):
         'skipped': skipped_count,
         'errors': errors
     }
+# --- Grilles de délibération ------------------------------------------------
+
+# Repères du fichier de grille (cf. data/L1 INFO LMD A_2025_2026.xlsx).
+_ENTETE_UE = "UNITES D'ENSEIGNEMENT"
+_LIBELLE_CREDITS = 'Crédits'
+
+
+def _texte(valeur):
+    """Chaîne « propre » d'une cellule (espaces multiples réduits), ou ''."""
+    if valeur is None or isinstance(valeur, bool):
+        return ''
+    return ' '.join(str(valeur).split())
+
+
+def _entier(valeur, defaut=0):
+    """Entier d'une cellule, ou `defaut` si la cellule n'est pas numérique."""
+    if valeur is None or isinstance(valeur, bool):
+        return defaut
+    try:
+        return int(float(str(valeur).strip()))
+    except (TypeError, ValueError):
+        return defaut
+
+
+def _note(valeur):
+    """Note /20 d'une cellule, ou None pour une case vide / illisible.
+
+    Les grilles utilisent plusieurs écritures pour l'absence de note :
+    cellule vide, « 0 », ou tirets de présentation (barème, signatures).
+    """
+    if valeur is None or isinstance(valeur, bool):
+        return None
+    try:
+        return Decimal(str(valeur).replace(',', '.')).quantize(Decimal('0.01'))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _est_en_tete_ue(valeur):
+    return _texte(valeur).upper().replace(' ', '') == _ENTETE_UE.replace(' ', '')
+
+
+def _alerte_credits(lignes, ues):
+    """Alerte si le total pondéré saisi diverge des notes (contrôle d'intégrité).
+
+    Le fichier calcule « crédits × note » ; `total_pondere` y est pourtant
+    saisi en dur. Un écart trahit une note modifiée après coup, ou un total
+    jamais recalculé : c'est exactement ce qu'un import doit signaler plutôt
+    que de le corriger en silence.
+    """
+    credits_par_colonne = {ue['colonne']: ue['credits'] for ue in ues}
+    ecarts = []
+    for ligne in lignes:
+        if not ligne['total_pondere']:
+            continue
+        calcule = sum(
+            note * credits_par_colonne[colonne]
+            for colonne, note in ligne['notes'].items() if note is not None)
+        if calcule != ligne['total_pondere']:
+            ecarts.append(
+                f"{ligne['noms']} : total pondéré saisi "
+                f"{ligne['total_pondere']}, recalculé {calcule}")
+    if not ecarts:
+        return None
+    if len(ecarts) == 1:
+        return f"Écart de total pondéré — {ecarts[0]}"
+    return (f"Écarts de total pondéré ({len(ecarts)}) : "
+            + ' ; '.join(ecarts[:5]) + ('…' if len(ecarts) > 5 else ''))
+
+
+def _alerte_decisions(lignes, ues, total_credits):
+    """Alerte si une décision contredit le barème officiel de la grille.
+
+    Barème du fichier : crédits validés (note ≥ 10) par semestre, décision
+    `V` si toutes les UE sont acquises, sinon `VC` au-delà de 9,5/20 pondéré,
+    `NV` en dessous ; mention calculée sur la moyenne.
+    """
+    ecarts = []
+    for ligne in lignes:
+        ue_par_colonne = {ue['colonne']: ue for ue in ues}
+        acquises = [ue_par_colonne[colonne]
+                    for colonne, note in ligne['notes'].items()
+                    if note is not None and note >= GrilleNote.SEUIL_VALIDATION]
+        credits_s1 = sum(u['credits'] for u in acquises if u['semestre'] == 1)
+        credits_s2 = sum(u['credits'] for u in acquises if u['semestre'] == 2)
+        credits = credits_s1 + credits_s2
+        reprises = len(ues) - len(acquises)
+        # Le fichier compare la moyenne pondérée au seuil de 9,5/20 pour
+        # départager VC (validé avec complément) et NV.
+        curseur = (Decimal(ligne['total_pondere']) / total_credits
+                   if total_credits else Decimal(0))
+        attendu = 'V' if not reprises else ('VC' if curseur >= Decimal('9.5')
+                                            else 'NV')
+        if ligne['credits_s1'] != credits_s1 or ligne['credits_s2'] != credits_s2:
+            ecarts.append(f"{ligne['noms']} : crédits validés "
+                          f"{ligne['credits_s1']}/{ligne['credits_s2']} "
+                          f"au lieu de {credits_s1}/{credits_s2}")
+        elif ligne['credits_total'] != credits:
+            ecarts.append(f"{ligne['noms']} : total des crédits "
+                          f"{ligne['credits_total']} au lieu de {credits}")
+        elif ligne['nb_ue_reprendre'] != reprises:
+            ecarts.append(f"{ligne['noms']} : UE à reprendre "
+                          f"{ligne['nb_ue_reprendre']} au lieu de {reprises}")
+        elif ligne['decision'] and ligne['decision'] != attendu:
+            ecarts.append(f"{ligne['noms']} : décision {ligne['decision']} "
+                          f"au lieu de {attendu}")
+    if not ecarts:
+        return None
+    if len(ecarts) == 1:
+        return f"Écart de délibération — {ecarts[0]}"
+    return (f"Écarts de délibération ({len(ecarts)}) : "
+            + ' ; '.join(ecarts[:5]) + ('…' if len(ecarts) > 5 else ''))
+
+
+
+def _colonne_de(feuille, libelle, derniere_ligne):
+    """Colonne d'un libellé d'en-tête (première occurrence), ou None.
+
+    Les libellés ne sont pas tous sur la même ligne : les intitulés d'UE sont
+    sur une ligne, les codes de groupe au-dessus, et la synthèse (« Décision »,
+    « Mention »…) encore au-dessus. On balaie donc toutes les lignes d'en-tête
+    au lieu de coder en dur des lettres de colonnes.
+    """
+    cible = slugify(libelle)
+    for ligne in range(1, derniere_ligne + 1):
+        for colonne in range(1, feuille.max_column + 1):
+            if slugify(_texte(feuille.cell(ligne, colonne).value)) == cible:
+                return colonne
+    return None
+
+
+def _colonnes_de(feuille, libelle, derniere_ligne):
+    """Toutes les colonnes portant ce libellé (triées, sans doublon).
+
+    « Total crédit validé » apparaît deux fois — une par semestre.
+    """
+    cible = slugify(libelle)
+    trouvees = set()
+    for ligne in range(1, derniere_ligne + 1):
+        for colonne in range(1, feuille.max_column + 1):
+            if slugify(_texte(feuille.cell(ligne, colonne).value)) == cible:
+                trouvees.add(colonne)
+    return sorted(trouvees)
+
+
+def _groupes_par_colonne(feuille, ligne):
+    """Code de groupe (« IBA », « LAN »…) de chaque colonne d'UE.
+
+    Un code couvre plusieurs colonnes via une cellule fusionnée (C6:F6 =
+    « IBA ») : sans dépliage, seule la première colonne hériterait du groupe.
+    """
+    if ligne < 1:
+        return {}
+    groupes = {}
+    for cellule in feuille[ligne]:
+        valeur = _texte(cellule.value)
+        if valeur and slugify(valeur) != 'groupe':
+            groupes[cellule.column] = valeur
+    for plage in feuille.merged_cells.ranges:
+        # Seules les fusions *posées sur cette ligne* portent des groupes ; les
+        # fusions verticales (en-tête d'établissement, signatures…) ne doivent
+        # pas écraser un code.
+        if plage.min_row == ligne and plage.min_col >= 3:
+            valeur = _texte(feuille.cell(plage.min_row, plage.min_col).value)
+            for colonne in range(plage.min_col, plage.max_col + 1):
+                if valeur:
+                    groupes[colonne] = valeur
+    return groupes
+
+
+def _annee_academique(intitule, defaut='2025-2026'):
+    """Année académique déduite d'un intitulé (« … 2025 - 2026 »)."""
+    annees = re.findall(r'(20[0-9]{2})', _texte(intitule))
+    if len(annees) >= 2:
+        return f'{annees[0]}-{annees[1]}'
+    return defaut
+def lire_grille_feuille(feuille):
+    """Décompose une grille : (en-tête, UE, lignes d'étudiants).
+
+    Repères repérés dynamiquement (aucune lettre de colonne codée en dur) :
+      - la ligne « UNITES D'ENSEIGNEMENT » donne les intitulés d'UE, la ligne
+        « Crédits » juste en dessous leurs crédits, la ligne au-dessus les
+        codes de groupe ;
+      - les libellés de synthèse et les colonnes « Total crédit validé »
+        situent les colonnes calculées ;
+      - une ligne d'étudiant = un N° d'ordre numérique en colonne A suivi d'un
+        nom en colonne B. Les lignes de moyennes, de statistiques (V / VC /
+        NV) et de signatures n'ont pas de numéro : elles sont ignorées.
+
+    Les UE sont rattachées au semestre 1 tant qu'on n'a pas atteint la première
+    colonne « Total crédit validé » : c'est ce qui sépare les deux semestres
+    sans dépendre d'une position fixe.
+    """
+    ligne_ue = None
+    for ligne in range(1, feuille.max_row + 1):
+        if _est_en_tete_ue(feuille.cell(ligne, 2).value):
+            ligne_ue = ligne
+            break
+    if ligne_ue is None:
+        raise ValueError(
+            f"En-tête « {_ENTETE_UE} » introuvable : ce fichier n'a pas le "
+            "format d'une grille de délibération (grille LMD attendue).")
+
+    ligne_credits = ligne_ue + 1
+    colonnes_credits = _colonnes_de(feuille, 'Total crédit validé', ligne_ue)
+    if not colonnes_credits:
+        raise ValueError(
+            'Colonne « Total crédit validé » introuvable : la grille est '
+            'incomplète ou dans un format non pris en charge.')
+    groupes = _groupes_par_colonne(feuille, ligne_ue - 1)
+
+    ues = []
+    for colonne in range(3, feuille.max_column + 1):
+        intitule = _texte(feuille.cell(ligne_ue, colonne).value)
+        if not intitule:
+            continue           # colonnes de synthèse, zone annexe
+        credits = _entier(feuille.cell(ligne_credits, colonne).value, None)
+        if credits is None:
+            continue           # marqueur de fin de tableau (« FIN »)
+        ues.append({
+            'colonne': colonne,
+            'intitule': intitule,
+            'credits': credits,
+            'semestre': 1 if colonne < colonnes_credits[0] else 2,
+            'groupe': groupes.get(colonne, ''),
+            'ordre': len(ues) + 1,
+        })
+    if not ues:
+        raise ValueError('Aucune UE lue dans la grille.')
+
+    synthese = {
+        'credits_s1': colonnes_credits[0],
+        'credits_s2': (colonnes_credits[1]
+                       if len(colonnes_credits) > 1 else None),
+        'credits_total': _colonne_de(feuille, 'Total Général crédit', ligne_ue),
+        'nb_ue_reprendre': _colonne_de(feuille, 'Nbre UE à reprendre',
+                                       ligne_ue),
+        'total_pondere': _colonne_de(feuille, 'Total pondéré', ligne_ue),
+        'moyenne': _colonne_de(feuille, 'Moyenne /20', ligne_ue),
+        'pourcentage': _colonne_de(feuille, 'Pourcentage', ligne_ue),
+        'decision': _colonne_de(feuille, 'Décision', ligne_ue),
+        'mention': _colonne_de(feuille, 'Mention', ligne_ue),
+    }
+
+    lignes = []
+    for ligne in range(ligne_credits + 1, feuille.max_row + 1):
+        rang = _entier(feuille.cell(ligne, 1).value, None)
+        noms = _texte(feuille.cell(ligne, 2).value)
+        if rang is None or not 0 < rang < 1000 or not noms:
+            continue           # en-têtes répétés, totaux, signatures
+
+        def cellule(cle):
+            colonne = synthese.get(cle)
+            return feuille.cell(ligne, colonne).value if colonne else None
+
+        pourcentage = _note(cellule('pourcentage'))
+        lignes.append({
+            'rang': rang,
+            'noms': noms,
+            'notes': {ue['colonne']: _note(
+                feuille.cell(ligne, ue['colonne']).value) for ue in ues},
+            'credits_s1': _entier(cellule('credits_s1')),
+            'credits_s2': _entier(cellule('credits_s2')),
+            'credits_total': _entier(cellule('credits_total')),
+            'nb_ue_reprendre': _entier(cellule('nb_ue_reprendre')),
+            'total_pondere': _entier(cellule('total_pondere')),
+            'moyenne': _note(cellule('moyenne')),
+            # Le fichier stocke le pourcentage en fraction (0,372) ; on le
+            # ramène en points (37,24) pour que l'affichage soit direct.
+            'pourcentage': ((pourcentage * 100).quantize(Decimal('0.01'))
+                            if pourcentage is not None else None),
+            'decision': _texte(cellule('decision')),
+            'mention': _texte(cellule('mention')),
+        })
+    if not lignes:
+        raise ValueError("Aucune ligne d'étudiant reconnue dans la grille.")
+
+    etablissement, intitule = '', ''
+    for ligne in range(1, ligne_ue):
+        valeur = _texte(feuille.cell(ligne, 1).value)
+        if not valeur:
+            continue
+        if 'grille' in slugify(valeur):
+            intitule = valeur
+        elif not etablissement:
+            etablissement = valeur
+
+    entete = {
+        'etablissement': etablissement[:100],
+        'intitule': intitule[:200],
+        'annee_academique': _annee_academique(intitule),
+    }
+    return entete, ues, lignes
+def import_grille_excel(file_obj, promotion, session=None,
+                        annee_academique=None):
+    """Importe une grille de délibération pour `promotion`.
+
+    Retourne le même dictionnaire de résultat que les autres imports
+    (`success`, `created`, `updated`, `skipped`, `errors`), enrichi du
+    récapitulatif de la grille (`grille`, `nb_ue`, `nb_lignes`, `nb_notes`).
+
+    Le ré-import d'une même grille (même promotion, session et année)
+    *remplace* l'ancienne : tout est dérivé du fichier, la conserver en double
+    n'aurait aucun sens. Les notes sont insérées par lots (`bulk_create`) :
+    une grille de 30 UE × 1 000 étudiants représente 30 000 lignes, qu'une
+    insertion unitaire rendrait impraticable.
+    """
+    resultat = {
+        'success': False, 'created': 0, 'updated': 0, 'skipped': 0,
+        'errors': [], 'grille': None, 'nb_ue': 0, 'nb_lignes': 0, 'nb_notes': 0,
+    }
+    if promotion is None:
+        resultat['errors'].append('Promotion obligatoire pour une grille.')
+        return resultat
+
+    try:
+        classeur = openpyxl.load_workbook(file_obj, data_only=True)
+        entete, ues, lignes = lire_grille_feuille(classeur.worksheets[0])
+    except Exception as err:               # fichier illisible ou format autre
+        resultat['errors'].append(
+            f'Fichier illisible ou format inattendu : {err}')
+        return resultat
+
+    annee = annee_academique or entete['annee_academique']
+
+    with transaction.atomic():
+        ancienne = Grille.objects.filter(
+            promotion=promotion, session=session,
+            annee_academique=annee).first()
+        if ancienne is not None:
+            ancienne.delete()
+            resultat['updated'] = 1
+        else:
+            resultat['created'] = 1
+
+        grille = Grille.objects.create(
+            promotion=promotion, session=session, annee_academique=annee,
+            etablissement=entete['etablissement'], intitule=entete['intitule'],
+            total_credits=sum(ue['credits'] for ue in ues),
+            fichier_source=getattr(file_obj, 'name', '') or '',
+        )
+
+        # UE -> cours du référentiel : les intitulés des cours ont été alignés
+        # sur ceux de la grille (manage.py aligner_cours_grille), un simple
+        # slug suffit donc à les apparier.
+        cours_par_slug = {}
+        for cours in Cours.objects.filter(promotion=promotion):
+            cours_par_slug.setdefault(slugify(cours.nom), cours)
+
+        ue_par_colonne = {}
+        for ue in ues:
+            ue_par_colonne[ue['colonne']] = GrilleUE.objects.create(
+                grille=grille, cours=cours_par_slug.get(slugify(ue['intitule'])),
+                intitule=ue['intitule'], credits=ue['credits'],
+                semestre=ue['semestre'], groupe=ue['groupe'], ordre=ue['ordre'])
+
+        # Étudiants : le N° d'ordre de la grille correspond au matricule
+        # déterministe « <PROMO>-<rang> » posé par l'import des étudiants. Le
+        # nom sert de repli si la grille a été renumérotée entre-temps.
+        promo_slug = slugify(promotion.nom).upper() or 'ETU'
+        etudiants = list(Etudiant.objects.filter(promotion=promotion))
+        par_numero = {e.numero_etudiant: e for e in etudiants}
+        par_nom = {e.noms: e for e in etudiants}
+
+        notes = []
+        for ligne in lignes:
+            etudiant = par_numero.get(f'{promo_slug}-{ligne["rang"]:03d}')
+            if etudiant is None:
+                etudiant = par_nom.get(ligne['noms'])
+            if etudiant is None:
+                resultat['skipped'] += 1
+                resultat['errors'].append(
+                    f"Ligne {ligne['rang']} — « {ligne['noms']} » : étudiant "
+                    f'introuvable dans {promotion.nom}, ligne ignorée.')
+                continue
+
+            ligne_grille = GrilleEtudiant.objects.create(
+                grille=grille, etudiant=etudiant, rang=ligne['rang'],
+                credits_s1=ligne['credits_s1'], credits_s2=ligne['credits_s2'],
+                credits_total=ligne['credits_total'],
+                nb_ue_reprendre=ligne['nb_ue_reprendre'],
+                total_pondere=ligne['total_pondere'],
+                moyenne=ligne['moyenne'], pourcentage=ligne['pourcentage'],
+                decision=ligne['decision'][:2], mention=ligne['mention'][:20],
+            )
+            for colonne, note in ligne['notes'].items():
+                notes.append(GrilleNote(ligne=ligne_grille,
+                                        ue=ue_par_colonne[colonne], note=note))
+
+        GrilleNote.objects.bulk_create(notes)
+
+        resultat.update({
+            'success': True, 'grille': grille, 'nb_ue': len(ues),
+            'nb_lignes': len(lignes) - resultat['skipped'],
+            'nb_notes': len(notes),
+        })
+        resultat['errors'].extend(_controles_grille(ues, lignes,
+                                                   grille.total_credits))
+    return resultat
+
+
+def _controles_grille(ues, lignes, total_credits):
+    """Contrôles d'intégrité d'une grille importée (avertissements)."""
+    alertes = []
+    for controle in (_alerte_credits(lignes, ues),
+                     _alerte_decisions(lignes, ues, total_credits)):
+        if controle:
+            alertes.append(controle)
+    return alertes
