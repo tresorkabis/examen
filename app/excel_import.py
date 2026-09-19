@@ -661,6 +661,21 @@ def _entier(valeur, defaut=0):
         return defaut
 
 
+def _decimal(valeur, defaut=None):
+    """Décimal d'une cellule, ou `defaut` si non numérique.
+
+    Comme `_entier`, mais sans troncature : le total pondéré peut être
+    décimal quand une note l'est (731,2), et le tronquer créerait un écart
+    artificiel au contrôle d'intégrité.
+    """
+    if valeur is None or isinstance(valeur, bool):
+        return defaut
+    try:
+        return Decimal(str(valeur).replace(',', '.')).quantize(Decimal('0.01'))
+    except (InvalidOperation, ValueError):
+        return defaut
+
+
 def _note(valeur):
     """Note /20 d'une cellule, ou None pour une case vide / illisible.
 
@@ -921,7 +936,10 @@ def lire_grille_feuille(feuille):
             'credits_s2': _entier(cellule('credits_s2')),
             'credits_total': _entier(cellule('credits_total')),
             'nb_ue_reprendre': _entier(cellule('nb_ue_reprendre')),
-            'total_pondere': _entier(cellule('total_pondere')),
+            # Le fichier arrondit parfois le total pondéré à l'entier (731 au
+            # lieu de 731,2 quand une note est décimale) : le stocker en
+            # décimal évite de créer un faux écart à la comparaison.
+            'total_pondere': _decimal(cellule('total_pondere')),
             'moyenne': _note(cellule('moyenne')),
             # Le fichier stocke le pourcentage en fraction (0,372) ; on le
             # ramène en points (37,24) pour que l'affichage soit direct.

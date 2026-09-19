@@ -358,7 +358,11 @@ class GrilleEtudiant(models.Model):
     credits_total = models.PositiveSmallIntegerField(default=0)
     nb_ue_reprendre = models.PositiveSmallIntegerField(
         default=0, verbose_name='UE à reprendre')
-    total_pondere = models.PositiveIntegerField(default=0)
+    total_pondere = models.DecimalField(
+        max_digits=8, decimal_places=2, default=0,
+        help_text=('Total pondéré délibéré (notes × crédits). Décimal car '
+                   'des grilles comportent des notes à 1 décimale, ex. '
+                   '16,2 → total 731,20.'))
     moyenne = models.DecimalField(
         max_digits=4, decimal_places=2, null=True, blank=True,
         help_text='Moyenne /20 délibérée (null si non calculable).')
