@@ -1945,3 +1945,65 @@ class GrilleModelesTests(TestCase):
         self.assertIsNone(ue.cours)
         self.assertEqual(ue.intitule, 'Informatique Générale')
 
+
+class GrilleSessionDetailTests(TestCase):
+    """Onglet « Grilles » du détail de session (sessions/4/)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.promotion = Promotion.objects.create(nom='L1 INFO A')
+        cls.etudiant = Etudiant.objects.create(
+            noms='KATANGA TSHIKUNGA FISTON', numero_etudiant='L1INFOA-001',
+            promotion=cls.promotion)
+        cls.session = Session.objects.create(
+            nom='Rattrapage SEMESTRE 2 2025 - 2026', semestre=2,
+            type_session='rattrapage',
+            date_debut=date(2026, 6, 1), date_fin=date(2026, 6, 30))
+
+    def _grille(self):
+        grille = Grille.objects.create(
+            promotion=self.promotion, session=self.session,
+            annee_academique='2025-2026', total_credits=76)
+        ue = GrilleUE.objects.create(
+            grille=grille, intitule='Informatique Générale', credits=4,
+            semestre=1, groupe='IBA', ordre=1)
+        ligne = GrilleEtudiant.objects.create(
+            grille=grille, etudiant=self.etudiant, rang=1,
+            credits_total=33, moyenne='7.45', decision='NV')
+        GrilleNote.objects.create(ligne=ligne, ue=ue, note='12')
+        return grille
+
+    def _contexte(self):
+        from .views import SessionDetailView
+        view = SessionDetailView()
+        view.object = self.session
+        view.request = None
+        return view.get_context_data()
+
+    def test_onglet_grilles_expose_la_grille_de_la_session(self):
+        """La grille rattachée à la session apparaît dans le contexte."""
+        self._grille()
+        ctx = self._contexte()
+        self.assertEqual(ctx['nb_grilles'], 1)
+        element = ctx['grilles'][0]
+        self.assertEqual(len(element['ues']), 1)
+        self.assertEqual(len(element['lignes']), 1)
+        self.assertEqual(len(element['lignes'][0]['notes']), 1)
+
+    def test_sans_grille_les_promotions_sont_proposees_a_l_import(self):
+        """Sans import, la promotion est listée pour l'import direct."""
+        Cours.objects.create(nom='Informatique Générale', coefficient=4,
+                             promotion=self.promotion)
+        Examen.objects.create(
+            cours=Cours.objects.get(promotion=self.promotion),
+            session=self.session, date_examen=timezone.now(), salle='Local 1')
+        ctx = self._contexte()
+        self.assertEqual(ctx['nb_grilles'], 0)
+        self.assertIn(self.promotion, ctx['promotions_sans_grille'])
+
+    def test_avec_grille_la_promotion_n_est_plus_proposee(self):
+        """Une promotion déjà dotée d'une grille n'est plus proposée."""
+        self._grille()
+        ctx = self._contexte()
+        self.assertNotIn(self.promotion, ctx['promotions_sans_grille'])
+
