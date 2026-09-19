@@ -1718,7 +1718,7 @@ class AlignerCoursGrilleCommandTest(TestCase):
     """Commande `aligner_cours_grille` : intitulés + crédits depuis la grille."""
 
     @staticmethod
-    def _ecrire_grille(dossier, ues):
+    def _ecrire_grille(dossier, ues, nom_fichier='L1 INFO LMD A_2025_2026.xlsx'):
         """Écrit une grille de délibération minimale (lignes 7 et 8).
 
         `ues` : liste de tuples (intitulé, crédits). Un marqueur « FIN » est
@@ -1740,12 +1740,14 @@ class AlignerCoursGrilleCommandTest(TestCase):
         ]
         # Toutes les lignes doivent avoir la même largeur pour pandas.
         lignes = [ligne + [''] * (largeur - len(ligne) + 1) for ligne in lignes]
-        chemin = dossier / 'L1 INFO LMD A_2025_2026.xlsx'
+        chemin = dossier / nom_fichier
         pd.DataFrame(lignes).to_excel(chemin, header=False, index=False)
         return chemin
 
-    def _contexte(self, ues, cours_existants):
-        """Prépare une promo L1 INFO A + sa grille et patche DATA_DIR.
+    def _contexte(self, ues, cours_existants,
+                  promo='L1 INFO A',
+                  grille='L1 INFO LMD A_2025_2026.xlsx'):
+        """Prépare une promo + sa grille et patche DATA_DIR.
 
         Retourne la promotion créée.
         """
@@ -1757,9 +1759,9 @@ class AlignerCoursGrilleCommandTest(TestCase):
 
         dossier = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, dossier, ignore_errors=True)
-        self._ecrire_grille(dossier, ues)
+        self._ecrire_grille(dossier, ues, nom_fichier=grille)
 
-        promotion = Promotion.objects.create(nom='L1 INFO A')
+        promotion = Promotion.objects.create(nom=promo)
         for nom, coefficient in cours_existants:
             Cours.objects.create(nom=nom, coefficient=coefficient,
                                  promotion=promotion)

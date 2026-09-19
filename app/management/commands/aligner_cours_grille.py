@@ -28,13 +28,17 @@ from django.db import transaction
 from app.models import Cours, Promotion
 
 DATA_DIR = Path(__file__).resolve().parents[3] / 'data'
-FICHIER = 'L1 INFO LMD A_2025_2026.xlsx'
-PROMOTION = 'L1 INFO A'
 ENTETE_UE = "UNITES D'ENSEIGNEMENT"
+
+# Grilles prises en charge : fichier -> promotion.
+GRILLES = {
+    'L1 INFO LMD A_2025_2026.xlsx': 'L1 INFO A',
+    'L2 SCF_LMD 2025_2026.xlsx': 'L2 SCF LMD',
+}
 
 # UE de la grille (intitulé exact) -> nom du cours créé par la charge horaire.
 # `None` = l'UE n'existe pas encore en base et doit être créée.
-CORRESPONDANCES = {
+CORRESPONDANCES_L1 = {
     'Informatique Générale': 'INFO GENERALE',
     'Bureautique': 'LABORATOIRE',
     'Analyse Informatique': 'ANALYSE INFORMATIQUE',
@@ -66,11 +70,46 @@ CORRESPONDANCES = {
     'Projet Tutoré': 'PROJET TUTORE',
 }
 
-# Fautes de frappe présentes dans la grille : intitulé orthographié
+# Fautes de frappe présentes dans la grille L1 : intitulé orthographié
 # correctement retenu pour le cours.
-CORRECTIONS = {
+CORRECTIONS_L1 = {
     'Bilant professionnel': 'Bilan professionnel',
     'Initiation aux réseux info': 'Initiation aux réseaux info',
+}
+
+# UE de la grille L2 SCF (intitulé exact) -> cours en base. `None` = à créer.
+# Les intitulés courts ou fautifs de la charge horaire sont résolus ici.
+CORRESPONDANCES_L2_SCF = {
+    'Comptabilité des sociétés': 'COMPTABILITE DES SOCIETES',
+    'Analyse financière': 'ANALYSE FINANCIERE',
+    'Eléments de droit commercial': 'DROIT COMMERCIAL',
+    'Elément de droit fiscal': 'DROIT FISCAL',
+    'Statistique Inférentielle': 'STATISTIQUE INFERENTIELLE',
+    'Méthode de Recherche Scientifique': 'MRS',
+    "Technique d'enquête": "METHODE ET TECH D'ENQUETE",
+    'Gestion financière': 'GESTION FINANCIERE',
+    'Gestion de la production': 'GESTION DE LA PRODUCTION',
+    'Gestion des ressources humaines': 'GRH',
+    'Eléments de recherche opérationnelle': 'RO',
+    'Comptabilité de gestion': 'COMPTABILITE DE GESTION',
+    'Droit du travail': 'DROIT DE TRAVAIL',
+    'Droit administratif': 'DROIT ADMINISTRATIF',
+    "Eléments d'entrepreneuriat": 'ENTREPREUNARIAT',
+    'Gestion des projets': 'GESTION DES PROJETS',
+    'Gestion des bases de données': 'SGBD',
+    'Bureautique': 'BUREAUTIQUE 2',
+    'Anglais des affaires 1': 'ANGLAIS DES AFFAIRES',
+    'Pratique professionnelle 2': 'PRATIQUE PROFESSIONNELLE',
+    "Stage d'intervention": None,
+    'Projet tutoré 1': None,
+}
+
+# Fichier -> (promotion, correspondances, corrections).
+CONFIGS = {
+    'L1 INFO LMD A_2025_2026.xlsx': (
+        'L1 INFO A', CORRESPONDANCES_L1, CORRECTIONS_L1),
+    'L2 SCF_LMD 2025_2026.xlsx': (
+        'L2 SCF LMD', CORRESPONDANCES_L2_SCF, {}),
 }
 
 
@@ -111,6 +150,11 @@ def lire_grille(chemin):
         if not isinstance(nom, str) or not nom.strip():
             # Colonnes de synthèse (`Total crédit validé`) et zone annexe.
             continue
+        if 'total' in nom.strip().lower():
+            # Colonne de synthèse (`Total crédit validé`, `Total Général
+            # crédit`) : elle porte un intitulé et un crédit numérique mais
+            # n'est pas une UE.
+            continue
         credit = feuille.cell(ligne_credits, colonne).value
         if isinstance(credit, bool) or not isinstance(credit, (int, float)):
             # Marqueur de fin de tableau (« FIN », cellule BT7 du fichier) :
@@ -130,20 +174,54 @@ class Command(BaseCommand):
         parser.add_argument(
             '--dry-run', action='store_true',
             help="Affiche les modifications sans écrire en base")
+        parser.add_argument(
+            '--grille', default=None,
+            help="Nom du fichier de grille à traiter (défaut : toutes)")
 
     @transaction.atomic
     def handle(self, *args, **options):
         dry_run = options['dry_run']
-        chemin = DATA_DIR / FICHIER
+        selection = options.get('grille')
 
         if dry_run:
             self.stdout.write(self.style.WARNING('MODE SIMULATION (--dry-run)'))
-        if not chemin.exists():
-            raise CommandError(f'Fichier introuvable : {chemin}')
+        if selection and selection not in CONFIGS:
+            raise CommandError(
+                f"Grille « {selection} » inconnue. Choix : "
+                f"{', '.join(sorted(CONFIGS))}.")
 
-        promotion = Promotion.objects.filter(nom=PROMOTION).first()
+        fichiers = ([selection] if selection else list(CONFIGS))
+        traitees = 0
+        for nom in fichiers:
+            traitees += self._aligner(nom, dry_run)
+
+        if not selection and traitees == 0:
+            raise CommandError(
+                "Aucun fichier de grille trouvé dans "
+                f"{DATA_DIR} (attendus : {', '.join(sorted(CONFIGS))}).")
+
+        if dry_run:
+            transaction.set_rollback(True)
+
+    def _aligner(self, nom_fichier, dry_run):
+        """Aligne une promotion sur sa grille. Retourne 1 si traitée, 0 sinon."""
+        nom_promotion, correspondances, corrections = CONFIGS[nom_fichier]
+        chemin = DATA_DIR / nom_fichier
+
+        if not chemin.exists():
+            # Balayage multi-grilles (tests, poste sans data/...) : on signale
+            # et on passe à la suivante. Un appel explicite (--grille) reste
+            # strict pour ne pas masquer une faute de frappe.
+            message = f'Fichier introuvable : {chemin}'
+            if getattr(self, '_grille_explicite', False):
+                raise CommandError(message)
+            self.stdout.write(self.style.WARNING(f'  ⏭️  {message} (ignorée)'))
+            return 0
+
+        promotion = Promotion.objects.filter(nom=nom_promotion).first()
         if promotion is None:
-            raise CommandError(f"Promotion « {PROMOTION} » introuvable en base.")
+            raise CommandError(
+                f"Promotion « {nom_promotion} » introuvable en base.")
 
         ues = lire_grille(chemin)
         self.stdout.write(
@@ -154,9 +232,9 @@ class Command(BaseCommand):
         traites = set()
 
         for intitule_grille, credit in ues:
-            intitule = CORRECTIONS.get(intitule_grille, intitule_grille)
+            intitule = corrections.get(intitule_grille, intitule_grille)
             cours = cours_par_nom.get(intitule)
-            ancien_nom = CORRESPONDANCES.get(intitule_grille)
+            ancien_nom = correspondances.get(intitule_grille)
             if cours is None and ancien_nom:
                 cours = cours_par_nom.get(ancien_nom)
 
@@ -210,6 +288,5 @@ class Command(BaseCommand):
             f'{renommes} renommage(s), {maj_credits} crédit(s) mis à jour, '
             f'{crees} cours créé(s), {alignes} déjà aligné(s).'))
 
-        if dry_run:
-            transaction.set_rollback(True)
+        return 1
 
