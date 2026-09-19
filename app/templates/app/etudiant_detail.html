@@ -1,11 +1,217 @@
 {% extends 'app/base.html' %}
 
-{% block title %}{{ etudiant.noms }}{% endblock %}
+{% block title %}Relevé de notes — {{ etudiant.noms }}{% endblock %}
+
+{% block extra_style %}
+<style>
+    /* ===== Styles de présentation écran ===== */
+    .deliberation-card {
+        border-left: 4px solid #0d6efd;
+    }
+    .badge-decision-v { background-color: #198754; color: #fff; }
+    .badge-decision-vc { background-color: #ffc107; color: #000; }
+    .badge-decision-nv { background-color: #dc3545; color: #fff; }
+
+    .ue-row-validee { background-color: rgba(25, 135, 84, 0.04); }
+    .ue-row-echec { background-color: rgba(220, 53, 69, 0.04); }
+
+    /* ===== Éléments réservés à l'impression ===== */
+    .print-only-header,
+    .print-only-summary,
+    .print-only-footer {
+        display: none;
+    }
+
+    /* ===== Optimisation de la disposition d'impression (A4 portrait) ===== */
+    @media print {
+        @page {
+            size: A4 portrait;
+            margin: 8mm 10mm 10mm 10mm;
+        }
+
+        #sidebar, nav.navbar, .breadcrumb, .alert, .no-print, .btn, footer {
+            display: none !important;
+        }
+
+        body {
+            background: #fff !important;
+            color: #000 !important;
+            font-size: 8.5pt !important;
+            line-height: 1.25 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        .main-content {
+            margin-left: 0 !important;
+            padding: 0 !important;
+            min-height: 0 !important;
+        }
+
+        .container, .container-fluid {
+            max-width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+
+        .card {
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+        }
+
+        .card-body {
+            padding: 0 !important;
+        }
+
+        /* En-tête académique officiel */
+        .print-only-header {
+            display: block !important;
+            text-align: center;
+            border-bottom: 2px solid #000;
+            padding-bottom: 5px;
+            margin-bottom: 8px;
+        }
+        .print-only-header h1 {
+            font-size: 11pt;
+            font-weight: 700;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+        }
+        .print-only-header h2 {
+            font-size: 11pt;
+            font-weight: 700;
+            margin: 2px 0 0;
+            letter-spacing: .05em;
+        }
+        .print-header-meta {
+            font-size: 8.5pt;
+            margin-top: 3px;
+            color: #111;
+        }
+
+        /* Synthèse tabulaire compacte à l'impression */
+        .print-only-summary {
+            display: block !important;
+            margin-bottom: 8px;
+        }
+        .print-table-summary {
+            width: 100% !important;
+            border: 1px solid #333 !important;
+            border-collapse: collapse !important;
+            font-size: 8pt !important;
+        }
+        .print-table-summary td {
+            padding: 3px 6px !important;
+            border: 1px solid #777 !important;
+        }
+        .print-table-summary .bg-light {
+            background-color: #f1f3f5 !important;
+            font-weight: 600;
+        }
+
+        /* Disposition des 2 semestres côte à côte (2 colonnes parallèles) */
+        .print-semester-row {
+            display: flex !important;
+            flex-direction: row !important;
+            gap: 8px !important;
+            width: 100% !important;
+            margin: 0 !important;
+        }
+        .print-semester-col {
+            width: calc(50% - 4px) !important;
+            flex: 0 0 calc(50% - 4px) !important;
+            max-width: calc(50% - 4px) !important;
+            padding: 0 !important;
+        }
+
+        .semester-card {
+            border: 1px solid #444 !important;
+            border-radius: 0 !important;
+        }
+        .semester-card .card-header {
+            padding: 3px 6px !important;
+            font-size: 8.5pt !important;
+            background-color: #e9ecef !important;
+            border-bottom: 1px solid #444 !important;
+            font-weight: 700;
+        }
+
+        /* Tableaux de notes compacts et nets */
+        .table-ue {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            font-size: 7.6pt !important;
+            margin-bottom: 0 !important;
+        }
+        .table-ue th, .table-ue td {
+            padding: 2px 3px !important;
+            border: 1px solid #bbb !important;
+            line-height: 1.15 !important;
+        }
+        .table-ue th {
+            background-color: #f8f9fa !important;
+            font-weight: 700 !important;
+            border-bottom: 1px solid #444 !important;
+        }
+        .table-ue tfoot td {
+            padding: 2px 4px !important;
+            background-color: #f1f3f5 !important;
+            border-top: 1px solid #444 !important;
+            font-weight: 700;
+        }
+
+        .ue-status-valide {
+            font-weight: 700;
+            color: #0f5132 !important;
+        }
+        .ue-status-echec {
+            font-weight: 700;
+            color: #842029 !important;
+        }
+
+        /* Emplacement officiel de signature */
+        .print-only-footer {
+            display: block !important;
+            margin-top: 12px !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-        <h2 class="mb-0">{{ etudiant.noms }}</h2>
+    <!-- En-tête officiel imprimable (visible uniquement à l'impression) -->
+    <div class="print-only-header">
+        <h1>{% if grille_ligne and grille_ligne.grille.etablissement %}{{ grille_ligne.grille.etablissement }}{% else %}ENSEIGNEMENT SUPÉRIEUR ET UNIVERSITAIRE{% endif %}</h1>
+        <h2>RELEVÉ DE NOTES</h2>
+        <div class="print-header-meta">
+            Étudiant(e) : <strong>{{ etudiant.noms }}</strong> &nbsp;|&nbsp;
+            Matricule : <strong>{{ etudiant.numero_etudiant }}</strong> &nbsp;|&nbsp;
+            Promotion : <strong>{{ etudiant.promotion.nom }}</strong>
+            {% if grille_ligne %} &nbsp;|&nbsp; Année académique : <strong>{{ grille_ligne.grille.annee_academique }}</strong>{% endif %}
+        </div>
+    </div>
+
+    <!-- Barre d'action supérieure (écran uniquement) -->
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3 no-print">
+        <div>
+            <h2 class="mb-0 fw-bold">{{ etudiant.noms }}</h2>
+            <div class="text-muted small">
+                Fiche détaillée et relevé de notes
+            </div>
+        </div>
         <div class="d-flex gap-2">
+            <button type="button" class="btn btn-primary" onclick="window.print()">
+                <i class="bi bi-printer me-1"></i>Imprimer le relevé
+            </button>
+            {% if grille_ligne and grille_ligne.grille.session %}
+            <a href="{% url 'session_grille_apercu' grille_ligne.grille.session.pk grille_ligne.grille.pk %}" class="btn btn-outline-info" title="Consulter la grille de délibération de toute la promotion">
+                <i class="bi bi-table me-1"></i>Grille promotion
+            </a>
+            {% endif %}
             <a href="{% url 'etudiant_update' etudiant.pk %}" class="btn btn-outline-secondary">
                 <i class="bi bi-pencil me-1"></i>Modifier
             </a>
@@ -15,55 +221,405 @@
         </div>
     </div>
 
-    <div class="card shadow-sm mb-3">
-        <div class="card-body d-flex flex-wrap gap-2">
-            <span class="badge text-bg-light border fs-6 font-monospace">
-                <i class="bi bi-hash me-1"></i>{{ etudiant.numero_etudiant }}
-            </span>
-            {% if etudiant.email %}
-            <span class="badge text-bg-light border fs-6">
-                <i class="bi bi-envelope me-1"></i>{{ etudiant.email }}
-            </span>
-            {% endif %}
-            <a href="{% url 'promotion_detail' etudiant.promotion.pk %}"
-               class="badge text-bg-primary text-decoration-none fs-6">
-                <i class="bi bi-diagram-3 me-1"></i>{{ etudiant.promotion.nom }}
-            </a>
-        </div>
-    </div>
-
-
-    <div class="row g-3 mb-3">
-        <div class="col-md-6">
-            <div class="card shadow-sm h-100 text-center">
-                <div class="card-body">
-                    <div class="display-6 fw-bold text-primary">{{ nb_examens }}</div>
-                    <div class="text-muted"><i class="bi bi-file-earmark-text me-1"></i>Examen{{ nb_examens|pluralize }}</div>
+    <!-- Fiche d'identification de l'étudiant (écran uniquement) -->
+    <div class="card shadow-sm mb-4 no-print">
+        <div class="card-body p-3">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-3">
+                    <span class="text-muted small d-block">Matricule / N° Étudiant</span>
+                    <span class="fs-6 fw-bold font-monospace text-primary">
+                        <i class="bi bi-hash me-1"></i>{{ etudiant.numero_etudiant }}
+                    </span>
                 </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card shadow-sm h-100 text-center">
-                <div class="card-body">
-                    {% if moyenne_generale is not None %}
-                        <div class="display-6 fw-bold text-success">{{ moyenne_generale|floatformat:2 }}</div>
+                <div class="col-md-3">
+                    <span class="text-muted small d-block">Promotion</span>
+                    <a href="{% url 'promotion_detail' etudiant.promotion.pk %}"
+                       class="fw-semibold text-decoration-none text-dark">
+                        <i class="bi bi-diagram-3 me-1 text-primary"></i>{{ etudiant.promotion.nom }}
+                    </a>
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted small d-block">Contact / Email</span>
+                    <span>
+                        {% if etudiant.email %}
+                            <i class="bi bi-envelope me-1 text-muted"></i>{{ etudiant.email }}
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="col-md-3">
+                    {% if grille_ligne %}
+                    <span class="text-muted small d-block">Rang en délibération</span>
+                    <span class="badge text-bg-secondary fs-6">
+                        <i class="bi bi-trophy me-1"></i>N° {{ grille_ligne.rang }} sur {{ grille_ligne.grille.lignes.count }}
+                    </span>
                     {% else %}
-                        <div class="display-6 fw-bold text-secondary">—</div>
+                    <span class="text-muted small d-block">Inscriptions aux examens</span>
+                    <span class="badge text-bg-light border fs-6">
+                        {{ nb_examens }} examen{{ nb_examens|pluralize }}
+                    </span>
                     {% endif %}
-                    <div class="text-muted"><i class="bi bi-award me-1"></i>Moyenne générale /20</div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="card shadow-sm">
-        <div class="card-header fw-semibold">
-            <i class="bi bi-journal-text me-1"></i>Examens et notes ({{ nb_examens }})
+    {% if grille_ligne %}
+        {# =================================================================== #}
+        {# SECTION 1 : RELEVÉ DE DÉLIBÉRATION OFFICIEL (GRILLE DE LA PROMOTION) #}
+        {# =================================================================== #}
+        <div class="card shadow-sm deliberation-card mb-4">
+            <!-- En-tête de carte (écran uniquement) -->
+            <div class="card-header bg-white py-3 no-print">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <div class="badge text-bg-primary text-uppercase mb-1">Résultats officiels</div>
+                        <h4 class="mb-0 fw-bold">
+                            <i class="bi bi-mortarboard-fill me-2 text-primary"></i>Relevé de notes
+                        </h4>
+                        <div class="small text-muted mt-1">
+                            Promotion : <strong>{{ grille_ligne.grille.promotion.nom }}</strong> ·
+                            Année académique : <strong>{{ grille_ligne.grille.annee_academique }}</strong>
+                            {% if grille_ligne.grille.etablissement %} · {{ grille_ligne.grille.etablissement }}{% endif %}
+                        </div>
+                    </div>
+
+                    {% if grille_lignes|length > 1 %}
+                    <div class="no-print">
+                        <form method="get" class="d-flex align-items-center gap-1">
+                            <label for="select-grille" class="small text-muted me-1">Grille :</label>
+                            <select id="select-grille" name="grille" class="form-select form-select-sm" onchange="this.form.submit()">
+                                {% for gl in grille_lignes %}
+                                <option value="{{ gl.grille.pk }}" {% if gl.grille.pk == grille_ligne.grille.pk %}selected{% endif %}>
+                                    Année {{ gl.grille.annee_academique }}{% if gl.grille.session %} ({{ gl.grille.session.nom }}){% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Synthèse officielle compacte (impression uniquement) -->
+            <div class="print-only-summary">
+                <table class="table table-bordered table-sm print-table-summary">
+                    <tbody>
+                        <tr>
+                            <td class="bg-light" style="width: 22%;">Décision du Jury :</td>
+                            <td style="width: 28%;" class="fw-bold">
+                                {% if grille_ligne.decision == 'V' %}VALIDÉ (V)
+                                {% elif grille_ligne.decision == 'VC' %}VALIDÉ AVEC COMPLÉMENT (VC)
+                                {% elif grille_ligne.decision == 'NV' %}NON VALIDÉ (NV)
+                                {% else %}{{ grille_ligne.decision|default:"—" }}{% endif %}
+                                {% if grille_ligne.mention %} — <em>{{ grille_ligne.mention }}</em>{% endif %}
+                            </td>
+                            <td class="bg-light" style="width: 20%;">Moyenne :</td>
+                            <td style="width: 30%;" class="fw-bold">
+                                {{ grille_ligne.moyenne_affichee|default:grille_ligne.moyenne }}/20
+                                {% if grille_ligne.pourcentage %} ({{ grille_ligne.pourcentage }}%){% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="bg-light">Crédits validés :</td>
+                            <td><strong>{{ grille_ligne.credits_total }}</strong> / {{ grille_ligne.grille.total_credits }} cr. (S1: {{ grille_ligne.credits_s1 }} · S2: {{ grille_ligne.credits_s2 }})</td>
+                            <td class="bg-light">Unités d'Enseignement :</td>
+                            <td><strong>{{ nb_ues_validees }}</strong> / {{ grille_ues_notes|length }} validées{% if grille_ligne.nb_ue_reprendre %} ({{ grille_ligne.nb_ue_reprendre }} à reprendre){% endif %}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Synthèse de délibération en cartes (écran uniquement) -->
+            <div class="card-body bg-light border-bottom no-print">
+                <div class="row g-2 text-center">
+                    <div class="col-6 col-md-3">
+                        <div class="card h-100 border-0 shadow-sm py-2">
+                            <div class="small text-muted mb-1 fw-semibold">Décision du Jury</div>
+                            <div>
+                                {% if grille_ligne.decision == 'V' %}
+                                    <span class="badge badge-decision-v fs-6 px-3 py-2">
+                                        <i class="bi bi-check-circle me-1"></i>Validé (V)
+                                    </span>
+                                {% elif grille_ligne.decision == 'VC' %}
+                                    <span class="badge badge-decision-vc fs-6 px-3 py-2">
+                                        <i class="bi bi-exclamation-triangle me-1"></i>Validé avec complément (VC)
+                                    </span>
+                                {% elif grille_ligne.decision == 'NV' %}
+                                    <span class="badge badge-decision-nv fs-6 px-3 py-2">
+                                        <i class="bi bi-x-circle me-1"></i>Non validé (NV)
+                                    </span>
+                                {% else %}
+                                    <span class="badge text-bg-light border fs-6 px-3 py-2">—</span>
+                                {% endif %}
+                            </div>
+                            {% if grille_ligne.mention %}
+                            <div class="small text-muted mt-1 fw-semibold">{{ grille_ligne.mention }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="col-6 col-md-3">
+                        <div class="card h-100 border-0 shadow-sm py-2">
+                            <div class="small text-muted mb-1 fw-semibold">Moyenne Délibérée</div>
+                            <div class="display-6 fw-bold {% if grille_ligne.moyenne_validee %}text-success{% else %}text-danger{% endif %}">
+                                {% if grille_ligne.moyenne is not None %}
+                                    {{ grille_ligne.moyenne_affichee|default:grille_ligne.moyenne }}<span class="fs-6 text-muted fw-normal">/20</span>
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </div>
+                            {% if grille_ligne.pourcentage %}
+                            <div class="small text-muted">{{ grille_ligne.pourcentage }}% de réussite</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="col-6 col-md-3">
+                        <div class="card h-100 border-0 shadow-sm py-2">
+                            <div class="small text-muted mb-1 fw-semibold">Crédits Capitalisés</div>
+                            <div class="display-6 fw-bold text-primary">
+                                {{ grille_ligne.credits_total }}<span class="fs-6 text-muted fw-normal">/{{ grille_ligne.grille.total_credits }}</span>
+                            </div>
+                            <div class="small text-muted">
+                                S1: <strong>{{ grille_ligne.credits_s1 }}</strong> cr. · S2: <strong>{{ grille_ligne.credits_s2 }}</strong> cr.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-6 col-md-3">
+                        <div class="card h-100 border-0 shadow-sm py-2">
+                            <div class="small text-muted mb-1 fw-semibold">Unités d'Enseignement</div>
+                            <div class="display-6 fw-bold text-dark">
+                                {{ nb_ues_validees }}<span class="fs-6 text-muted fw-normal">/{{ grille_ues_notes|length }}</span>
+                            </div>
+                            <div class="small text-muted">
+                                {% if grille_ligne.nb_ue_reprendre %}
+                                    <span class="text-danger fw-semibold">{{ grille_ligne.nb_ue_reprendre }} UE à reprendre</span>
+                                {% else %}
+                                    <span class="text-success fw-semibold">Toutes UE validées</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Détail des Unités d'Enseignement (Semestre 1 & Semestre 2 côte à côte) -->
+            <div class="card-body p-3">
+                <div class="row g-4 print-semester-row">
+                    <!-- SEMESTRE 1 -->
+                    <div class="col-lg-6 print-semester-col">
+                        <div class="card h-100 border semester-card">
+                            <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                                <span class="fw-bold text-primary">
+                                    <i class="bi bi-calendar-event me-1 no-print"></i>Semestre 1
+                                </span>
+                                <span class="badge text-bg-light border small">
+                                    {{ s1_credits_valides }} / {{ s1_credits_total }} crédits
+                                </span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover align-middle mb-0 table-ue">
+                                    <thead class="table-light small">
+                                        <tr>
+                                            <th style="width: 24px;" class="text-center">#</th>
+                                            <th>Unité d'Enseignement (UE)</th>
+                                            <th class="text-center" style="width: 32px;" title="Crédits">Cr.</th>
+                                            <th class="text-center" style="width: 48px;">Note</th>
+                                            <th class="text-center" style="width: 68px;">Statut</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for item in s1_notes %}
+                                        <tr class="{% if item.note and item.note.est_validee %}ue-row-validee{% elif item.note and item.note.note is not None %}ue-row-echec{% endif %}">
+                                            <td class="text-center text-muted small">{{ forloop.counter }}</td>
+                                            <td>
+                                                <span class="fw-semibold">{{ item.ue.intitule }}</span>
+                                                {% if item.ue.groupe %}
+                                                <span class="badge text-bg-light border font-monospace ms-1 small no-print">{{ item.ue.groupe }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="text-center fw-semibold text-secondary">{{ item.ue.credits }}</td>
+                                            <td class="text-center">
+                                                {% if item.note and item.note.note is not None %}
+                                                    <span class="fw-bold {% if item.note.est_validee %}text-success ue-status-valide{% else %}text-danger ue-status-echec{% endif %}">
+                                                        {{ item.note.note_affichee }}
+                                                    </span>
+                                                    <small class="text-muted no-print">/20</small>
+                                                {% else %}
+                                                    <span class="text-muted">—</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="text-center">
+                                                {% if item.note and item.note.est_validee %}
+                                                    <span class="badge text-bg-success-subtle text-success border border-success-subtle small ue-status-valide">
+                                                        Validé
+                                                    </span>
+                                                {% elif item.note and item.note.note is not None %}
+                                                    <span class="badge text-bg-danger-subtle text-danger border border-danger-subtle small ue-status-echec">
+                                                        À reprendre
+                                                    </span>
+                                                {% else %}
+                                                    <span class="badge text-bg-light border text-muted small">Non noté</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% empty %}
+                                        <tr>
+                                            <td colspan="5" class="text-center text-muted py-3">Aucune UE au Semestre 1.</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                    <tfoot class="table-light small fw-bold">
+                                        <tr>
+                                            <td colspan="2" class="text-end">Total S1 :</td>
+                                            <td class="text-center">{{ s1_credits_total }}</td>
+                                            <td colspan="2" class="text-center text-primary">
+                                                {{ s1_credits_valides }} cr. validés
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SEMESTRE 2 -->
+                    <div class="col-lg-6 print-semester-col">
+                        <div class="card h-100 border semester-card">
+                            <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                                <span class="fw-bold text-primary">
+                                    <i class="bi bi-calendar-event me-1 no-print"></i>Semestre 2
+                                </span>
+                                <span class="badge text-bg-light border small">
+                                    {{ s2_credits_valides }} / {{ s2_credits_total }} crédits
+                                </span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover align-middle mb-0 table-ue">
+                                    <thead class="table-light small">
+                                        <tr>
+                                            <th style="width: 24px;" class="text-center">#</th>
+                                            <th>Unité d'Enseignement (UE)</th>
+                                            <th class="text-center" style="width: 32px;" title="Crédits">Cr.</th>
+                                            <th class="text-center" style="width: 48px;">Note</th>
+                                            <th class="text-center" style="width: 68px;">Statut</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for item in s2_notes %}
+                                        <tr class="{% if item.note and item.note.est_validee %}ue-row-validee{% elif item.note and item.note.note is not None %}ue-row-echec{% endif %}">
+                                            <td class="text-center text-muted small">{{ forloop.counter }}</td>
+                                            <td>
+                                                <span class="fw-semibold">{{ item.ue.intitule }}</span>
+                                                {% if item.ue.groupe %}
+                                                <span class="badge text-bg-light border font-monospace ms-1 small no-print">{{ item.ue.groupe }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="text-center fw-semibold text-secondary">{{ item.ue.credits }}</td>
+                                            <td class="text-center">
+                                                {% if item.note and item.note.note is not None %}
+                                                    <span class="fw-bold {% if item.note.est_validee %}text-success ue-status-valide{% else %}text-danger ue-status-echec{% endif %}">
+                                                        {{ item.note.note_affichee }}
+                                                    </span>
+                                                    <small class="text-muted no-print">/20</small>
+                                                {% else %}
+                                                    <span class="text-muted">—</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="text-center">
+                                                {% if item.note and item.note.est_validee %}
+                                                    <span class="badge text-bg-success-subtle text-success border border-success-subtle small ue-status-valide">
+                                                        Validé
+                                                    </span>
+                                                {% elif item.note and item.note.note is not None %}
+                                                    <span class="badge text-bg-danger-subtle text-danger border border-danger-subtle small ue-status-echec">
+                                                        À reprendre
+                                                    </span>
+                                                {% else %}
+                                                    <span class="badge text-bg-light border text-muted small">Non noté</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% empty %}
+                                        <tr>
+                                            <td colspan="5" class="text-center text-muted py-3">Aucune UE au Semestre 2.</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                    <tfoot class="table-light small fw-bold">
+                                        <tr>
+                                            <td colspan="2" class="text-end">Total S2 :</td>
+                                            <td class="text-center">{{ s2_credits_total }}</td>
+                                            <td colspan="2" class="text-center text-primary">
+                                                {{ s2_credits_valides }} cr. validés
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Synthèse globale de bas de grille (écran uniquement) -->
+                <div class="mt-3 p-3 bg-light rounded border d-flex justify-content-between align-items-center flex-wrap gap-2 no-print">
+                    <div>
+                        <span class="text-muted small d-block">Bilan des crédits de l'année</span>
+                        <strong class="text-primary fs-6">{{ grille_ligne.credits_total }} crédits validés</strong> sur un total de <strong>{{ grille_ligne.grille.total_credits }}</strong> crédits exigés
+                    </div>
+                    <div>
+                        <span class="text-muted small d-block">Total pondéré officiel</span>
+                        <strong>{{ grille_ligne.total_pondere }}</strong> points
+                    </div>
+                    <div>
+                        <span class="text-muted small d-block">Résultat final</span>
+                        <strong>{{ grille_ligne.get_decision_display|default:grille_ligne.decision }}</strong>
+                        {% if grille_ligne.mention %} — <em>{{ grille_ligne.mention }}</em>{% endif %}
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="card-body p-0" style="max-height: 480px; overflow-y: auto;">
+
+        <!-- Emplacement officiel de signature à l'impression : seul le Secrétaire Général Académique signe -->
+        <div class="print-only-footer mt-4 pt-1">
+            <div class="d-flex justify-content-end text-center">
+                <div style="width: 250px;">
+                    <p class="mb-1 text-muted" style="font-size: 8pt;">Fait à ........................................, le ..............................</p>
+                    <p class="fw-bold mb-4" style="font-size: 9pt;">Le Secrétaire Général Académique</p>
+                    <p class="text-muted border-top border-dark pt-1 mx-2" style="font-size: 7.5pt;">Sceau &amp; Signature</p>
+                </div>
+            </div>
+        </div>
+
+    {% else %}
+        <div class="alert alert-info d-flex align-items-center mb-4">
+            <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+            <div>
+                Aucune grille de délibération n'a encore été importée pour la promotion <strong>{{ etudiant.promotion.nom }}</strong>.
+                <a href="{% url 'import_excel' %}?type=grilles" class="alert-link ms-1">Importer une grille Excel</a>.
+            </div>
+        </div>
+    {% endif %}
+
+    {# =================================================================== #}
+    {# SECTION 2 : ÉVALUATION CONTINUE & FICHES DE COTE DES EXAMENS        #}
+    {# =================================================================== #}
+    <div class="card shadow-sm mb-4 no-print">
+        <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-semibold">
+                <i class="bi bi-journal-check me-2 text-secondary"></i>Fiches de cotation &amp; Examens enregistrés ({{ nb_examens }})
+            </h5>
+            {% if moyenne_generale is not None %}
+            <span class="badge text-bg-success">Moyenne fiches : {{ moyenne_generale|floatformat:2 }}/20</span>
+            {% endif %}
+        </div>
+        <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-sm table-hover align-middle mb-0">
-                    <thead>
+                    <thead class="table-light">
                         <tr>
                             <th>Cours</th>
                             <th>Promotion</th>
@@ -72,8 +628,8 @@
                             <th class="text-center">Interro /5</th>
                             <th class="text-center">TP /5</th>
                             <th class="text-center">Examen /10</th>
-                            <th class="text-center">Moyenne /20</th>
-                            <th class="text-end">Fiche</th>
+                            <th class="text-center">Note /20</th>
+                            <th class="text-end no-print">Fiche</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -88,11 +644,15 @@
                             <td class="text-center">{{ ins.note_examen|default_if_none:'—' }}</td>
                             <td class="text-center">
                                 {% if ins.note is not None %}
-                                    <span class="badge {% if ins.note >= 10 %}text-bg-success{% else %}text-bg-danger{% endif %}">{{ ins.note|floatformat:2 }}</span>
+                                    <span class="badge {% if ins.note >= 10 %}text-bg-success{% else %}text-bg-danger{% endif %}">
+                                        {{ ins.note|floatformat:2 }}
+                                    </span>
                                 {% else %}—{% endif %}
                             </td>
-                            <td class="text-end">
-                                <a href="{% url 'examen_fiche' ins.examen.pk %}" class="btn btn-sm btn-outline-primary">Fiche</a>
+                            <td class="text-end no-print">
+                                <a href="{% url 'examen_fiche' ins.examen.pk %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye me-1"></i>Fiche
+                                </a>
                             </td>
                         </tr>
                         {% empty %}

@@ -40,6 +40,14 @@ class Enseignant(models.Model):
     noms = models.CharField(max_length=200, default='')
     email = models.EmailField(unique=True)
 
+    @property
+    def nom(self):
+        return self.noms
+
+    @property
+    def prenom(self):
+        return ''
+
     def __str__(self):
         return self.noms
 
@@ -55,6 +63,14 @@ class Etudiant(models.Model):
     numero_etudiant = models.CharField(
         max_length=20, unique=True, blank=True)
     promotion = models.ForeignKey(Promotion, on_delete=models.CASCADE, related_name='etudiants')
+
+    @property
+    def nom(self):
+        return self.noms
+
+    @property
+    def prenom(self):
+        return ''
 
     def save(self, *args, **kwargs):
         if not self.numero_etudiant:

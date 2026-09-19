@@ -327,10 +327,84 @@ class EtudiantDetailView(DetailView):
                         .order_by('examen__date_examen'))
         notes = [i.note for i in inscriptions if i.note is not None]
         moyenne = (sum(notes) / len(notes)) if notes else None
+
+        # --- Relevé de grille de délibération (si la promotion possède une
+        # grille importée) : une ligne par UE avec la note /20, crédits,
+        # semestre et statut de validité, puis la synthèse délibérée.
+        grille_lignes = list(
+            GrilleEtudiant.objects
+            .select_related('grille', 'grille__promotion', 'grille__session')
+            .filter(etudiant=etudiant)
+            .order_by('-grille__annee_academique', '-grille__id')
+        )
+
+        selected_grille_id = self.request.GET.get('grille')
+        grille_ligne = None
+        if selected_grille_id and selected_grille_id.isdigit():
+            grille_ligne = next(
+                (l for l in grille_lignes if l.grille_id == int(selected_grille_id)),
+                None
+            )
+        if grille_ligne is None and grille_lignes:
+            grille_ligne = grille_lignes[0]
+
+        grille_ues_notes = []
+        s1_notes = []
+        s2_notes = []
+        s1_credits_total = 0
+        s2_credits_total = 0
+        s1_credits_valides = 0
+        s2_credits_valides = 0
+        nb_ues_validees = 0
+        nb_ues_echouees = 0
+        nb_ues_non_notees = 0
+
+        if grille_ligne is not None:
+            ues = list(grille_ligne.grille.ues.order_by(
+                'semestre', 'ordre', 'intitule'))
+            notes_map = {
+                n.ue_id: n for n in
+                GrilleNote.objects.filter(ligne=grille_ligne)
+                .select_related('ue')
+            }
+            for ue in ues:
+                note_obj = notes_map.get(ue.pk)
+                item = {'ue': ue, 'note': note_obj}
+                grille_ues_notes.append(item)
+                if ue.semestre == 1:
+                    s1_notes.append(item)
+                    s1_credits_total += ue.credits
+                    if note_obj and note_obj.est_validee:
+                        s1_credits_valides += ue.credits
+                else:
+                    s2_notes.append(item)
+                    s2_credits_total += ue.credits
+                    if note_obj and note_obj.est_validee:
+                        s2_credits_valides += ue.credits
+
+                if note_obj and note_obj.est_validee:
+                    nb_ues_validees += 1
+                elif note_obj and note_obj.note is not None:
+                    nb_ues_echouees += 1
+                else:
+                    nb_ues_non_notees += 1
+
         ctx.update({
             'inscriptions': inscriptions,
             'nb_examens': len(inscriptions),
             'moyenne_generale': moyenne,
+            'grille_ligne': grille_ligne,
+            'grille_lignes': grille_lignes,
+            'grille_ues_notes': grille_ues_notes,
+            's1_notes': s1_notes,
+            's2_notes': s2_notes,
+            's1_credits_total': s1_credits_total,
+            's2_credits_total': s2_credits_total,
+            's1_credits_valides': s1_credits_valides,
+            's2_credits_valides': s2_credits_valides,
+            'nb_ues_validees': nb_ues_validees,
+            'nb_ues_echouees': nb_ues_echouees,
+            'nb_ues_non_notees': nb_ues_non_notees,
         })
         return ctx
 
