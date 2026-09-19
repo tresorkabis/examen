@@ -604,6 +604,34 @@ def _donnees_participants_session(session):
     return examens, list(groupes.items()), nb_inscriptions, len(participants_ids)
 
 
+def _donnees_grille(grille):
+    """Données d'une grille, prêtes pour l'affichage.
+
+    Factorise la préparation commune à l'onglet « Grilles » du détail de
+    session et à la page d'aperçu : UE triées, notes indexées par
+    (ligne, UE), et pour chaque ligne la liste des notes dans l'ordre exact
+    des colonnes.
+    """
+    ues = list(grille.ues.order_by('semestre', 'ordre', 'intitule'))
+    notes = {
+        (note.ligne_id, note.ue_id): note
+        for note in GrilleNote.objects.filter(ligne__grille=grille)
+    }
+    lignes = []
+    for ligne in grille.lignes.select_related('etudiant'):
+        lignes.append({
+            'ligne': ligne,
+            'notes': [notes.get((ligne.pk, ue.pk)) for ue in ues],
+        })
+    return {
+        'grille': grille,
+        'ues': ues,
+        'ues_s1': [ue for ue in ues if ue.semestre == 1],
+        'ues_s2': [ue for ue in ues if ue.semestre == 2],
+        'lignes': lignes,
+    }
+
+
 def _grilles_session(session):
     """Grilles d'une session, préparées pour l'affichage.
 
@@ -620,27 +648,7 @@ def _grilles_session(session):
                .filter(session=session)
                .select_related('promotion')
                .order_by('promotion__nom'))
-    resultat = []
-    for grille in grilles:
-        ues = list(grille.ues.order_by('semestre', 'ordre', 'intitule'))
-        notes = {
-            (note.ligne_id, note.ue_id): note
-            for note in GrilleNote.objects.filter(ligne__grille=grille)
-        }
-        lignes = []
-        for ligne in grille.lignes.select_related('etudiant'):
-            lignes.append({
-                'ligne': ligne,
-                'notes': [notes.get((ligne.pk, ue.pk)) for ue in ues],
-            })
-        resultat.append({
-            'grille': grille,
-            'ues': ues,
-            'ues_s1': [ue for ue in ues if ue.semestre == 1],
-            'ues_s2': [ue for ue in ues if ue.semestre == 2],
-            'lignes': lignes,
-        })
-    return resultat
+    return [_donnees_grille(grille) for grille in grilles]
 
 
 class SessionDetailView(DetailView):
@@ -705,7 +713,6 @@ def session_participants_pdf(request, pk):
 
     session = get_object_or_404(Session, pk=pk)
     _, groupes, _, nb_participants = _donnees_participants_session(session)
-
     tampon = BytesIO()
     doc = SimpleDocTemplate(
         tampon, pagesize=A4,
@@ -754,6 +761,24 @@ def session_participants_pdf(request, pk):
     return FileResponse(
         tampon, as_attachment=True, content_type='application/pdf',
         filename=f"participants-{slugify(session.nom)}.pdf")
+
+
+def session_grille_apercu(request, pk, grille_pk):
+    """Aperçu plein écran d'une grille de délibération (sans sidebar).
+
+    L'onglet « Grilles » du détail de session liste les promotions dotées
+    d'une grille ; un clic ouvre ici le tableau complet de la promotion —
+    notes sans décimale superflue, moyennes et délibération — dans un gabarit
+    autonome (pas d'héritage de `base.html`, donc pas de sidebar).
+    """
+    session = get_object_or_404(Session, pk=pk)
+    grille = get_object_or_404(
+        Grille.objects.select_related('promotion', 'session'),
+        pk=grille_pk, session=session)
+    return render(request, 'app/grille_apercu.html', {
+        'session': session,
+        **_donnees_grille(grille),
+    })
 
 
 class SessionCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):

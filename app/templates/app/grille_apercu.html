@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aperçu grille — {{ grille.promotion.nom }} — {{ session.nom }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        /* Grille large : aperçu sans sidebar, défilement horizontal */
+        .table-grille th, .table-grille td { white-space: nowrap; }
+        .table-grille thead th { position: sticky; top: 0; z-index: 2; }
+        .col-etudiant { position: sticky; left: 0; background: #fff; z-index: 1; }
+        thead .col-etudiant { z-index: 3; }
+        @media print {
+            .no-print { display: none !important; }
+            body { background: #fff; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-3">
+        <div class="d-flex align-items-center flex-wrap gap-2 mb-3 no-print">
+            <a href="{% url 'session_detail' session.pk %}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Retour session
+            </a>
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print()">
+                <i class="bi bi-printer me-1"></i>Imprimer
+            </button>
+        </div>
+
+        <div class="d-flex align-items-baseline flex-wrap gap-2 mb-1">
+            <h4 class="mb-0">Grille de délibération — {{ grille.promotion.nom }}</h4>
+            <span class="badge text-bg-light border">{{ grille.annee_academique }}</span>
+            <span class="badge text-bg-secondary">{{ ues|length }} UE</span>
+            <span class="badge text-bg-secondary">{{ lignes|length }} étudiants</span>
+        </div>
+        <p class="text-muted small">
+            Session : {{ session.nom }} · {{ grille.total_credits }} crédits (barème {{ grille.bareme }})
+            {% if grille.etablissement %} · {{ grille.etablissement }}{% endif %}
+            {% if grille.intitule %} · {{ grille.intitule }}{% endif %}
+        </p>
+
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered table-hover align-middle small table-grille bg-white mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-center">N°</th>
+                        <th class="col-etudiant">Étudiant</th>
+                        {% for ue in ues %}
+                        <th class="text-center" title="{{ ue.intitule }} ({{ ue.credits }} cr.)">{{ ue.intitule|truncatechars:14 }}</th>
+                        {% endfor %}
+                        <th class="text-center">Moy.</th>
+                        <th class="text-center">Déc.</th>
+                        <th>Mention</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in lignes %}
+                    <tr>
+                        <td class="text-center text-muted">{{ item.ligne.rang }}</td>
+                        <td class="col-etudiant fw-semibold">{{ item.ligne.etudiant.noms }}</td>
+                        {% for note in item.notes %}
+                        <td class="text-center {% if note and note.est_validee %}text-success fw-semibold{% elif note and note.note is not None %}text-danger{% else %}text-muted{% endif %}">
+                            {% if note %}{{ note.note_affichee }}{% else %}—{% endif %}
+                        </td>
+                        {% endfor %}
+                        <td class="text-center fw-semibold">{{ item.ligne.moyenne_affichee|default:"—" }}</td>
+                        <td class="text-center">
+                            <span class="badge {% if item.ligne.decision == 'V' %}text-bg-success{% elif item.ligne.decision == 'VC' %}text-bg-warning text-dark{% elif item.ligne.decision %}text-bg-danger{% else %}text-bg-light border{% endif %}">{{ item.ligne.decision|default:"—" }}</span>
+                        </td>
+                        <td>{{ item.ligne.mention|default:"—" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="{{ ues|length|add:5 }}" class="text-center text-muted py-4">
+                            Aucune ligne dans cette grille.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

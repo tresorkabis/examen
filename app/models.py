@@ -373,6 +373,19 @@ class GrilleEtudiant(models.Model):
     def __str__(self):
         return f'{self.rang}. {self.etudiant.noms}'
 
+    @property
+    def moyenne_affichee(self):
+        """Moyenne prête à afficher : sans décimale superflue.
+
+        Même logique que `GrilleNote.note_affichee` : la moyenne
+        délibérée (ex. ``7.45``) s'affiche telle quelle, mais ``12.00``
+        devient ``12`` — jamais de virgule inutile.
+        """
+        if self.moyenne is None or self.moyenne == '':
+            return ''
+        valeur = Decimal(self.moyenne).normalize()
+        return format(valeur, 'f')
+
     class Meta:
         ordering = ['rang']
         constraints = [
@@ -414,6 +427,21 @@ class GrilleNote(models.Model):
 
     def __str__(self):
         return f'{self.ligne.etudiant.noms} — {self.ue.intitule}'
+
+    @property
+    def note_affichee(self):
+        """Note prête à afficher : entier sans décimale superflue.
+
+        Le fichier Excel ne contient que des entiers (``12``, pas
+        ``12,50``) : afficher ``{{ note.note }}`` forcerait le format
+        ``12,00`` (localisation fr). Cette propriété retire les zéros
+        inutiles — ``Decimal('12.00')`` -> ``'12'`` — sans jamais
+        ajouter de séparateur décimal.
+        """
+        if self.note is None or self.note == '':
+            return ''
+        valeur = Decimal(self.note).normalize()
+        return format(valeur, 'f')
 
     @property
     def est_validee(self):
