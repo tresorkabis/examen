@@ -670,17 +670,21 @@ class SessionDetailView(DetailView):
             _donnees_participants_session(session)
         participants = [etu for _, etus in groupes for etu in etus]
 
-        # Les grilles sont rattachées à la session à l'import ; les promotions
-        # de la session qui n'en ont pas encore sont listées pour proposer
-        # l'import directement depuis la page.
+        # Les grilles sont rattachées à la session à l'import. L'onglet
+        # « Grilles » liste chaque promotion de la session avec sa grille
+        # (ou un bouton d'import si elle n'existe pas encore).
         grilles = _grilles_session(session)
-        avec_grille = {element['grille'].promotion_id for element in grilles}
-        promotions_sans_grille = [
-            promotion for promotion in
-            (Promotion.objects
-             .filter(cours__examens__session=session)
-             .distinct().order_by('nom'))
-            if promotion.pk not in avec_grille
+        grille_par_promotion = {
+            element['grille'].promotion_id: element for element in grilles
+        }
+        promotions_session = list(
+            Promotion.objects
+            .filter(cours__examens__session=session)
+            .distinct().order_by('nom'))
+        promotions_grilles = [
+            {'promotion': promotion,
+             'grille': grille_par_promotion.get(promotion.pk)}
+            for promotion in promotions_session
         ]
 
         ctx.update({
@@ -691,7 +695,11 @@ class SessionDetailView(DetailView):
             'participants_par_promotion': groupes,
             'grilles': grilles,
             'nb_grilles': len(grilles),
-            'promotions_sans_grille': promotions_sans_grille,
+            'promotions_grilles': promotions_grilles,
+            'promotions_sans_grille': [
+                item['promotion'] for item in promotions_grilles
+                if item['grille'] is None
+            ],
         })
         return ctx
 

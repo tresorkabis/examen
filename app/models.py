@@ -1,6 +1,6 @@
 import random
 import string
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -375,16 +375,25 @@ class GrilleEtudiant(models.Model):
 
     @property
     def moyenne_affichee(self):
-        """Moyenne prête à afficher : sans décimale superflue.
+        """Moyenne prête à afficher : arrondie à l'entier, sans décimale.
 
-        Même logique que `GrilleNote.note_affichee` : la moyenne
-        délibérée (ex. ``7.45``) s'affiche telle quelle, mais ``12.00``
-        devient ``12`` — jamais de virgule inutile.
+        Contrairement aux notes (`GrilleNote.note_affichee`, valeurs entières
+        brutes), la moyenne délibérée est un calcul (ex. ``7.45``) : l'aperçu
+        l'arrondit à l'entier le plus proche (``7.45`` -> ``7``) pour une
+        lecture rapide, sans jamais de virgule.
         """
         if self.moyenne is None or self.moyenne == '':
             return ''
-        valeur = Decimal(self.moyenne).normalize()
+        valeur = Decimal(self.moyenne).quantize(
+            Decimal('1'), rounding=ROUND_HALF_UP)
         return format(valeur, 'f')
+
+    @property
+    def moyenne_validee(self):
+        """La moyenne atteint-elle le seuil, comme une note ?"""
+        if self.moyenne is None or self.moyenne == '':
+            return False
+        return Decimal(self.moyenne) >= GrilleNote.SEUIL_VALIDATION
 
     class Meta:
         ordering = ['rang']

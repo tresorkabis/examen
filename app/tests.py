@@ -1945,6 +1945,17 @@ class GrilleModelesTests(TestCase):
         self.assertIsNone(ue.cours)
         self.assertEqual(ue.intitule, 'Informatique Générale')
 
+    def test_moyenne_affichee_arrondie_a_l_entier_sans_virgule(self):
+        """L'aperçu arrondit la moyenne : 7.45 -> 7, 7.50 -> 8."""
+        ligne = self._ligne(self._grille())
+        self.assertEqual(ligne.moyenne_affichee, '7')
+        ligne.moyenne = '7.50'
+        self.assertEqual(ligne.moyenne_affichee, '8')
+        ligne.moyenne = '12.00'
+        self.assertEqual(ligne.moyenne_affichee, '12')
+        ligne.moyenne = None
+        self.assertEqual(ligne.moyenne_affichee, '')
+
 
 class GrilleSessionDetailTests(TestCase):
     """Onglet « Grilles » du détail de session (sessions/4/)."""
@@ -1989,6 +2000,32 @@ class GrilleSessionDetailTests(TestCase):
         self.assertEqual(len(element['ues']), 1)
         self.assertEqual(len(element['lignes']), 1)
         self.assertEqual(len(element['lignes'][0]['notes']), 1)
+
+    def test_onglet_grilles_liste_les_promotions_avec_bouton_import(self):
+        """Chaque promotion : grille (aperçu) ou bouton d'import."""
+        cours = Cours.objects.create(nom='Informatique Générale', coefficient=4,
+                                     promotion=self.promotion)
+        Examen.objects.create(
+            cours=cours, session=self.session, date_examen=timezone.now(),
+            salle='Local 1')
+        grille = self._grille()
+        ctx = self._contexte()
+        entrees = ctx['promotions_grilles']
+        self.assertEqual(len(entrees), 1)
+        self.assertEqual(entrees[0]['promotion'], self.promotion)
+        self.assertEqual(entrees[0]['grille']['grille'], grille)
+
+    def test_onglet_grilles_apercu_sans_virgule(self):
+        """L'aperçu (page sans base.html) affiche 12, pas 12,00."""
+        grille = self._grille()
+        reponse = self.client.get(
+            reverse('session_grille_apercu',
+                    args=[self.session.pk, grille.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        contenu = reponse.content.decode()
+        self.assertIn('KATANGA', contenu)
+        self.assertRegex(contenu, r'>\s*12\s*<')
+        self.assertNotIn('12,00', contenu)
 
     def test_sans_grille_les_promotions_sont_proposees_a_l_import(self):
         """Sans import, la promotion est listée pour l'import direct."""
