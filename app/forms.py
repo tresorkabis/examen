@@ -121,12 +121,15 @@ class ExcelImportForm(forms.Form):
     )
     # Une grille est annuelle alors qu'une session est ponctuelle : le lien
     # reste facultatif, mais c'est lui qui fait apparaître la grille dans le
-    # détail de la session.
+    # détail de la session. Pour une grille d'une année antérieure (ex. L1
+    # 2024-2025 des actuels L2), on le laisse vide : la grille vit sur la
+    # fiche de la promotion et l'historique des étudiants, pas dans une
+    # session d'examens.
     session = forms.ModelChoiceField(
         queryset=Session.objects.all(),
         required=False,
-        label="Session d'examens (grilles)",
-        help_text="Session dans laquelle la grille sera consultable.",
+        label="Session d'examens (grilles — optionnel)",
+        help_text="Vide sauf si la grille doit apparaître dans l'onglet « Grilles » d'une session.",
         widget=forms.Select(attrs={'class': 'form-select'})
     )
     # Année académique : elle est normalement lue dans le titre du fichier

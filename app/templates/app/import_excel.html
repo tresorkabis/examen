@@ -83,11 +83,11 @@
                     {% if type_active == 'grilles' %}
                     <div class="mb-4">
                         <label for="{{ form.session.id_for_label }}" class="form-label fw-semibold">
-                            Session d'examens
+                            Session d'examens <span class="text-muted fw-normal">(optionnel)</span>
                         </label>
                         {{ form.session }}
                         <div class="form-text">
-                            La grille apparaîtra dans l'onglet « Grilles » du détail de cette session.
+                            Laissez vide pour une grille d'une année antérieure : elle sera consultable sur la fiche de la promotion. Choisissez une session uniquement pour l'afficher dans son onglet « Grilles ».
                         </div>
                         {% if form.session.errors %}
                             <div class="text-danger small mt-1">{{ form.session.errors }}</div>
