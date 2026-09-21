@@ -36,6 +36,19 @@ class Promotion(models.Model):
         ordering = ['nom']
 
 
+class HistoriquePromotion(models.Model):
+    etudiant = models.ForeignKey('Etudiant', on_delete=models.CASCADE, related_name='historique_promotions')
+    promotion = models.ForeignKey(Promotion, on_delete=models.CASCADE)
+    date_debut = models.DateField(auto_now_add=True)
+    date_fin = models.DateField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-date_debut']
+
+    def __str__(self):
+        return f"{self.etudiant} - {self.promotion} ({self.date_debut})"
+
+
 class Enseignant(models.Model):
     noms = models.CharField(max_length=200, default='')
     email = models.EmailField(unique=True)
@@ -73,6 +86,21 @@ class Etudiant(models.Model):
         return ''
 
     def save(self, *args, **kwargs):
+        if not self.pk:
+            # Création initiale : on enregistre la promotion actuelle dans l'historique
+            pass
+        elif self.pk:
+            # Mise à jour : on vérifie si la promotion a changé
+            old_promotion = Etudiant.objects.get(pk=self.pk).promotion
+            if old_promotion != self.promotion:
+                from django.utils import timezone
+                # Clôturer l'ancienne promotion
+                HistoriquePromotion.objects.filter(
+                    etudiant=self, promotion=old_promotion, date_fin__isnull=True
+                ).update(date_fin=timezone.now().date())
+                # Créer l'entrée pour la nouvelle promotion
+                HistoriquePromotion.objects.create(etudiant=self, promotion=self.promotion)
+
         if not self.numero_etudiant:
             self.numero_etudiant = generate_numero_etudiant()
         super().save(*args, **kwargs)
