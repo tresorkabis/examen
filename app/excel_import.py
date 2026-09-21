@@ -987,6 +987,7 @@ def import_grille_excel(file_obj, promotion, session=None,
     """
     resultat = {
         'success': False, 'created': 0, 'updated': 0, 'skipped': 0,
+        'rattaches_hors_promotion': 0,
         'errors': [], 'grille': None, 'nb_ue': 0, 'nb_lignes': 0, 'nb_notes': 0,
     }
     if promotion is None:
@@ -1038,16 +1039,38 @@ def import_grille_excel(file_obj, promotion, session=None,
         # Étudiants : le N° d'ordre de la grille correspond au matricule
         # déterministe « <PROMO>-<rang> » posé par l'import des étudiants. Le
         # nom sert de repli si la grille a été renumérotée entre-temps.
+        # Repli élargi : quand une grille d'année antérieure (ex. L1 2024-2025)
+        # est importée après le passage en L2, les fiches ont déjà changé de
+        # promotion. On cherche alors par nom exact dans toute la base, sans
+        # déplacer la fiche : la ligne de grille reste rattachée à la fiche
+        # actuelle, et l'étape de parcours de la promotion quittée s'y inscrit
+        # — c'est ce qui donne aux L2/L3 leur historique des années antérieures.
         promo_slug = slugify(promotion.nom).upper() or 'ETU'
         etudiants = list(Etudiant.objects.filter(promotion=promotion))
         par_numero = {e.numero_etudiant: e for e in etudiants}
         par_nom = {e.noms: e for e in etudiants}
+        par_nom_global = {}
+        for etudiant in Etudiant.objects.exclude(promotion=promotion):
+            par_nom_global.setdefault(etudiant.noms, []).append(etudiant)
 
+        resultat['rattaches_hors_promotion'] = 0
         notes = []
         for ligne in lignes:
             etudiant = par_numero.get(f'{promo_slug}-{ligne["rang"]:03d}')
             if etudiant is None:
                 etudiant = par_nom.get(ligne['noms'])
+            if etudiant is None:
+                candidats = par_nom_global.get(ligne['noms'], [])
+                if len(candidats) == 1:
+                    etudiant = candidats[0]
+                    resultat['rattaches_hors_promotion'] += 1
+                elif len(candidats) > 1:
+                    resultat['skipped'] += 1
+                    resultat['errors'].append(
+                        f"Ligne {ligne['rang']} — « {ligne['noms']} » : "
+                        f'nom ambigu ({len(candidats)} fiches hors '
+                        f'{promotion.nom}), ligne ignorée.')
+                    continue
             if etudiant is None:
                 resultat['skipped'] += 1
                 resultat['errors'].append(

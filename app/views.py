@@ -1447,9 +1447,13 @@ def import_excel_view(request):
             elif type_import == 'grilles':
                 # Une grille est rattachée à *une* promotion et, si elle est
                 # fournie, à *une* session : c'est ce lien qui l'affiche dans
-                # le détail de la session.
+                # le détail de la session. L'année saisie prime sur celle lue
+                # dans le titre du fichier (cas des grilles d'années
+                # antérieures, ex. L1 2024-2025 des actuels L2).
+                annee = (form.cleaned_data.get('annee_academique') or '').strip()
                 res = import_grille_excel(
-                    fichier, promotion, form.cleaned_data.get('session'))
+                    fichier, promotion, form.cleaned_data.get('session'),
+                    annee_academique=annee or None)
                 libelle = "grilles"
             else:
                 res = {'success': False, 'created': 0, 'updated': 0, 'skipped': 0, 'errors': ["Type d'import invalide."]}
@@ -1463,6 +1467,13 @@ def import_excel_view(request):
                            f"{res['nb_notes']} note(s)")
                     msg += (". Grille mise à jour." if res['updated']
                             else ". Nouvelle grille enregistrée.")
+                    if res.get('rattaches_hors_promotion'):
+                        # Grille d'une année antérieure importée après le passage
+                        # en promotion supérieure : ces lignes alimentent
+                        # l'historique des années antérieures des fiches actuelles.
+                        msg += (f" ({res['rattaches_hors_promotion']} ligne(s) "
+                                "rattachée(s) à des fiches d'une autre "
+                                "promotion — historique des années antérieures).")
                 else:
                     msg = f"Import {libelle} terminé : {res['created']} créé(s), {res['updated']} mis à jour, {res['skipped']} ignoré(s)."
                 if res['errors']:

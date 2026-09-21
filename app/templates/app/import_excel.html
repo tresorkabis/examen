@@ -93,6 +93,19 @@
                             <div class="text-danger small mt-1">{{ form.session.errors }}</div>
                         {% endif %}
                     </div>
+                    <div class="mb-4">
+                        <label for="{{ form.annee_academique.id_for_label }}" class="form-label fw-semibold">
+                            Année académique
+                        </label>
+                        {{ form.annee_academique }}
+                        <div class="form-text">
+                            {{ form.annee_academique.help_text }}
+                            Indispensable pour une grille d'une année antérieure (ex. L1 2024-2025 des actuels L2 SCF) : elle date l'historique des étudiants.
+                        </div>
+                        {% if form.annee_academique.errors %}
+                            <div class="text-danger small mt-1">{{ form.annee_academique.errors }}</div>
+                        {% endif %}
+                    </div>
                     {% endif %}
 
                     <div class="d-grid mt-4">
@@ -173,6 +186,7 @@
                     <li>une ligne par étudiant : <strong>N° d'ordre</strong> en colonne A, <strong>nom</strong> en colonne B, puis les notes /20.</li>
                 </ul>
                 <p class="small text-muted mb-0"><i class="bi bi-info-circle me-1"></i>Les notes, les crédits et la délibération sont recopiés tels quels. Les étudiants sont reconnus par leur matricule généré à partir du N° d'ordre.</p>
+                <p class="small text-muted mb-0 mt-2"><i class="bi bi-clock-history me-1"></i><strong>Grille d'une année antérieure</strong> (ex. L1 2024-2025 des actuels L2) : importez-la avec <strong>Promotion = L1</strong> et saisissez son <strong>année académique</strong>. Les lignes sont alors rattachées par nom aux fiches actuelles (L2/L3), sans les déplacer, et leur historique se remplit — ré-importée, la grille ne purge que les grilles de cette même année.</p>
                 {% endif %}
 
             </div>

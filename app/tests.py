@@ -2151,6 +2151,43 @@ class ImportGrilleRemplacementTests(TestCase):
             self._fichier_grille(), self.promotion, self.session_rattrapage)
         self.assertEqual(Grille.objects.count(), 1)
 
+    def test_annee_forcee_prime_sur_le_titre_du_fichier(self):
+        """L'année saisie à l'import prime sur celle du titre (« ...2026 »).
+
+        Cas réel : la grille L1 2024-2025 des actuels L2 SCF — son titre ne
+        porte pas forcément la bonne année, la saisie la corrige et date
+        l'historique des étudiants.
+        """
+        from app.excel_import import import_grille_excel
+
+        res = import_grille_excel(
+            self._fichier_grille(), self.promotion, None,
+            annee_academique='2024-2025')
+        self.assertTrue(res['success'], res['errors'])
+        grille = Grille.objects.get()
+        self.assertEqual(grille.annee_academique, '2024-2025')
+        etape = HistoriquePromotion.objects.get(
+            etudiant__noms='KATANGA TSHIKUNGA FISTON')
+        self.assertEqual(etape.annee_academique, '2024-2025')
+
+    def test_annees_distinctes_ne_se_purgent_pas_mutuellement(self):
+        """Ré-importer 2025-2026 ne purge pas la grille 2024-2025.
+
+        Sans cela, importer la grille de l'année courante effacerait
+        l'historique L1 des étudiants passés en L2.
+        """
+        from app.excel_import import import_grille_excel
+
+        import_grille_excel(
+            self._fichier_grille(), self.promotion, None,
+            annee_academique='2024-2025')
+        res = import_grille_excel(
+            self._fichier_grille(), self.promotion, self.session_rattrapage)
+        self.assertTrue(res['success'], res['errors'])
+        self.assertEqual(
+            set(Grille.objects.values_list('annee_academique', flat=True)),
+            {'2024-2025', '2025-2026'})
+
 
 class GrilleSessionDetailTests(TestCase):
     """Onglet « Grilles » du détail de session (sessions/4/)."""

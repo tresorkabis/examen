@@ -129,6 +129,21 @@ class ExcelImportForm(forms.Form):
         help_text="Session dans laquelle la grille sera consultable.",
         widget=forms.Select(attrs={'class': 'form-select'})
     )
+    # Année académique : elle est normalement lue dans le titre du fichier
+    # (« GRILLE 2025 - 2026 »), mais un fichier d'une année antérieure
+    # (ex. grille L1 2024-2025 des actuels L2) peut ne pas la porter — ou la
+    # porter de façon ambiguë. La valeur saisie ici prime alors sur la
+    # détection automatique.
+    annee_academique = forms.CharField(
+        max_length=20,
+        required=False,
+        label="Année académique (grilles)",
+        help_text="Ex. « 2024-2025 ». Vide : l'année est lue dans le titre du fichier.",
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '2024-2025',
+        })
+    )
 
     def clean_fichier_excel(self):
         f = self.cleaned_data.get('fichier_excel')
