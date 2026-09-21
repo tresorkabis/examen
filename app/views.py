@@ -494,12 +494,26 @@ class PromotionDetailView(DetailView):
                        .order_by('noms'))
         nb_noted = Inscription.objects.filter(
             etudiant__promotion=promotion).count()
+
+        # --- Grilles de délibération de la promotion : une par année. C'est
+        # ici qu'on les consulte (aperçu plein écran) et qu'on les importe ou
+        # les retire, sans dépendre d'une session (le rattachement à une
+        # session est facultatif à l'import).
+        grilles = list(Grille.objects
+                       .filter(promotion=promotion)
+                       .select_related('session')
+                       .annotate(nb_ue=Count('ues', distinct=True),
+                                 nb_etudiants=Count('lignes', distinct=True))
+                       .order_by('-annee_academique', '-importe_le'))
+
         ctx.update({
             'cours': cours,
             'etudiants': etudiants,
             'nb_avec_antecedents': nb_avec_antecedents,
             'enseignants': enseignants,
             'nb_inscriptions': nb_noted,
+            'grilles': grilles,
+            'nb_grilles': len(grilles),
         })
         return ctx
 
@@ -929,6 +943,44 @@ def session_grille_retirer(request, pk, grille_pk):
         f"La grille de {promotion_nom} a été retirée de la session "
         f"« {session.nom} ».")
     return redirect('session_detail', pk=pk)
+
+
+@login_required
+def promotion_grille_apercu(request, pk, grille_pk):
+    """Aperçu plein écran d'une grille, depuis la fiche de la promotion.
+
+    Même gabarit autonome que l'aperçu d'une session (pas de sidebar), mais
+    l'accès passe par la promotion : une grille peut exister sans être
+    rattachée à une session (le lien de session est facultatif à l'import).
+    """
+    promotion = get_object_or_404(Promotion, pk=pk)
+    grille = get_object_or_404(
+        Grille.objects.select_related('promotion', 'session'),
+        pk=grille_pk, promotion=promotion)
+    return render(request, 'app/grille_apercu.html', {
+        'session': grille.session,
+        'promotion': promotion,
+        **_donnees_grille(grille),
+    })
+
+
+@login_required
+def promotion_grille_retirer(request, pk, grille_pk):
+    """Retire (supprime) une grille depuis la fiche de la promotion.
+
+    Suppression en cascade vers les UE, les lignes étudiants et les notes.
+    Le GET est refusé, comme pour le retrait depuis une session : retirer une
+    grille délibérée doit rester un geste explicite.
+    """
+    promotion = get_object_or_404(Promotion, pk=pk)
+    grille = get_object_or_404(Grille, pk=grille_pk, promotion=promotion)
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    annee = grille.annee_academique
+    grille.delete()
+    messages.success(
+        request, f'La grille {annee} de {promotion.nom} a été retirée.')
+    return redirect('promotion_detail', pk=pk)
 
 
 class SessionCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):

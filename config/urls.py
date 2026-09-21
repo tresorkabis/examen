@@ -6,6 +6,7 @@ from app.views import (
     dashboard, import_excel_view,
     EtudiantListView, EtudiantDetailView, EtudiantCreateView, EtudiantUpdateView, EtudiantDeleteView,
     PromotionListView, PromotionCreateView, PromotionDetailView, PromotionUpdateView, PromotionDeleteView, promotion_bulk_delete,
+    promotion_grille_apercu, promotion_grille_retirer,
     EnseignantListView, EnseignantDetailView, EnseignantCreateView, EnseignantUpdateView, EnseignantDeleteView,
     SessionListView, SessionDetailView, SessionCreateView, SessionUpdateView, SessionDeleteView,
     session_participants_pdf, session_grille_apercu, session_grille_retirer,
@@ -37,6 +38,8 @@ urlpatterns = [
     path('promotions/add/', PromotionCreateView.as_view(), name='promotion_create'),
     path('promotions/bulk-delete/', promotion_bulk_delete, name='promotion_bulk_delete'),
     path('promotions/<int:pk>/', PromotionDetailView.as_view(), name='promotion_detail'),
+    path('promotions/<int:pk>/grilles/<int:grille_pk>/', promotion_grille_apercu, name='promotion_grille_apercu'),
+    path('promotions/<int:pk>/grilles/<int:grille_pk>/retirer/', promotion_grille_retirer, name='promotion_grille_retirer'),
     path('promotions/<int:pk>/edit/', PromotionUpdateView.as_view(), name='promotion_update'),
     path('promotions/<int:pk>/delete/', PromotionDeleteView.as_view(), name='promotion_delete'),
 

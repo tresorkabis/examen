@@ -222,6 +222,79 @@
         </div>
     </div>
 
+    {# =================================================================== #}
+    {# GRILLES DE DÉLIBÉRATION : une par année académique. L'aperçu s'ouvre #}
+    {# dans une page autonome (sans sidebar) ; l'import et le retrait se     #}
+    {# font ici, sans dépendre d'une session.                               #}
+    {# =================================================================== #}
+    <div class="card shadow-sm mt-3 no-print">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span class="fw-semibold">
+                <i class="bi bi-table me-1"></i>Grilles de délibération ({{ nb_grilles }})
+            </span>
+            <a href="{% url 'import_excel' %}?type=grilles&amp;promotion={{ promotion.pk }}" class="btn btn-sm btn-primary">
+                <i class="bi bi-upload me-1"></i>Importer une grille
+            </a>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Année</th>
+                            <th>Session</th>
+                            <th class="text-center">UE</th>
+                            <th class="text-center">Étudiants</th>
+                            <th class="text-center">Crédits</th>
+                            <th>Fichier source</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for grille in grilles %}
+                        <tr>
+                            <td class="fw-semibold">{{ grille.annee_academique|default:"—" }}</td>
+                            <td>
+                                {% if grille.session %}
+                                <a href="{% url 'session_detail' grille.session.pk %}" class="text-decoration-none">{{ grille.session.nom }}</a>
+                                {% else %}<span class="text-muted">—</span>{% endif %}
+                            </td>
+                            <td class="text-center"><span class="badge text-bg-secondary">{{ grille.nb_ue }}</span></td>
+                            <td class="text-center"><span class="badge text-bg-secondary">{{ grille.nb_etudiants }}</span></td>
+                            <td class="text-center">{{ grille.total_credits }} <span class="text-muted small">(barème {{ grille.bareme }})</span></td>
+                            <td class="small text-muted">{{ grille.fichier_source|default:"—" }}</td>
+                            <td class="text-end">
+                                <div class="d-flex gap-1 justify-content-end">
+                                    <a href="{% url 'promotion_grille_apercu' promotion.pk grille.pk %}" class="btn btn-sm btn-outline-primary" title="Aperçu plein écran de la grille">
+                                        <i class="bi bi-eye me-1"></i>Aperçu
+                                    </a>
+                                    <a href="{% url 'import_excel' %}?type=grilles&amp;promotion={{ promotion.pk }}{% if grille.session %}&amp;session={{ grille.session.pk }}{% endif %}" class="btn btn-sm btn-outline-secondary" title="Ré-importer le fichier (remplace la grille)">
+                                        <i class="bi bi-upload me-1"></i>Importer
+                                    </a>
+                                    <form method="post" action="{% url 'promotion_grille_retirer' promotion.pk grille.pk %}" class="d-inline"
+                                          onsubmit="return confirm('Retirer la grille {{ grille.annee_academique }} de {{ promotion.nom }} ? Les UE, étudiants et notes seront supprimés.');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Retirer la grille">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">
+                                Aucune grille importée pour cette promotion.
+                                <div class="small mt-1">Le bouton « Importer une grille » ouvre l'import pré-rempli pour cette promotion.</div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <div class="card shadow-sm mt-3 no-print">
         <div class="card-header fw-semibold"><i class="bi bi-person-badge me-1"></i>Enseignants intervenant dans cette promotion ({{ enseignants|length }})</div>
         <div class="card-body p-0" style="max-height: 320px; overflow-y: auto;">

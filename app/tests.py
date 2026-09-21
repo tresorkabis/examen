@@ -2510,3 +2510,94 @@ class PromouvoirEtudiantsCommandTests(TestCase):
         with self.assertRaises(CommandError):
             self._passer(cible='L2 INEXISTANTE')
 
+
+
+class GrillesPromotionTests(TestCase):
+    """Affichage des grilles de délibération dans la fiche d'une promotion."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            'resp_grilles', password='pass12345')
+        self.promotion = Promotion.objects.create(nom='L1 INFO A')
+        self.etudiant = Etudiant.objects.create(
+            noms='KATANGA TSHIKUNGA FISTON', numero_etudiant='L1INFOA-001',
+            promotion=self.promotion)
+
+    def _grille(self, session=None, annee='2025-2026'):
+        grille = Grille.objects.create(
+            promotion=self.promotion, session=session,
+            annee_academique=annee, total_credits=13,
+            fichier_source='L1 INFO LMD A_2025_2026.xlsx')
+        ue = GrilleUE.objects.create(
+            grille=grille, intitule='Informatique Générale', credits=4,
+            semestre=1, groupe='IBA', ordre=1)
+        ligne = GrilleEtudiant.objects.create(
+            grille=grille, etudiant=self.etudiant, rang=1, credits_total=12,
+            moyenne='13.31', decision='V')
+        GrilleNote.objects.create(ligne=ligne, ue=ue, note='12')
+        return grille
+
+    def test_fiche_promotion_liste_les_grilles(self):
+        """La fiche promotion expose ses grilles : année, UE, étudiants."""
+        self._grille()
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('promotion_detail', args=[self.promotion.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse.context['nb_grilles'], 1)
+
+        grille = reponse.context['grilles'][0]
+        self.assertEqual(grille.nb_ue, 1)
+        self.assertEqual(grille.nb_etudiants, 1)
+        self.assertEqual(grille.total_credits, 13)
+        contenu = reponse.content.decode()
+        self.assertIn('Grilles de délibération', contenu)
+        self.assertIn('2025-2026', contenu)
+
+    def test_apercu_d_une_grille_sans_session(self):
+        """L'aperçu s'ouvre depuis la promotion, même sans session liée."""
+        grille = self._grille(session=None)
+        self.client.force_login(self.user)
+        reponse = self.client.get(reverse(
+            'promotion_grille_apercu',
+            args=[self.promotion.pk, grille.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        contenu = reponse.content.decode()
+        self.assertIn('KATANGA', contenu)
+        self.assertIn('Retour promotion', contenu)
+        # Notes sans décimale superflue, comme l'aperçu de session.
+        self.assertRegex(contenu, r'>\s*12\s*<')
+        self.assertNotIn('12,00', contenu)
+
+    def test_apercu_refuse_la_grille_d_une_autre_promotion(self):
+        """L'URL d'une promotion ne donne pas accès à la grille d'une autre."""
+        autre = Promotion.objects.create(nom='L3 INFO A')
+        grille = self._grille()
+        self.client.force_login(self.user)
+        reponse = self.client.get(reverse(
+            'promotion_grille_apercu', args=[autre.pk, grille.pk]))
+        self.assertEqual(reponse.status_code, 404)
+
+    def test_retirer_une_grille_depuis_la_promotion(self):
+        """Le bouton Retirer (POST) supprime la grille et ses données."""
+        grille = self._grille()
+        self.client.force_login(self.user)
+        reponse = self.client.post(reverse(
+            'promotion_grille_retirer', args=[self.promotion.pk, grille.pk]))
+        self.assertRedirects(
+            reponse, reverse('promotion_detail', args=[self.promotion.pk]),
+            fetch_redirect_response=False)
+        self.assertFalse(Grille.objects.filter(pk=grille.pk).exists())
+        self.assertEqual(GrilleUE.objects.count(), 0)
+        self.assertEqual(GrilleEtudiant.objects.count(), 0)
+        self.assertEqual(GrilleNote.objects.count(), 0)
+
+    def test_retirer_une_grille_refuse_le_get(self):
+        """Retirer est un geste explicite : le GET ne supprime rien."""
+        grille = self._grille()
+        self.client.force_login(self.user)
+        reponse = self.client.get(reverse(
+            'promotion_grille_retirer', args=[self.promotion.pk, grille.pk]))
+        self.assertEqual(reponse.status_code, 405)
+        self.assertTrue(Grille.objects.filter(pk=grille.pk).exists())
+
