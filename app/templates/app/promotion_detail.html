@@ -120,7 +120,14 @@
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="card shadow-sm h-100">
-                <div class="card-header fw-semibold no-print"><i class="bi bi-people me-1"></i>Étudiants ({{ etudiants|length }})</div>
+                <div class="card-header fw-semibold no-print d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-people me-1"></i>Étudiants ({{ etudiants|length }})</span>
+                    {% if nb_avec_antecedents %}
+                    <span class="badge text-bg-light border" title="Étudiants dont les années antérieures sont connues">
+                        <i class="bi bi-clock-history me-1"></i>{{ nb_avec_antecedents }} avec antécédents
+                    </span>
+                    {% endif %}
+                </div>
                 <div class="card-body p-0" style="max-height: 480px; overflow-y: auto;">
                     <div class="list-group list-group-flush students-list-screen">
                         {% for e in etudiants %}
@@ -128,6 +135,21 @@
                                 <div>
                                     <span class="fw-semibold">{{ e.noms }}</span>
                                     <div class="small text-muted">{{ e.email }}</div>
+                                    {# Antécédents : années antérieures suivies par l'étudiant. #}
+                                    {% for ant in e.antecedents %}
+                                    <div class="small mt-1">
+                                        <i class="bi bi-clock-history text-secondary me-1"></i>
+                                        <span class="badge text-bg-light border">{{ ant.etape.promotion.nom }}</span>
+                                        <span class="badge text-bg-light border">{{ ant.etape.annee_academique|default:"année inconnue" }}</span>
+                                        {% if ant.ligne %}
+                                        <span class="badge {% if ant.ligne.decision == 'V' %}text-bg-success{% elif ant.ligne.decision == 'VC' %}text-bg-warning text-dark{% elif ant.ligne.decision %}text-bg-danger{% else %}text-bg-light border{% endif %}">{{ ant.ligne.decision|default:"—" }}</span>
+                                        <span class="text-muted">{{ ant.ligne.moyenne_affichee|default:"—" }}/20</span>
+                                        <span class="text-muted">· {{ ant.ligne.credits_total }}/{{ ant.ligne.grille.total_credits }} cr.</span>
+                                        {% else %}
+                                        <span class="text-muted fst-italic">résultats non importés</span>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
                                 </div>
                                 <span class="badge text-bg-light font-monospace">{{ e.numero_etudiant }}</span>
                             </a>

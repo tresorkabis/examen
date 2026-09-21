@@ -20,7 +20,7 @@ from .excel_import import _alerte_decisions
 
 from .models import (Promotion, Enseignant, Etudiant, Cours, Session,
                      Examen, Inscription, Grille, GrilleUE, GrilleEtudiant,
-                     GrilleNote)
+                     GrilleNote, HistoriquePromotion)
 from .forms import ExamenForm
 
 
@@ -2265,4 +2265,248 @@ class GrilleSessionDetailTests(TestCase):
                     args=[self.session.pk, grille.pk]))
         self.assertEqual(reponse.status_code, 405)
         self.assertTrue(Grille.objects.filter(pk=grille.pk).exists())
+
+
+class ParcoursAcademiqueTests(TestCase):
+    """Historique des années antérieures des étudiants de L2 et de L3.
+
+    Un étudiant garde une seule fiche : son passage de promotion successif
+    (L1 → L2 → L3) est conservé dans `HistoriquePromotion`, année par année.
+    L'import d'une grille renseigne l'étape correspondante, ce qui donne aux
+    promotions de L2 et de L3 l'historique de leurs étudiants.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            'resp_parcours', password='pass12345')
+        self.promotion_l1 = Promotion.objects.create(nom='L1 INFO A')
+        self.promotion_l2 = Promotion.objects.create(nom='L2 SCF LMD')
+        self.session = Session.objects.create(
+            nom='Rattrapage SEMESTRE 2 2025 - 2026', semestre=2,
+            type_session='rattrapage',
+            date_debut=date(2026, 6, 1), date_fin=date(2026, 6, 30))
+        self.etudiant = Etudiant.objects.create(
+            noms='KATANGA TSHIKUNGA FISTON', numero_etudiant='L1INFOA-001',
+            promotion=self.promotion_l1)
+
+    def _fichier_grille(self):
+        """Classeur de grille (layout réel, une UE validée et une échouée)."""
+        feuille = LireGrilleFeuilleTests._feuille_synthese_sur_ligne_ue()
+        tampon = BytesIO()
+        feuille.parent.save(tampon)
+        tampon.seek(0)
+        tampon.name = 'L1 INFO LMD A_2025_2026.xlsx'
+        return tampon
+
+    def _importer(self, promotion=None):
+        from app.excel_import import import_grille_excel
+
+        resultat = import_grille_excel(
+            self._fichier_grille(), promotion or self.promotion_l1,
+            self.session)
+        self.assertTrue(resultat['success'], resultat['errors'])
+        return resultat
+
+    def _passer_en_l2(self):
+        """Déplace l'étudiant en L2 (même fiche) et retourne l'instance à jour."""
+        etudiant = Etudiant.objects.get(pk=self.etudiant.pk)
+        etudiant.promotion = self.promotion_l2
+        etudiant.save()
+        return Etudiant.objects.get(pk=self.etudiant.pk)
+
+    def test_import_grille_renseigne_l_etape_de_parcours(self):
+        """L'import d'une grille date l'étape : promotion, année et grille."""
+        resultat = self._importer()
+
+        etape = HistoriquePromotion.objects.get(
+            etudiant=self.etudiant, promotion=self.promotion_l1)
+        self.assertEqual(etape.annee_academique, '2025-2026')
+        self.assertEqual(etape.grille_id, resultat['grille'].pk)
+
+    def test_re_import_ne_duplique_pas_l_etape(self):
+        """Ré-importer la même grille ne crée pas une seconde étape."""
+        self._importer()
+        self._importer()
+
+        self.assertEqual(
+            HistoriquePromotion.objects.filter(
+                etudiant=self.etudiant,
+                promotion=self.promotion_l1).count(), 1)
+
+    def test_etape_sans_annee_est_completee_par_l_import(self):
+        """Une étape créée sans année (changement de promotion) est datée."""
+        HistoriquePromotion.objects.create(
+            etudiant=self.etudiant, promotion=self.promotion_l1)
+
+        self._importer()
+
+        etapes = HistoriquePromotion.objects.filter(
+            etudiant=self.etudiant, promotion=self.promotion_l1)
+        self.assertEqual(etapes.count(), 1)
+        self.assertEqual(etapes.get().annee_academique, '2025-2026')
+
+    def test_changement_de_promotion_cloture_et_ouvre_les_etapes(self):
+        """Passer en L2 clôture l'étape L1 et ouvre celle de L2."""
+        self._importer()
+        etudiant = self._passer_en_l2()
+
+        etape_l1 = HistoriquePromotion.objects.get(
+            etudiant=etudiant, promotion=self.promotion_l1)
+        etape_l2 = HistoriquePromotion.objects.get(
+            etudiant=etudiant, promotion=self.promotion_l2)
+        self.assertIsNotNone(etape_l1.date_fin)
+        self.assertIsNone(etape_l2.date_fin)
+
+    def test_fiche_etudiant_expose_le_parcours(self):
+        """La fiche de l'étudiant en L2 liste ses deux années."""
+        self._importer()
+        self._passer_en_l2()
+
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('etudiant_detail', args=[self.etudiant.pk]))
+        self.assertEqual(reponse.status_code, 200)
+
+        parcours = reponse.context['parcours']
+        self.assertEqual(len(parcours), 2)
+        self.assertEqual({item['etape'].promotion_id for item in parcours},
+                         {self.promotion_l1.pk, self.promotion_l2.pk})
+        # L'année de L1 conserve ses résultats délibérés.
+        item_l1 = next(item for item in parcours
+                       if item['etape'].promotion_id == self.promotion_l1.pk)
+        self.assertIsNotNone(item_l1['ligne'])
+        self.assertEqual(item_l1['ligne'].decision, 'V')
+        self.assertIn('Parcours académique', reponse.content.decode())
+
+    def test_promotion_l2_affiche_les_antecedents(self):
+        """Chaque étudiant de L2 porte l'historique de son année de L1."""
+        self._importer()
+        self._passer_en_l2()
+
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('promotion_detail', args=[self.promotion_l2.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse.context['nb_avec_antecedents'], 1)
+
+        etudiant = reponse.context['etudiants'][0]
+        self.assertEqual(len(etudiant.antecedents), 1)
+        antecedent = etudiant.antecedents[0]
+        self.assertEqual(antecedent['etape'].promotion, self.promotion_l1)
+        self.assertEqual(antecedent['etape'].annee_academique, '2025-2026')
+        self.assertEqual(antecedent['ligne'].decision, 'V')
+
+    def test_promotion_sans_annee_anterieure_n_affiche_rien(self):
+        """Une promotion de première année n'affiche aucun antécédent."""
+        self._importer()
+
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('promotion_detail', args=[self.promotion_l1.pk]))
+        self.assertEqual(reponse.context['nb_avec_antecedents'], 0)
+        self.assertEqual(reponse.context['etudiants'][0].antecedents, [])
+
+
+class PromouvoirEtudiantsCommandTests(TestCase):
+    """Commande `promouvoir_etudiants` : passage L1 → L2 avec historique.
+
+    Le passage se fait sur la **même fiche** (l'année quittée reste dans le
+    parcours) et fusionne la fiche déjà présente dans la promotion d'arrivée,
+    pour que l'étudiant de L2 conserve l'année antérieure.
+    """
+
+    def setUp(self):
+        self.promotion_l1 = Promotion.objects.create(nom='L1 INFO A')
+        self.promotion_l2 = Promotion.objects.create(nom='L2 SCF LMD')
+        self.session = Session.objects.create(
+            nom='Rattrapage SEMESTRE 2 2025 - 2026', semestre=2,
+            type_session='rattrapage',
+            date_debut=date(2026, 6, 1), date_fin=date(2026, 6, 30))
+        self.etudiant = Etudiant.objects.create(
+            noms='KATANGA TSHIKUNGA FISTON', numero_etudiant='L1INFOA-001',
+            promotion=self.promotion_l1)
+
+    def _grille(self, promotion, etudiant, annee):
+        """Grille minimale avec une UE et la ligne de l'étudiant."""
+        grille = Grille.objects.create(
+            promotion=promotion, session=self.session,
+            annee_academique=annee, total_credits=13)
+        ue = GrilleUE.objects.create(
+            grille=grille, intitule='Informatique Générale', credits=4,
+            semestre=1, groupe='IBA', ordre=1)
+        ligne = GrilleEtudiant.objects.create(
+            grille=grille, etudiant=etudiant, rang=1, credits_total=12,
+            moyenne='13.31', decision='V')
+        GrilleNote.objects.create(ligne=ligne, ue=ue, note='12')
+        return grille
+
+    def _passer(self, **kwargs):
+        options = {'source': self.promotion_l1.nom,
+                   'cible': self.promotion_l2.nom, 'annee': '2024-2025',
+                   'annee_cible': '2025-2026'}
+        options.update(kwargs)
+        call_command('promouvoir_etudiants', **options)
+
+    def test_passage_date_l_annee_quittee_et_ouvre_la_nouvelle(self):
+        """Sans doublon : la fiche change de promotion, l'année est datée."""
+        self._passer()
+
+        etudiant = Etudiant.objects.get(pk=self.etudiant.pk)
+        self.assertEqual(etudiant.promotion, self.promotion_l2)
+
+        etape_l1 = HistoriquePromotion.objects.get(
+            etudiant=etudiant, promotion=self.promotion_l1)
+        etape_l2 = HistoriquePromotion.objects.get(
+            etudiant=etudiant, promotion=self.promotion_l2)
+        self.assertEqual(etape_l1.annee_academique, '2024-2025')
+        self.assertIsNotNone(etape_l1.date_fin)
+        self.assertEqual(etape_l2.annee_academique, '2025-2026')
+        self.assertIsNone(etape_l2.date_fin)
+
+    def test_passage_fusionne_la_fiche_presente_dans_la_promotion_cible(self):
+        """La fiche en doublon est fusionnée : une seule fiche, deux années."""
+        self._grille(self.promotion_l1, self.etudiant, '2024-2025')
+
+        cours_l2 = Cours.objects.create(
+            nom='Gestion financière', coefficient=4, promotion=self.promotion_l2)
+        examen = Examen.objects.create(
+            cours=cours_l2, session=self.session, date_examen=timezone.now(),
+            salle='Local 1')
+        doublon = Etudiant.objects.create(
+            noms='KATANGA TSHIKUNGA FISTON', numero_etudiant='L2SCFLMD-001',
+            promotion=self.promotion_l2)
+        Inscription.objects.create(etudiant=doublon, examen=examen,
+                                   note_examen=Decimal('8'))
+        self._grille(self.promotion_l2, doublon, '2025-2026')
+
+        self._passer()
+
+        # Une seule fiche, promue en L2, portant les deux années.
+        self.assertEqual(Etudiant.objects.count(), 1)
+        etudiant = Etudiant.objects.get()
+        self.assertEqual(etudiant.pk, self.etudiant.pk)
+        self.assertEqual(etudiant.promotion, self.promotion_l2)
+        self.assertEqual(etudiant.grille_lignes.count(), 2)
+        self.assertEqual(etudiant.inscriptions.count(), 1)
+        annees = set(HistoriquePromotion.objects
+                     .filter(etudiant=etudiant)
+                     .values_list('promotion__nom', 'annee_academique'))
+        self.assertIn(('L1 INFO A', '2024-2025'), annees)
+        self.assertIn(('L2 SCF LMD', '2025-2026'), annees)
+
+    def test_dry_run_ne_modifie_rien(self):
+        """La simulation laisse la base intacte."""
+        self._passer(dry_run=True)
+
+        etudiant = Etudiant.objects.get(pk=self.etudiant.pk)
+        self.assertEqual(etudiant.promotion, self.promotion_l1)
+        self.assertFalse(
+            HistoriquePromotion.objects.filter(etudiant=etudiant).exists())
+
+    def test_promotions_de_depart_et_arrivee_doivent_exister(self):
+        """Un nom de promotion inexistant arrête la commande."""
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            self._passer(cible='L2 INEXISTANTE')
 

@@ -6,7 +6,8 @@ import openpyxl
 import pandas as pd
 from django.db import transaction
 from app.models import (Etudiant, Enseignant, Cours, Promotion,
-                        Grille, GrilleUE, GrilleEtudiant, GrilleNote)
+                        Grille, GrilleUE, GrilleEtudiant, GrilleNote,
+                        HistoriquePromotion)
 
 PROMOTION_ALIASES = {
     'L3 INFO': 'L3 INFO A',
@@ -1063,6 +1064,11 @@ def import_grille_excel(file_obj, promotion, session=None,
                 moyenne=ligne['moyenne'], pourcentage=ligne['pourcentage'],
                 decision=ligne['decision'][:2], mention=ligne['mention'][:20],
             )
+            # Étape de parcours : l'étudiant a fréquenté cette promotion cette
+            # année-là. C'est ce qui constitue, pour un étudiant de L2 ou de
+            # L3, l'historique de ses années antérieures — renseigné à chaque
+            # import de grille, jamais saisi à la main.
+            HistoriquePromotion.enregistrer(etudiant, promotion, annee, grille)
             for colonne, note in ligne['notes'].items():
                 notes.append(GrilleNote(ligne=ligne_grille,
                                         ue=ue_par_colonne[colonne], note=note))

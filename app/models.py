@@ -37,16 +37,82 @@ class Promotion(models.Model):
 
 
 class HistoriquePromotion(models.Model):
-    etudiant = models.ForeignKey('Etudiant', on_delete=models.CASCADE, related_name='historique_promotions')
+    """Étape du parcours d'un étudiant : une promotion fréquentée une année.
+
+    Un étudiant ne garde qu'**une seule fiche** (`Etudiant.promotion` = sa
+    promotion actuelle) ; son parcours est conservé ici, année par année.
+    L'import d'une grille de délibération renseigne l'étape correspondante :
+    c'est ce qui donne aux étudiants de L2 et de L3 l'historique de leurs
+    années antérieures (promotion, année, décision, moyenne), sans saisie
+    manuelle.
+    """
+
+    etudiant = models.ForeignKey(
+        'Etudiant', on_delete=models.CASCADE,
+        related_name='historique_promotions')
     promotion = models.ForeignKey(Promotion, on_delete=models.CASCADE)
+    annee_academique = models.CharField(
+        max_length=20, blank=True, default='',
+        help_text="Année de l'étape, ex. « 2024-2025 ».")
+    # Grille de l'année : `SET_NULL`, car l'étape du parcours doit survivre à
+    # la suppression de la grille — l'étudiant a bien fréquenté la promotion,
+    # même si la pièce délibérée n'est plus archivée.
+    grille = models.ForeignKey(
+        'Grille', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='parcours')
     date_debut = models.DateField(auto_now_add=True)
     date_fin = models.DateField(null=True, blank=True)
 
+    @classmethod
+    def enregistrer(cls, etudiant, promotion, annee='', grille=None):
+        """Renseigne — ou crée — l'étape de parcours d'un étudiant.
+
+        Une entrée existante pour ce couple (étudiant, promotion) est
+        complétée plutôt que dupliquée : une étape à année vide (créée par
+        `Etudiant.save` lors d'un changement de promotion) reçoit l'année et
+        la grille de l'import. L'opération est donc idempotente.
+
+        Retourne ``(etape, cree)``.
+        """
+        etape = (cls.objects
+                 .filter(etudiant=etudiant, promotion=promotion)
+                 .filter(models.Q(annee_academique=annee)
+                         | models.Q(annee_academique=''))
+                 .first())
+        if etape is None:
+            return cls.objects.create(
+                etudiant=etudiant, promotion=promotion,
+                annee_academique=annee, grille=grille), True
+
+        champs = []
+        if annee and etape.annee_academique != annee:
+            etape.annee_academique = annee
+            champs.append('annee_academique')
+        if grille is not None and etape.grille_id != grille.pk:
+            etape.grille = grille
+            champs.append('grille')
+        if champs:
+            etape.save(update_fields=champs)
+        return etape, False
+
     class Meta:
-        ordering = ['-date_debut']
+        # Tri décroissant : l'année la plus récente d'abord (les années
+        # académiques sont au format « AAAA-AAAA », donc triables telles
+        # quelles). Champs locaux uniquement — pas de FK jointe.
+        ordering = ['-annee_academique', '-date_debut']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['etudiant', 'promotion', 'annee_academique'],
+                name='unique_parcours_etudiant_promotion_annee',
+                violation_error_message=(
+                    'Cette étape de parcours existe déjà pour cet étudiant.'
+                ),
+            ),
+        ]
 
     def __str__(self):
-        return f"{self.etudiant} - {self.promotion} ({self.date_debut})"
+        annee = f' ({self.annee_academique})' if self.annee_academique else ''
+        return f'{self.etudiant} - {self.promotion}{annee}'
 
 
 class Enseignant(models.Model):
@@ -86,20 +152,27 @@ class Etudiant(models.Model):
         return ''
 
     def save(self, *args, **kwargs):
-        if not self.pk:
-            # Création initiale : on enregistre la promotion actuelle dans l'historique
-            pass
-        elif self.pk:
-            # Mise à jour : on vérifie si la promotion a changé
-            old_promotion = Etudiant.objects.get(pk=self.pk).promotion
-            if old_promotion != self.promotion:
+        if self.pk:
+            # Mise à jour : on vérifie si la promotion a changé. Une promotion
+            # différente = une étape de parcours qui se clôture et une autre
+            # qui s'ouvre : c'est ce qui donne aux étudiants de L2 et de L3
+            # l'historique de leurs années antérieures.
+            ancienne_promotion = Etudiant.objects.get(pk=self.pk).promotion
+            if ancienne_promotion != self.promotion:
                 from django.utils import timezone
-                # Clôturer l'ancienne promotion
+                # Clôturer l'étape de l'ancienne promotion
                 HistoriquePromotion.objects.filter(
-                    etudiant=self, promotion=old_promotion, date_fin__isnull=True
+                    etudiant=self, promotion=ancienne_promotion,
+                    date_fin__isnull=True
                 ).update(date_fin=timezone.now().date())
-                # Créer l'entrée pour la nouvelle promotion
-                HistoriquePromotion.objects.create(etudiant=self, promotion=self.promotion)
+                # Ouvrir l'étape de la nouvelle promotion (réutilisée si elle
+                # existe déjà — l'unicité (étudiant, promotion, année) interdit
+                # tout doublon).
+                etape, _ = HistoriquePromotion.enregistrer(
+                    self, self.promotion)
+                if etape.date_fin is not None:
+                    etape.date_fin = None
+                    etape.save(update_fields=['date_fin'])
 
         if not self.numero_etudiant:
             self.numero_etudiant = generate_numero_etudiant()

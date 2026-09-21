@@ -22,7 +22,8 @@ from django.views.generic import (ListView, CreateView, UpdateView, DeleteView,
 from .forms import (PromotionForm, EnseignantForm, EtudiantForm, CoursForm,
                     SessionForm, ExamenForm, ExcelImportForm)
 from .models import (Etudiant, Cours, Session, Enseignant, Promotion, Examen,
-                     Inscription, Grille, GrilleUE, GrilleEtudiant, GrilleNote)
+                     Inscription, Grille, GrilleUE, GrilleEtudiant, GrilleNote,
+                     HistoriquePromotion)
 from .excel_import import (import_etudiants_excel, import_enseignants_excel,
                           import_cours_excel, import_grille_excel)
 
@@ -389,10 +390,28 @@ class EtudiantDetailView(DetailView):
                 else:
                     nb_ues_non_notees += 1
 
+        # --- Parcours de l'étudiant : une étape par année fréquentée. C'est
+        # ici que les étudiants de L2 et de L3 retrouvent l'historique de
+        # leurs années antérieures (promotion, année, crédits, décision et
+        # moyenne délibérées), renseigné à l'import de chaque grille.
+        lignes_par_grille = {ligne.grille_id: ligne for ligne in grille_lignes}
+        parcours = [
+            {
+                'etape': etape,
+                'ligne': lignes_par_grille.get(etape.grille_id),
+                'est_courante': (etape.promotion_id == etudiant.promotion_id
+                                 and etape.date_fin is None),
+            }
+            for etape in (HistoriquePromotion.objects
+                          .filter(etudiant=etudiant)
+                          .select_related('promotion', 'grille'))
+        ]
+
         ctx.update({
             'inscriptions': inscriptions,
             'nb_examens': len(inscriptions),
             'moyenne_generale': moyenne,
+            'parcours': parcours,
             'grille_ligne': grille_ligne,
             'grille_lignes': grille_lignes,
             'grille_ues_notes': grille_ues_notes,
@@ -438,8 +457,33 @@ class PromotionDetailView(DetailView):
         cours = (promotion.cours
                  .select_related('enseignant')
                  .order_by('nom'))
-        etudiants = (promotion.etudiants
-                     .order_by('noms'))
+        etudiants = list(promotion.etudiants.order_by('noms'))
+
+        # --- Antécédents : étapes de parcours antérieures à cette promotion.
+        # Les promotions de L2 et de L3 affichent ainsi, pour chaque étudiant,
+        # les années déjà suivies (promotion, année, décision, moyenne) —
+        # l'étape est renseignée automatiquement à l'import de chaque grille.
+        etapes = list(HistoriquePromotion.objects
+                      .filter(etudiant__promotion=promotion)
+                      .exclude(promotion=promotion)
+                      .select_related('promotion', 'grille')
+                      .order_by('etudiant_id', '-annee_academique'))
+        ids_grilles = {etape.grille_id for etape in etapes if etape.grille_id}
+        lignes = {
+            (ligne.grille_id, ligne.etudiant_id): ligne
+            for ligne in GrilleEtudiant.objects.filter(
+                etudiant__promotion=promotion, grille_id__in=ids_grilles)
+        }
+        antecedents = {}
+        for etape in etapes:
+            antecedents.setdefault(etape.etudiant_id, []).append({
+                'etape': etape,
+                'ligne': lignes.get((etape.grille_id, etape.etudiant_id)),
+            })
+        for etudiant in etudiants:
+            etudiant.antecedents = antecedents.get(etudiant.pk, [])
+        nb_avec_antecedents = sum(1 for e in etudiants if e.antecedents)
+
         # Enseignants intervenant dans cette promotion : requête ORM triée,
         # avec le nombre de cours dispensés par chacun.
         enseignants = (Enseignant.objects
@@ -453,6 +497,7 @@ class PromotionDetailView(DetailView):
         ctx.update({
             'cours': cours,
             'etudiants': etudiants,
+            'nb_avec_antecedents': nb_avec_antecedents,
             'enseignants': enseignants,
             'nb_inscriptions': nb_noted,
         })
