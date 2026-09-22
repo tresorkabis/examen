@@ -13,11 +13,20 @@ dédié (l'interface l'affiche « Coefficient » / « Coef. »).
 Les UE de la grille absentes de l'application sont créées (sans enseignant,
 à compléter ensuite depuis l'interface).
 
+Deux sources de grille :
+- fichier de `data/` (défaut, ou `--grille NOM.xlsx`) ;
+- grille déjà importée en base (`--promotion NOM [--annee AAAA-AAAA]`) :
+  utile pour les grilles passées par l'interface web, absentes de `data/`.
+  Les UE de la grille sont ensuite reliées aux cours alignés (`GrilleUE.cours`),
+  ce qui complète les liens laissés vides par l'import.
+
 Idempotente : un second passage ne modifie plus rien.
 
 Usage :
     python manage.py aligner_cours_grille --dry-run   # simulation
     python manage.py aligner_cours_grille             # écriture en base
+    python manage.py aligner_cours_grille --promotion "L1 SCF LMD" \\
+        --annee 2025-2026 [--dry-run]
 """
 from pathlib import Path
 
@@ -25,7 +34,8 @@ import openpyxl
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from app.models import Cours, Promotion
+from app.models import Cours, Grille, Promotion
+from django.utils.text import slugify
 
 DATA_DIR = Path(__file__).resolve().parents[3] / 'data'
 ENTETE_UE = "UNITES D'ENSEIGNEMENT"
@@ -194,6 +204,48 @@ CONFIGS = {
         'L3 SD A', CORRESPONDANCES_L3_SD, CORRECTIONS_L3_SD),
 }
 
+# ------------------------------------------------------------------
+# Grilles lues depuis la BASE (mode `--promotion`) : pour les grilles
+# importées via l'interface web, absentes de `data/`.
+# ------------------------------------------------------------------
+
+# UE de la grille L1 SCF (intitulé exact) -> cours en base. `None` = à créer
+# ou déjà au nom exact de la grille. L'UE « Initiation à la Rech. Scientifique »
+# désigne le cours MRS (« Méthode de Recherche Scientifique ») : les deux fiches
+# ont été fusionnées (enseignant conservé), le cours porte désormais l'intitulé
+# de la grille.
+CORRESPONDANCES_L1_SCF = {
+    'Techniques de communication orale et écrite': 'TCOE',
+    'Anglais général': 'ANGLAIS',
+    'Initiation à la Rech. Scientifique': None,
+    'Bureautique': 'INFO ET BUREAUTIQUE',
+    'Informatique générale': None,
+    'Statistique descriptive': 'STATISTIQUE',
+    'Algèbre': 'MATH ALGEBRE',
+    'Analyse': 'MATH ANALYSE',
+    'Education à la citoyeneté': 'EDUCIT',
+    'Eléments de droit civil et constitutionnel': 'DROIT CIVIL',
+    'Comptabilité financière': 'COMPTABILITE FINANCIERE',
+    'Introduction au management': 'MANAGEMENT',
+    'Gestion marketing': 'GESTION MARKETING',
+    'Mathématique financière': 'MATH FINANCIERES',
+    'Documents commerciaux': 'DOCUMENTS COMMERCIAUX',
+    'Microéconomie': 'MICROECONOMIE',
+    'Macroéconomie': 'MACROECONOMIE',
+    'Pratique professionnelle': None,
+    "Stage d'observation": None,
+}
+
+# Fautes présentes dans la grille L1 SCF : le cours prend le libellé corrigé.
+CORRECTIONS_L1_SCF = {
+    'Education à la citoyeneté': 'Éducation à la citoyenneté',
+}
+
+# Promotion -> (correspondances, corrections) pour le mode base.
+CORRESPONDANCES_PAR_PROMOTION = {
+    'L1 SCF LMD': (CORRESPONDANCES_L1_SCF, CORRECTIONS_L1_SCF),
+}
+
 
 
 def _meme_en_tete(valeur):
@@ -259,11 +311,28 @@ class Command(BaseCommand):
         parser.add_argument(
             '--grille', default=None,
             help="Nom du fichier de grille à traiter (défaut : toutes)")
+        parser.add_argument(
+            '--promotion', default=None,
+            help=("Aligner depuis la grille la plus récente de cette "
+                  "promotion déjà importée en base (au lieu d'un fichier "
+                  "de data/)"))
+        parser.add_argument(
+            '--annee', default=None,
+            help="Année académique de la grille en base (défaut : la plus "
+                 "récente de la promotion)")
 
     @transaction.atomic
     def handle(self, *args, **options):
         dry_run = options['dry_run']
         selection = options.get('grille')
+        promotion_nom = options.get('promotion')
+
+        if promotion_nom:
+            self._aligner_depuis_base(promotion_nom, options.get('annee'),
+                                      dry_run)
+            if dry_run:
+                transaction.set_rollback(True)
+            return
 
         if dry_run:
             self.stdout.write(self.style.WARNING('MODE SIMULATION (--dry-run)'))
@@ -308,7 +377,84 @@ class Command(BaseCommand):
         ues = lire_grille(chemin)
         self.stdout.write(
             f'{chemin.name} → {promotion.nom} : {len(ues)} UE lues\n')
+        self._aligner_ues(promotion, ues, correspondances, corrections,
+                          dry_run, source=chemin.name)
+        return 1
 
+    def _aligner_depuis_base(self, promotion_nom, annee, dry_run):
+        """Aligne une promotion sur sa grille déjà importée en base."""
+        promotion = Promotion.objects.filter(nom=promotion_nom).first()
+        if promotion is None:
+            raise CommandError(
+                f"Promotion « {promotion_nom} » introuvable en base.")
+
+        grilles = Grille.objects.filter(promotion=promotion)
+        if annee:
+            grille = grilles.filter(annee_academique=annee).first()
+            if grille is None:
+                annees = ', '.join(
+                    g.annee_academique
+                    for g in grilles.order_by('annee_academique')) or 'aucune'
+                raise CommandError(
+                    f"Aucune grille {annee} pour {promotion.nom} "
+                    f"(années importées : {annes}).")
+        else:
+            grille = grilles.order_by('annee_academique').last()
+            if grille is None:
+                raise CommandError(
+                    f"Aucune grille importée en base pour {promotion.nom} : "
+                    "importez-la d'abord (interface web ou fichier data/).")
+
+        ues = [(ue.intitule, int(ue.credits))
+               for ue in grille.ues.order_by('ordre')]
+        correspondances, corrections = CORRESPONDANCES_PAR_PROMOTION.get(
+            promotion.nom, ({}, {}))
+        self.stdout.write(
+            f'{grille.intitule or "Grille"} ({promotion.nom}, '
+            f'{grille.annee_academique}) : {len(ues)} UE lues\n')
+
+        self._aligner_ues(promotion, ues, correspondances, corrections,
+                          dry_run, source=f'base pk={grille.pk}')
+        self._lier_ues(grille, promotion, correspondances, corrections,
+                       dry_run)
+
+    def _lier_ues(self, grille, promotion, correspondances, corrections,
+                  dry_run):
+        """Relie les UE de la grille aux cours alignés (GrilleUE.cours).
+
+        L'import web laisse souvent ce lien vide : une fois les cours
+        renommés, le rapprochement par slug (intitulé corrigé, sinon ancien
+        nom) devient possible.
+        """
+        cours_par_slug = {slugify(c.nom): c for c in promotion.cours.all()}
+        liees = 0
+        for ue in grille.ues.all():
+            cible = cours_par_slug.get(slugify(ue.intitule))
+            if cible is None:
+                # Nom abrégé d'origine (cours renommé depuis), puis intitulé
+                # corrigé (faute de frappe de la grille, cours au nom sain).
+                ancien = correspondances.get(ue.intitule)
+                if ancien:
+                    cible = cours_par_slug.get(slugify(ancien))
+                if cible is None:
+                    corrige = corrections.get(ue.intitule)
+                    if corrige:
+                        cible = cours_par_slug.get(slugify(corrige))
+            if cible is not None and ue.cours_id != cible.pk:
+                liees += 1
+                self.stdout.write(f'  🔗 UE « {ue.intitule} » → {cible.nom}')
+                if not dry_run:
+                    ue.cours = cible
+                    ue.save(update_fields=['cours'])
+        if liees:
+            self.stdout.write(self.style.SUCCESS(
+                f'{liees} UE liée(s) à leur cours.'))
+        else:
+            self.stdout.write('Toutes les UE étaient déjà liées.')
+
+    def _aligner_ues(self, promotion, ues, correspondances, corrections,
+                     dry_run, source):
+        """Cœur de l'alignement, commun aux modes fichier et base."""
         cours_par_nom = {c.nom: c for c in promotion.cours.all()}
         renommes = maj_credits = crees = alignes = 0
         traites = set()

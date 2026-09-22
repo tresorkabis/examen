@@ -839,6 +839,9 @@ def _annee_academique(intitule, defaut='2025-2026'):
     if len(annees) >= 2:
         return f'{annees[0]}-{annees[1]}'
     return defaut
+ETABLISSEMENT_DEFAUT = "ÉCOLE SUPÉRIEURE DE FORMATION DES CADRES"
+
+
 def lire_grille_feuille(feuille):
     """Décompose une grille : (en-tête, UE, lignes d'étudiants).
 
@@ -961,6 +964,11 @@ def lire_grille_feuille(feuille):
             intitule = valeur
         elif not etablissement:
             etablissement = valeur
+    # L'en-tête des relevés porte le nom officiel de l'école : l'acronyme du
+    # fichier (« ESFORCA/INPP ») est normalisé, et l'absence d'en-tête retombe
+    # sur le nom complet plutôt que sur une valeur vide.
+    if not etablissement or 'esforca' in slugify(etablissement):
+        etablissement = ETABLISSEMENT_DEFAUT
 
     entete = {
         'etablissement': etablissement[:100],

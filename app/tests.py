@@ -2083,6 +2083,26 @@ class LireGrilleFeuilleTests(TestCase):
         self.assertEqual(ligne['total_pondere'], 173)
         self.assertEqual(ligne['decision'], 'V')
 
+    def test_etablissement_des_releves_est_le_nom_officiel(self):
+        """L'en-tête des relevés porte le nom officiel de l'école.
+
+        Un fichier sans établissement retombe sur le nom complet, et
+        l'acronyme « ESFORCA/INPP » des grilles réelles est normalisé.
+        """
+        from app.excel_import import ETABLISSEMENT_DEFAUT, lire_grille_feuille
+
+        # Aucun en-tête d'établissement dans le fichier.
+        entete, _, _ = lire_grille_feuille(
+            self._feuille_synthese_sur_ligne_ue())
+        self.assertEqual(entete['etablissement'], ETABLISSEMENT_DEFAUT)
+
+        # L'acronyme du fichier réel est remplacé par le nom officiel.
+        feuille = self._feuille_synthese_sur_ligne_ue()
+        feuille.insert_rows(1)
+        feuille.cell(1, 1, 'ESFORCA/INPP')
+        entete, _, _ = lire_grille_feuille(feuille)
+        self.assertEqual(entete['etablissement'], ETABLISSEMENT_DEFAUT)
+
 
 class ImportGrilleRemplacementTests(TestCase):
     """Le bouton « Importer » d'une grille supprime les anciennes données.
