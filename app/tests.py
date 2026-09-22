@@ -2658,3 +2658,110 @@ class GrillesPromotionTests(TestCase):
         self.assertEqual(reponse.status_code, 405)
         self.assertTrue(Grille.objects.filter(pk=grille.pk).exists())
 
+class UesAReprendreTests(TestCase):
+    """Section consolidée « UE à reprendre » de la fiche étudiant.
+
+    L'agrégation couvre toutes les grilles fréquentées par l'étudiant :
+    promotion courante et années antérieures (HistoriquePromotion).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user('admin', password='pass12345')
+        cls.promo_l2 = Promotion.objects.create(nom='L2 SCF LMD')
+        cls.promo_l1 = Promotion.objects.create(nom='L1 SCF LMD')
+        cls.etudiant = Etudiant.objects.create(
+            noms='APOTA KISOKI COLLINS', numero_etudiant='L2SCFLMD-001',
+            promotion=cls.promo_l2)
+
+        cls.grille_l2 = Grille.objects.create(
+            promotion=cls.promo_l2, annee_academique='2025-2026',
+            total_credits=60)
+        cls.grille_l1 = Grille.objects.create(
+            promotion=cls.promo_l1, annee_academique='2024-2025',
+            total_credits=60)
+
+        # Le tri « plus récent d'abord » repose sur l'ordre des lignes
+        # construit par la vue : la grille courante (2025-2026) doit
+        # apparaître avant la grille antérieure (2024-2025).
+        cls.ligne_l2 = GrilleEtudiant.objects.create(
+            grille=cls.grille_l2, etudiant=cls.etudiant, rang=1)
+        cls.ligne_l1 = GrilleEtudiant.objects.create(
+            grille=cls.grille_l1, etudiant=cls.etudiant, rang=1)
+
+    def _ue(self, grille, intitule, credits, ordre, semestre=1):
+        return GrilleUE.objects.create(
+            grille=grille, intitule=intitule, credits=credits,
+            ordre=ordre, semestre=semestre)
+
+    def test_agregat_toutes_les_grilles_de_l_etudiant(self):
+        """Échecs dans 2 grilles → les deux promotions apparaissent."""
+        from app.views import _ues_a_reprendre
+
+        # Grille courante : 1 échec + 1 validée + 1 non notée
+        ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
+        ue_stat = self._ue(self.grille_l2, 'Statistique Inférentielle', 4, 2)
+        self._ue(self.grille_l2, 'Anglais', 2, 3)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=8)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_stat, note=14)
+        # ue 3 : pas de note → ignorée (on ne peut pas déclarer un
+        # échec sans note)
+
+        # Grille antérieure : 1 échec
+        ue_compta = self._ue(self.grille_l1, 'Comptabilité financière', 3, 1)
+        GrilleNote.objects.create(ligne=self.ligne_l1, ue=ue_compta, note=7)
+
+        resultat = _ues_a_reprendre([self.ligne_l2, self.ligne_l1])
+
+        self.assertEqual(len(resultat), 2)
+        self.assertEqual(resultat[0]['grille'], self.grille_l2)
+        self.assertEqual(resultat[1]['grille'], self.grille_l1)
+        self.assertEqual([n.ue.intitule for n in resultat[0]['ues']],
+                         ['Droit administratif'])
+        self.assertEqual([n.ue.intitule for n in resultat[1]['ues']],
+                         ['Comptabilité financière'])
+        self.assertEqual(resultat[0]['credits'], 3)
+        self.assertEqual(resultat[1]['credits'], 3)
+
+    def test_note_absente_et_ue_validee_ne_comptent_pas(self):
+        """Ni la note vide, ni l'UE validée ne sont « à reprendre »."""
+        from app.views import _ues_a_reprendre
+
+        ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
+        ue_stat = self._ue(self.grille_l2, 'Statistique Inférentielle', 4, 2)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=None)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_stat, note=10)
+
+        self.assertEqual(_ues_a_reprendre([self.ligne_l2]), [])
+
+    def test_section_visible_sur_la_fiche(self):
+        """La fiche affiche la section avec le compte et les crédits."""
+        ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
+        ue_stat = self._ue(self.grille_l2, 'Statistique Inférentielle', 4, 2)
+        ue_compta = self._ue(self.grille_l1, 'Comptabilité financière', 3, 1)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=8)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_stat, note=14)
+        GrilleNote.objects.create(ligne=self.ligne_l1, ue=ue_compta, note=7)
+
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('etudiant_detail', args=[self.etudiant.pk]))
+
+        self.assertContains(reponse, 'UE à reprendre (2)')
+        self.assertContains(reponse, 'Droit administratif')
+        self.assertContains(reponse, 'Comptabilité financière')
+        self.assertContains(reponse, 'L1 SCF LMD')
+        self.assertContains(reponse, '2024-2025')
+
+    def test_section_absente_sans_echec(self):
+        """Un étudiant qui a tout validé n'a pas la section."""
+        ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=12)
+
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('etudiant_detail', args=[self.etudiant.pk]))
+
+        self.assertNotContains(reponse, 'UE à reprendre')
+
+

@@ -310,6 +310,44 @@ class EtudiantDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     success_message = "L'étudiant « %(object)s » a été supprimé."
 
 
+def _ues_a_reprendre(grille_lignes):
+    """UE non validées (note < 10) dans toutes les grilles de l'étudiant.
+
+    Une UE est « à reprendre » quand sa note existe mais passe sous le seuil
+    de validation (GrilleNote.est_validee — la règle même de la délibération).
+    `grille_lignes` porte toutes les grilles fréquentées par l'étudiant —
+    promotion courante comme années antérieures — l'agrégation couvre donc
+    toutes ses promotions. Une note absente (non saisie) n'est pas une UE à
+    reprendre : on ne peut pas déclarer un échec sans note.
+
+    Retourne une liste triée de la grille la plus récente à la plus ancienne
+    : {'grille', 'ligne', 'ues' (notes échouées), 'credits'}.
+    """
+    notes_par_ligne = {}
+    for note in (GrilleNote.objects
+                 .filter(ligne__in=[ligne.pk for ligne in grille_lignes],
+                         note__isnull=False)
+                 .select_related('ue', 'ligne__grille__promotion')):
+        if note.est_validee:
+            continue
+        notes_par_ligne.setdefault(note.ligne_id, []).append(note)
+
+    resultat = []
+    for ligne in grille_lignes:      # déjà trié : plus récent d'abord
+        echouees = notes_par_ligne.get(ligne.pk, [])
+        if not echouees:
+            continue
+        echouees.sort(key=lambda n: (n.ue.semestre or 0, n.ue.ordre or 0,
+                                     n.ue.intitule))
+        resultat.append({
+            'grille': ligne.grille,
+            'ligne': ligne,
+            'ues': echouees,
+            'credits': sum(n.ue.credits for n in echouees),
+        })
+    return resultat
+
+
 class EtudiantDetailView(DetailView):
     """Fiche détaillée d'un étudiant : inscriptions, notes et examens."""
 
@@ -407,6 +445,11 @@ class EtudiantDetailView(DetailView):
                           .select_related('promotion', 'grille'))
         ]
 
+        # --- UE à reprendre : consolidé sur TOUTES les grilles de
+        # l'étudiant (promotion courante et années antérieures) — c'est ce
+        # que la délibération exige de repasser pour obtenir son année.
+        ues_a_reprendre = _ues_a_reprendre(grille_lignes)
+
         ctx.update({
             'inscriptions': inscriptions,
             'nb_examens': len(inscriptions),
@@ -424,6 +467,9 @@ class EtudiantDetailView(DetailView):
             'nb_ues_validees': nb_ues_validees,
             'nb_ues_echouees': nb_ues_echouees,
             'nb_ues_non_notees': nb_ues_non_notees,
+            'ues_a_reprendre': ues_a_reprendre,
+            'nb_ues_a_reprendre': sum(len(e['ues']) for e in ues_a_reprendre),
+            'nb_credits_a_reprendre': sum(e['credits'] for e in ues_a_reprendre),
         })
         return ctx
 

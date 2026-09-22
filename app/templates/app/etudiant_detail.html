@@ -678,6 +678,67 @@
     {% endif %}
 
     {# =================================================================== #}
+    {# UE À REPRENDRE : consolidé sur toutes les grilles de l'étudiant —   #}
+    # promotion courante ET années antérieures. Une UE figure ici dès    #}
+    # qu'une note existe et passe sous 10/20 (règle de délibération).    #}
+    {# =================================================================== #}
+    {% if ues_a_reprendre %}
+    <div class="card shadow-sm mb-4 no-print border-warning border-4">
+        <div class="card-header bg-warning bg-opacity-10 py-2 d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-semibold">
+                <i class="bi bi-arrow-repeat me-2 text-warning"></i>UE à reprendre ({{ nb_ues_a_reprendre }})
+            </h5>
+            <span class="badge text-bg-warning text-dark">{{ nb_credits_a_reprendre }} crédit{{ nb_credits_a_reprendre|pluralize }}</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Unité d'enseignement</th>
+                            <th class="text-center">Crédits</th>
+                            <th class="text-center">Note</th>
+                            <th class="text-center">Semestre</th>
+                            <th>Année — Promotion</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in ues_a_reprendre %}
+                        <tr class="table-light">
+                            <td colspan="5" class="small fw-semibold text-muted">
+                                <i class="bi bi-table me-1"></i>
+                                {{ item.grille.annee_academique|default:"—" }} — {{ item.grille.promotion.nom }}
+                                <span class="ms-2 text-muted">({{ item.credits }} crédit{{ item.credits|pluralize }} à repasser)</span>
+                            </td>
+                        </tr>
+                        {% for note in item.ues %}
+                        <tr>
+                            <td class="fw-semibold">{{ note.ue.intitule }}</td>
+                            <td class="text-center">{{ note.ue.credits }}</td>
+                            <td class="text-center text-danger fw-semibold">{{ note.note_affichee }}/20</td>
+                            <td class="text-center">S{{ note.ue.semestre|default:"?" }}</td>
+                            <td class="small text-muted">
+                                {% if item.ligne.decision %}
+                                Décision délibérée :
+                                <span class="badge {% if item.ligne.decision == 'V' %}text-bg-success{% elif item.ligne.decision == 'VC' %}text-bg-warning text-dark{% else %}text-bg-danger{% endif %}">{{ item.ligne.decision }}</span>
+                                {% else %}—{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="px-3 py-2 small text-muted border-top">
+                <i class="bi bi-info-circle me-1"></i>
+                UE dont la note est inférieure à 10/20, toutes grilles confondues (année courante et années antérieures).
+                Une UE sans note (non évaluée) n'est pas comptée comme à reprendre.
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# =================================================================== #}
     {# SECTION 2 : ÉVALUATION CONTINUE & FICHES DE COTE DES EXAMENS        #}
     {# =================================================================== #}
     <div class="card shadow-sm mb-4 no-print">
