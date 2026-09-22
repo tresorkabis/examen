@@ -97,7 +97,7 @@
                     {% for item in lignes %}
                     <tr>
                         <td class="text-center text-muted col-num">{{ item.ligne.rang }}</td>
-                        <td class="col-etudiant fw-semibold">{{ item.ligne.etudiant.noms }}</td>
+                        <td class="col-etudiant fw-semibold">{{ item.ligne.nom_affiche }}</td>
                         {% for note in item.notes %}
                         <td class="td-ue {% if note and note.est_validee %}text-success fw-semibold{% elif note and note.note is not None %}text-danger{% else %}text-muted{% endif %}">
                             {% if note %}{{ note.note_affichee }}{% else %}—{% endif %}

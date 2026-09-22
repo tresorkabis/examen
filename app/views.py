@@ -1474,6 +1474,12 @@ def import_excel_view(request):
                         msg += (f" ({res['rattaches_hors_promotion']} ligne(s) "
                                 "rattachée(s) à des fiches d'une autre "
                                 "promotion — historique des années antérieures).")
+                    if res.get('archivees'):
+                        # Cohorte passée : lignes archivées telles quelles,
+                        # sans fiche rattachée ni étape de parcours.
+                        msg += (f" ({res['archivees']} ligne(s) archivée(s) "
+                                "sans rattachement — cohorte d'une année "
+                                "antérieure).")
                 else:
                     msg = f"Import {libelle} terminé : {res['created']} créé(s), {res['updated']} mis à jour, {res['skipped']} ignoré(s)."
                 if res['errors']:

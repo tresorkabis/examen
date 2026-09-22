@@ -1044,27 +1044,35 @@ def import_grille_excel(file_obj, promotion, session=None,
                 intitule=ue['intitule'], credits=ue['credits'],
                 semestre=ue['semestre'], groupe=ue['groupe'], ordre=ue['ordre'])
 
-        # Étudiants : le N° d'ordre de la grille correspond au matricule
-        # déterministe « <PROMO>-<rang> » posé par l'import des étudiants. Le
-        # nom sert de repli si la grille a été renumérotée entre-temps.
-        # Repli élargi : quand une grille d'année antérieure (ex. L1 2024-2025)
-        # est importée après le passage en L2, les fiches ont déjà changé de
-        # promotion. On cherche alors par nom exact dans toute la base, sans
-        # déplacer la fiche : la ligne de grille reste rattachée à la fiche
-        # actuelle, et l'étape de parcours de la promotion quittée s'y inscrit
-        # — c'est ce qui donne aux L2/L3 leur historique des années antérieures.
+        # Étudiants : le rattachement est **validé par le nom**, jamais par le
+        # seul matricule. Les grilles déterministes « <PROMO>-<rang> » font
+        # que des cohortes différentes partagent les mêmes numéros (rang 1, 2,
+        # …) : appairer sur le numéro seul collerait une grille d'année
+        # antérieure aux fiches de la cohorte actuelle. Donc :
+        #   1. matricule <PROMO>-<rang> — accepté seulement si le nom correspond ;
+        #   2. sinon nom exact dans la promotion ;
+        #   3. sinon nom exact dans toute la base (fiche déjà passée en
+        #      promotion supérieure) : rattachement sans déplacement, qui
+        #     alimente l'historique des années antérieures ;
+        #   4. sinon la ligne est **archivée** (`etudiant` NULL, nom conservé) :
+        #     cohorte dont les fiches n'existent plus. Aucune fiche fantôme,
+        #     aucune fausse étape de parcours — la grille reste consultable.
         promo_slug = slugify(promotion.nom).upper() or 'ETU'
-        etudiants = list(Etudiant.objects.filter(promotion=promotion))
-        par_numero = {e.numero_etudiant: e for e in etudiants}
-        par_nom = {e.noms: e for e in etudiants}
+        par_nom = {e.noms: e for e in Etudiant.objects.filter(promotion=promotion)}
         par_nom_global = {}
         for etudiant in Etudiant.objects.exclude(promotion=promotion):
             par_nom_global.setdefault(etudiant.noms, []).append(etudiant)
 
         resultat['rattaches_hors_promotion'] = 0
+        resultat['archivees'] = 0
         notes = []
         for ligne in lignes:
-            etudiant = par_numero.get(f'{promo_slug}-{ligne["rang"]:03d}')
+            etudiant = None
+            candidate = Etudiant.objects.filter(
+                promotion=promotion,
+                numero_etudiant=f'{promo_slug}-{ligne["rang"]:03d}').first()
+            if candidate is not None and candidate.noms == ligne['noms']:
+                etudiant = candidate
             if etudiant is None:
                 etudiant = par_nom.get(ligne['noms'])
             if etudiant is None:
@@ -1080,14 +1088,14 @@ def import_grille_excel(file_obj, promotion, session=None,
                         f'{promotion.nom}), ligne ignorée.')
                     continue
             if etudiant is None:
-                resultat['skipped'] += 1
-                resultat['errors'].append(
-                    f"Ligne {ligne['rang']} — « {ligne['noms']} » : étudiant "
-                    f'introuvable dans {promotion.nom}, ligne ignorée.')
-                continue
+                # Ligne d'une cohorte passée : archivée sans rattachement.
+                # Ce n'est pas une erreur : la grille (pièce délibérée) est
+                # conservée telle quelle, avec le nom du fichier.
+                resultat['archivees'] += 1
 
             ligne_grille = GrilleEtudiant.objects.create(
-                grille=grille, etudiant=etudiant, rang=ligne['rang'],
+                grille=grille, etudiant=etudiant, noms=ligne['noms'][:150],
+                rang=ligne['rang'],
                 credits_s1=ligne['credits_s1'], credits_s2=ligne['credits_s2'],
                 credits_total=ligne['credits_total'],
                 nb_ue_reprendre=ligne['nb_ue_reprendre'],
@@ -1095,11 +1103,12 @@ def import_grille_excel(file_obj, promotion, session=None,
                 moyenne=ligne['moyenne'], pourcentage=ligne['pourcentage'],
                 decision=ligne['decision'][:2], mention=ligne['mention'][:20],
             )
-            # Étape de parcours : l'étudiant a fréquenté cette promotion cette
-            # année-là. C'est ce qui constitue, pour un étudiant de L2 ou de
-            # L3, l'historique de ses années antérieures — renseigné à chaque
-            # import de grille, jamais saisi à la main.
-            HistoriquePromotion.enregistrer(etudiant, promotion, annee, grille)
+            if etudiant is not None:
+                # Étape de parcours : l'étudiant a fréquenté cette promotion
+                # cette année-là. C'est ce qui constitue, pour un étudiant de
+                # L2 ou de L3, l'historique de ses années antérieures.
+                HistoriquePromotion.enregistrer(etudiant, promotion, annee,
+                                                grille)
             for colonne, note in ligne['notes'].items():
                 notes.append(GrilleNote(ligne=ligne_grille,
                                         ue=ue_par_colonne[colonne], note=note))

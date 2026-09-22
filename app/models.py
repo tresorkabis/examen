@@ -466,8 +466,18 @@ class GrilleEtudiant(models.Model):
 
     grille = models.ForeignKey(
         Grille, on_delete=models.CASCADE, related_name='lignes')
+    # `etudiant` est facultatif : une grille d'une année antérieure décrit
+    # une cohorte dont les fiches n'existent plus (ni dans cette promotion,
+    # ni ailleurs). La ligne est alors archivée avec le nom lu dans le
+    # fichier (`noms`), sans fiche fantôme ni fausse étape de parcours.
+    # `SET_NULL` : l'archivage doit survivre à la suppression d'une fiche.
     etudiant = models.ForeignKey(
-        Etudiant, on_delete=models.CASCADE, related_name='grille_lignes')
+        Etudiant, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='grille_lignes')
+    noms = models.CharField(
+        max_length=150, blank=True, default='',
+        help_text=("Nom tel qu'écrit dans la grille (recopié tel quel, même "
+                   "quand la ligne est rattachée à une fiche)."))
     rang = models.PositiveSmallIntegerField(
         help_text="N° d'ordre de l'étudiant dans la grille.")
     credits_s1 = models.PositiveSmallIntegerField(default=0)
@@ -492,7 +502,12 @@ class GrilleEtudiant(models.Model):
         max_length=20, choices=MENTION_CHOICES, blank=True, default='')
 
     def __str__(self):
-        return f'{self.rang}. {self.etudiant.noms}'
+        return f'{self.rang}. {self.nom_affiche}'
+
+    @property
+    def nom_affiche(self):
+        """Nom à afficher : celui du fichier, sinon celui de la fiche."""
+        return self.noms or (self.etudiant.noms if self.etudiant_id else '—')
 
     @property
     def moyenne_affichee(self):
