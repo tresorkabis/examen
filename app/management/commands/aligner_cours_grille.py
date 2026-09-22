@@ -241,9 +241,51 @@ CORRECTIONS_L1_SCF = {
     'Education à la citoyeneté': 'Éducation à la citoyenneté',
 }
 
+# UE de la grille L2 SD A (intitulé exact) -> cours en base. `None` = à créer
+# ou déjà au nom exact de la grille. Les abréviations de la charge horaire sont
+# résolues ici. MARKETING et STATISTIQUES restent hors grille (aucune UE de la
+# grille de délibération ne leur correspond, comme MRS pour L1 SCF).
+CORRESPONDANCES_L2_SD = {
+    'Technique de communication': 'TECH DE COMMUNICATION',
+    'Correspondance commerciale et adm': None,
+    'Gestion des bases des données': 'SGBD',
+    'Organisation et technique de secrétariat': 'OTS',
+    'Sténographie et dactylographie': 'STENOGRAPHIE',
+    "Management et organisation de l'entreprise": 'ORGANISATION DES ESES',
+    'Comportement organisationnel': 'COMPORTEMENT ORGA',
+    'Relations publiques': 'RP',
+    'Eléments de gestion des ressources et gst adm': None,
+    'Législation fiscale et sociale': 'LEGISLATION SOCIALE',
+    'Eléments de droit commercial': 'ELEMENT DE DROIT COMMERCIAL',
+    "Eléments d'entrepreneuriat": 'ENTREPREUNARIAT',
+    'Anglais 2': 'ANGLAIS',
+    'Grammaire francaise 2': 'GRAMMAIRE FRANCAISE',
+    'Orthographe et compte rendu': 'ORTHOGRAPHE FRANCAISE',
+    'Pratique professionnelle 2': 'PRATIQUE PROFESSIONNELLE',
+    "Stage d'intervention": None,
+    # Même slug côté grille et côté charge horaire : explicites pour que le
+    # renommage réutilise le cours existant au lieu d'en créer un doublon.
+    'Bureautique 2': 'BUREAUTIQUE 2',
+    'Bureautique 3': 'BUREAUTIQUE 3',
+    'Gestion des fichiers': 'GESTION DES FICHIERS',
+    'Archivage 2': 'ARCHIVAGE 2',
+    'Gestion des projets': 'GESTION DES PROJETS',
+    'Projet tutoré 1': 'PROJET TUTORE 1',
+}
+
+# Titres tronqués dans la grille L2 SD A (cellules Excel coupées) : le cours
+# prendra le libellé corrigé (valeur) au lieu du libellé brut (clé).
+CORRECTIONS_L2_SD = {
+    'Correspondance commerciale et adm':
+        'Correspondance commerciale et administrative',
+    'Eléments de gestion des ressources et gst adm':
+        'Eléments de gestion des ressources et gestion administrative',
+}
+
 # Promotion -> (correspondances, corrections) pour le mode base.
 CORRESPONDANCES_PAR_PROMOTION = {
     'L1 SCF LMD': (CORRESPONDANCES_L1_SCF, CORRECTIONS_L1_SCF),
+    'L2 SD A': (CORRESPONDANCES_L2_SD, CORRECTIONS_L2_SD),
 }
 
 
