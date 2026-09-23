@@ -2701,11 +2701,13 @@ class UesAReprendreTests(TestCase):
         # Grille courante : 1 échec + 1 validée + 1 non notée
         ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
         ue_stat = self._ue(self.grille_l2, 'Statistique Inférentielle', 4, 2)
-        self._ue(self.grille_l2, 'Anglais', 2, 3)
+        ue_anglais = self._ue(self.grille_l2, 'Anglais', 2, 3)
         GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=8)
         GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_stat, note=14)
-        # ue 3 : pas de note → ignorée (on ne peut pas déclarer un
-        # échec sans note)
+        # ue 3 : case vide → UE non notée, à reprendre elle aussi (règle du
+        # fichier : « toutes les UE − UE acquises »).
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_anglais,
+                                  note=None)
 
         # Grille antérieure : 1 échec
         ue_compta = self._ue(self.grille_l1, 'Comptabilité financière', 3, 1)
@@ -2716,15 +2718,20 @@ class UesAReprendreTests(TestCase):
         self.assertEqual(len(resultat), 2)
         self.assertEqual(resultat[0]['grille'], self.grille_l2)
         self.assertEqual(resultat[1]['grille'], self.grille_l1)
+        # Tri par semestre puis ordre : Droit administratif (1), Anglais (3).
         self.assertEqual([n.ue.intitule for n in resultat[0]['ues']],
-                         ['Droit administratif'])
+                         ['Droit administratif', 'Anglais'])
         self.assertEqual([n.ue.intitule for n in resultat[1]['ues']],
                          ['Comptabilité financière'])
-        self.assertEqual(resultat[0]['credits'], 3)
+        self.assertEqual(resultat[0]['credits'], 5)
         self.assertEqual(resultat[1]['credits'], 3)
 
-    def test_note_absente_et_ue_validee_ne_comptent_pas(self):
-        """Ni la note vide, ni l'UE validée ne sont « à reprendre »."""
+    def test_ue_non_notee_compte_comme_a_reprendre(self):
+        """Case vide → UE à reprendre ; UE validée → non.
+
+        C'est la règle du fichier : la colonne « Nbre UE à reprendre » vaut
+        « toutes les UE − UE acquises », les matières non notées comprises.
+        """
         from app.views import _ues_a_reprendre
 
         ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
@@ -2732,7 +2739,29 @@ class UesAReprendreTests(TestCase):
         GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=None)
         GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_stat, note=10)
 
-        self.assertEqual(_ues_a_reprendre([self.ligne_l2]), [])
+        resultat = _ues_a_reprendre([self.ligne_l2])
+
+        self.assertEqual(len(resultat), 1)
+        self.assertEqual([n.ue.intitule for n in resultat[0]['ues']],
+                         ['Droit administratif'])
+        self.assertEqual(resultat[0]['credits'], 3)
+        self.assertFalse(resultat[0]['ues'][0].est_notee)
+        self.assertFalse(resultat[0]['ues'][0].est_validee)
+
+    def test_note_absente_affichee_comme_non_notee(self):
+        """La fiche distingue une case vide d'une note sous le seuil."""
+        ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
+        ue_alg = self._ue(self.grille_l2, 'Algèbre', 4, 2)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=8)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_alg, note=None)
+
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('etudiant_detail', args=[self.etudiant.pk]))
+
+        self.assertContains(reponse, 'UE à reprendre (2)')
+        self.assertContains(reponse, '8/20')
+        self.assertContains(reponse, 'Non notée')
 
     def test_section_visible_sur_la_fiche(self):
         """La fiche affiche la section avec le compte et les crédits."""
@@ -2781,14 +2810,15 @@ class UesAReprendreTests(TestCase):
             for page in PdfReader(BytesIO(octets)).pages)
 
     def test_pdf_impression_limite_aux_ue_a_reprendre(self):
-        """Le PDF ne contient que les UE échouées, sur toutes les années."""
+        """Le PDF ne contient que les UE non acquises, sur toutes les années."""
         ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
         ue_stat = self._ue(self.grille_l2, 'Statistique Inférentielle', 4, 2)
         ue_anglais = self._ue(self.grille_l2, 'Anglais', 2, 3)
         ue_compta = self._ue(self.grille_l1, 'Comptabilité financière', 3, 1)
         GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=8)
         GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_stat, note=14)
-        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_anglais, note=None)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_anglais,
+                                  note=None)
         GrilleNote.objects.create(ligne=self.ligne_l1, ue=ue_compta, note=7)
 
         self.client.force_login(self.user)
@@ -2798,20 +2828,23 @@ class UesAReprendreTests(TestCase):
         self.assertIn('UE à reprendre', texte)
         self.assertIn('APOTA KISOKI COLLINS', texte)
         self.assertIn('L2 SCF LMD', texte)
-        self.assertIn('2 UE', texte)
-        self.assertIn('6 crédit(s) à reprendre', texte)
+        # 3 UE non acquises : 2 sous le seuil + 1 non notée (3 + 2 + 3 cr).
+        self.assertIn('3 UE', texte)
+        self.assertIn('8 crédit(s) à reprendre', texte)
         # Une section par année, la plus récente d'abord.
         self.assertIn('2025-2026', texte)
         self.assertIn('2024-2025', texte)
         self.assertLess(texte.index('2025-2026'), texte.index('2024-2025'))
         self.assertIn('L1 SCF LMD', texte)
-        # Les échecs sont là, les UE validées et non notées non.
+        # Les UE non acquises sont là, l'UE validée non.
         self.assertIn('Droit administratif', texte)
+        self.assertIn('Anglais', texte)
         self.assertIn('Comptabilité financière', texte)
         self.assertNotIn('Statistique Inférentielle', texte)
-        self.assertNotIn('Anglais', texte)
-        # Note affichée en entier, sans décimale ni virgule.
+        # Note affichée en entier, sans décimale ni virgule ; la case vide
+        # est explicitement annoncée.
         self.assertIn('8/20', texte)
+        self.assertIn('Non notée', texte)
         self.assertNotIn('8,00', texte)
         self.assertNotIn('8.00', texte)
         # Nom de fichier explicite, ouvert dans l'onglet (imprimable).
@@ -2820,7 +2853,7 @@ class UesAReprendreTests(TestCase):
         self.assertIn('inline', reponse['Content-Disposition'])
 
     def test_pdf_sans_ue_a_reprendre(self):
-        """Aucun échec : le PDF reste valide et le dit."""
+        """Aucune UE non acquise : le PDF reste valide et le dit."""
         ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
         GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=12)
 
@@ -2830,6 +2863,22 @@ class UesAReprendreTests(TestCase):
         self.assertIn("Aucune UE à reprendre sur l'ensemble des années.",
                       texte)
         self.assertNotIn('Droit administratif', texte)
+
+    def test_pdf_ue_non_notee_avec_toutes_les_ue_vides(self):
+        """Une année entièrement non notée reste une année à repasser."""
+        ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
+        ue_alg = self._ue(self.grille_l2, 'Algèbre', 4, 2)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=None)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_alg, note=None)
+
+        self.client.force_login(self.user)
+        _, texte = self._pdf(self.etudiant.pk)
+
+        self.assertIn('2 UE', texte)
+        self.assertIn('7 crédit(s) à reprendre', texte)
+        self.assertIn('Non notée', texte)
+        self.assertIn('Droit administratif', texte)
+        self.assertIn('Algèbre', texte)
 
     def test_pdf_anonyme_redirige_vers_login(self):
         """L'impression est réservée aux utilisateurs connectés."""

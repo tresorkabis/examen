@@ -729,7 +729,13 @@
                         <tr>
                             <td class="fw-semibold">{{ note.ue.intitule }}</td>
                             <td class="text-center">{{ note.ue.credits }}</td>
-                            <td class="text-center text-danger fw-semibold">{{ note.note_affichee }}/20</td>
+                            <td class="text-center fw-semibold">
+                                {% if note.est_notee %}
+                                <span class="text-danger">{{ note.note_affichee }}/20</span>
+                                {% else %}
+                                <span class="badge text-bg-secondary" title="Case vide dans la grille : UE non évaluée, à repasser">Non notée</span>
+                                {% endif %}
+                            </td>
                             <td class="text-center">S{{ note.ue.semestre|default:"?" }}</td>
                             <td class="small text-muted">
                                 {% if item.ligne.decision %}
@@ -745,8 +751,8 @@
             </div>
             <div class="px-3 py-2 small text-muted border-top">
                 <i class="bi bi-info-circle me-1"></i>
-                UE dont la note est inférieure à 10/20, toutes grilles confondues (année courante et années antérieures).
-                Une UE sans note (non évaluée) n'est pas comptée comme à reprendre.
+                UE non acquises, toutes grilles confondues (année courante et années antérieures) :
+                note inférieure à 10/20 <strong>ou</strong> UE non notée (case vide de la grille).
             </div>
         </div>
     </div>

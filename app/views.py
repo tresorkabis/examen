@@ -311,22 +311,26 @@ class EtudiantDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
 
 
 def _ues_a_reprendre(grille_lignes):
-    """UE non validées (note < 10) dans toutes les grilles de l'étudiant.
+    """UE à reprendre dans toutes les grilles de l'étudiant.
 
-    Une UE est « à reprendre » quand sa note existe mais passe sous le seuil
-    de validation (GrilleNote.est_validee — la règle même de la délibération).
+    Une UE est « à reprendre » quand elle n'est pas acquise : note sous le
+    seuil de validation (< 10, `GrilleNote.est_validee`) **ou** case vide
+    (UE non notée). C'est la règle du fichier lui-même, dont la colonne
+    « Nbre UE à reprendre » vaut `toutes les UE − UE acquises` : les
+    matières non évaluées y sont déjà comptées comme à repasser.
+
     `grille_lignes` porte toutes les grilles fréquentées par l'étudiant —
     promotion courante comme années antérieures — l'agrégation couvre donc
-    toutes ses promotions. Une note absente (non saisie) n'est pas une UE à
-    reprendre : on ne peut pas déclarer un échec sans note.
+    toutes ses promotions. Chaque UE d'une grille porte une ligne de note,
+    même vide (créée à l'import) : c'est par elle que les UE non notées
+    sont retrouvées.
 
     Retourne une liste triée de la grille la plus récente à la plus ancienne
-    : {'grille', 'ligne', 'ues' (notes échouées), 'credits'}.
+    : {'grille', 'ligne', 'ues' (notes échouées ou non notées), 'credits'}.
     """
     notes_par_ligne = {}
     for note in (GrilleNote.objects
-                 .filter(ligne__in=[ligne.pk for ligne in grille_lignes],
-                         note__isnull=False)
+                 .filter(ligne__in=[ligne.pk for ligne in grille_lignes])
                  .select_related('ue', 'ligne__grille__promotion')):
         if note.est_validee:
             continue
@@ -960,8 +964,8 @@ def _cle_annee(annee):
 def _donnees_ues_a_reprendre(etudiant):
     """UE à reprendre d'un étudiant, toutes années confondues.
 
-    Réutilise `_ues_a_reprendre` (la règle même de la délibération : une
-    note existe et passe sous 10/20) sur *toutes* les grilles fréquentées
+    Réutilise `_ues_a_reprendre` (la règle même de la délibération : note
+    sous 10/20 ou UE non notée) sur *toutes* les grilles fréquentées
     par l'étudiant — promotion courante comme années antérieures — puis
     aplatit le résultat en une entrée par UE échouée, prête pour
     l'impression : `annee_academique`, `promotion`, `ue`, `note` et `ligne`
@@ -993,10 +997,10 @@ def etudiant_ues_reprendre_pdf(request, pk):
 
     L'en-tête rappelle l'étudiant, sa promotion actuelle et le total des
     crédits à repasser ; le corps liste, année par année (la plus récente
-    d'abord) et par promotion, les UE non validées avec leur note /20 sans
-    décimale, leur semestre, leurs crédits et la décision délibérée. Un
-    total de crédits clôt chaque année : c'est la liste à remettre à
-    l'étudiant pour ses rattrapages.
+    d'abord) et par promotion, les UE non acquises — note sous 10/20 ou UE
+    non notée — avec leur note /20 sans décimale, leur semestre, leurs
+    crédits et la décision délibérée. Un total de crédits clôt chaque
+    année : c'est la liste à remettre à l'étudiant pour ses rattrapages.
     """
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
@@ -1058,7 +1062,8 @@ def etudiant_ues_reprendre_pdf(request, pk):
                 lignes.append([
                     element['ue'].intitule,
                     str(element['ue'].credits),
-                    f"{note.note_affichee}/20" if note else '—',
+                    (f"{note.note_affichee}/20" if note.est_notee
+                     else 'Non notée'),
                     str(element['ue'].semestre),
                     element['ligne'].decision or '—',
                 ])

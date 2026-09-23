@@ -591,6 +591,16 @@ class GrilleNote(models.Model):
         return format(valeur, 'f')
 
     @property
+    def est_notee(self):
+        """La case de la grille porte-t-elle une note ?
+
+        Une case vide n'est pas un « échec », mais l'UE n'en est pas moins
+        à repasser : la colonne « Nbre UE à reprendre » du fichier compte
+        d'ailleurs `toutes les UE − UE acquises`, non notées comprises.
+        """
+        return self.note is not None and self.note != ''
+
+    @property
     def est_validee(self):
         """L'UE est-elle acquise ? Critère du fichier : note >= 10.
 
