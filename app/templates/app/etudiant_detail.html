@@ -207,6 +207,13 @@
             <button type="button" class="btn btn-primary" onclick="window.print()">
                 <i class="bi bi-printer me-1"></i>Imprimer le relevé
             </button>
+            {% if ues_a_reprendre %}
+            <a href="{% url 'etudiant_ues_reprendre_pdf' etudiant.pk %}"
+               class="btn btn-warning" target="_blank" rel="noopener"
+               title="Imprimer uniquement les UE à reprendre (année courante et années antérieures)">
+                <i class="bi bi-arrow-repeat me-1"></i>UE à reprendre
+            </a>
+            {% endif %}
             {% if grille_ligne and grille_ligne.grille.session %}
             <a href="{% url 'session_grille_apercu' grille_ligne.grille.session.pk grille_ligne.grille.pk %}" class="btn btn-outline-info" title="Consulter la grille de délibération de toute la promotion">
                 <i class="bi bi-table me-1"></i>Grille promotion
@@ -688,7 +695,14 @@
             <h5 class="mb-0 fw-semibold">
                 <i class="bi bi-arrow-repeat me-2 text-warning"></i>UE à reprendre ({{ nb_ues_a_reprendre }})
             </h5>
-            <span class="badge text-bg-warning text-dark">{{ nb_credits_a_reprendre }} crédit{{ nb_credits_a_reprendre|pluralize }}</span>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge text-bg-warning text-dark">{{ nb_credits_a_reprendre }} crédit{{ nb_credits_a_reprendre|pluralize }}</span>
+                <a href="{% url 'etudiant_ues_reprendre_pdf' etudiant.pk %}"
+                   class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener"
+                   title="Imprimer uniquement ces UE (toutes années)">
+                    <i class="bi bi-printer me-1"></i>Imprimer
+                </a>
+            </div>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">

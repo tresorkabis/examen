@@ -2764,4 +2764,106 @@ class UesAReprendreTests(TestCase):
 
         self.assertNotContains(reponse, 'UE à reprendre')
 
+    # --- Impression dédiée : uniquement les UE à reprendre -----------------
+
+    def _pdf(self, pk):
+        """Télécharge le PDF « UE à reprendre » et en extrait le texte."""
+        from pypdf import PdfReader
+
+        reponse = self.client.get(
+            reverse('etudiant_ues_reprendre_pdf', args=[pk]))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse['Content-Type'], 'application/pdf')
+        octets = b''.join(reponse.streaming_content)
+        self.assertTrue(octets.startswith(b'%PDF'))
+        return reponse, ''.join(
+            page.extract_text() or ''
+            for page in PdfReader(BytesIO(octets)).pages)
+
+    def test_pdf_impression_limite_aux_ue_a_reprendre(self):
+        """Le PDF ne contient que les UE échouées, sur toutes les années."""
+        ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
+        ue_stat = self._ue(self.grille_l2, 'Statistique Inférentielle', 4, 2)
+        ue_anglais = self._ue(self.grille_l2, 'Anglais', 2, 3)
+        ue_compta = self._ue(self.grille_l1, 'Comptabilité financière', 3, 1)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=8)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_stat, note=14)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_anglais, note=None)
+        GrilleNote.objects.create(ligne=self.ligne_l1, ue=ue_compta, note=7)
+
+        self.client.force_login(self.user)
+        reponse, texte = self._pdf(self.etudiant.pk)
+
+        # En-tête : étudiant, promotion, synthèse des deux années.
+        self.assertIn('UE à reprendre', texte)
+        self.assertIn('APOTA KISOKI COLLINS', texte)
+        self.assertIn('L2 SCF LMD', texte)
+        self.assertIn('2 UE', texte)
+        self.assertIn('6 crédit(s) à reprendre', texte)
+        # Une section par année, la plus récente d'abord.
+        self.assertIn('2025-2026', texte)
+        self.assertIn('2024-2025', texte)
+        self.assertLess(texte.index('2025-2026'), texte.index('2024-2025'))
+        self.assertIn('L1 SCF LMD', texte)
+        # Les échecs sont là, les UE validées et non notées non.
+        self.assertIn('Droit administratif', texte)
+        self.assertIn('Comptabilité financière', texte)
+        self.assertNotIn('Statistique Inférentielle', texte)
+        self.assertNotIn('Anglais', texte)
+        # Note affichée en entier, sans décimale ni virgule.
+        self.assertIn('8/20', texte)
+        self.assertNotIn('8,00', texte)
+        self.assertNotIn('8.00', texte)
+        # Nom de fichier explicite, ouvert dans l'onglet (imprimable).
+        self.assertIn('ues-reprendre-apota-kisoki-collins.pdf',
+                      reponse['Content-Disposition'])
+        self.assertIn('inline', reponse['Content-Disposition'])
+
+    def test_pdf_sans_ue_a_reprendre(self):
+        """Aucun échec : le PDF reste valide et le dit."""
+        ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=12)
+
+        self.client.force_login(self.user)
+        _, texte = self._pdf(self.etudiant.pk)
+
+        self.assertIn("Aucune UE à reprendre sur l'ensemble des années.",
+                      texte)
+        self.assertNotIn('Droit administratif', texte)
+
+    def test_pdf_anonyme_redirige_vers_login(self):
+        """L'impression est réservée aux utilisateurs connectés."""
+        reponse = self.client.get(
+            reverse('etudiant_ues_reprendre_pdf', args=[self.etudiant.pk]))
+
+        self.assertEqual(reponse.status_code, 302)
+        self.assertIn('/login/', reponse.url)
+
+    def test_boutons_impression_sur_la_fiche(self):
+        """La fiche propose l'impression dédiée à côté du relevé complet."""
+        ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=8)
+
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('etudiant_detail', args=[self.etudiant.pk]))
+
+        url_pdf = reverse('etudiant_ues_reprendre_pdf',
+                          args=[self.etudiant.pk])
+        self.assertContains(reponse, url_pdf)
+        self.assertContains(reponse, 'Imprimer le relevé')
+
+    def test_bouton_impression_absent_sans_echec(self):
+        """Pas d'UE à reprendre → pas de bouton d'impression dédié."""
+        ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=15)
+
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('etudiant_detail', args=[self.etudiant.pk]))
+
+        self.assertNotContains(
+            reponse,
+            reverse('etudiant_ues_reprendre_pdf', args=[self.etudiant.pk]))
+
 

@@ -951,6 +951,149 @@ def session_participants_pdf(request, pk):
         filename=f"participants-{slugify(session.nom)}.pdf")
 
 
+def _cle_annee(annee):
+    """Clé de tri d'une année académique (« 2025-2026 » -> [2025, 2026])."""
+    return [int(partie) for partie in (annee or '').replace(' ', '').split('-')
+            if partie.isdigit()]
+
+
+def _donnees_ues_a_reprendre(etudiant):
+    """UE à reprendre d'un étudiant, toutes années confondues.
+
+    Réutilise `_ues_a_reprendre` (la règle même de la délibération : une
+    note existe et passe sous 10/20) sur *toutes* les grilles fréquentées
+    par l'étudiant — promotion courante comme années antérieures — puis
+    aplatit le résultat en une entrée par UE échouée, prête pour
+    l'impression : `annee_academique`, `promotion`, `ue`, `note` et `ligne`
+    (décision et moyenne délibérées).
+
+    Retourne `(elements, nb_credits)`.
+    """
+    grille_lignes = list(
+        GrilleEtudiant.objects
+        .select_related('grille', 'grille__promotion')
+        .filter(etudiant=etudiant)
+        .order_by('-grille__annee_academique', '-grille__id'))
+    elements = []
+    for groupe in _ues_a_reprendre(grille_lignes):
+        for note in groupe['ues']:
+            elements.append({
+                'annee_academique': groupe['grille'].annee_academique,
+                'promotion': groupe['grille'].promotion,
+                'ue': note.ue,
+                'note': note,
+                'ligne': groupe['ligne'],
+            })
+    return elements, sum(element['ue'].credits for element in elements)
+
+
+@login_required
+def etudiant_ues_reprendre_pdf(request, pk):
+    """PDF dédié : uniquement les UE à reprendre, toutes années confondues.
+
+    L'en-tête rappelle l'étudiant, sa promotion actuelle et le total des
+    crédits à repasser ; le corps liste, année par année (la plus récente
+    d'abord) et par promotion, les UE non validées avec leur note /20 sans
+    décimale, leur semestre, leurs crédits et la décision délibérée. Un
+    total de crédits clôt chaque année : c'est la liste à remettre à
+    l'étudiant pour ses rattrapages.
+    """
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (Paragraph, SimpleDocTemplate, Spacer,
+                                    Table, TableStyle)
+
+    etudiant = get_object_or_404(
+        Etudiant.objects.select_related('promotion'), pk=pk)
+    elements_ues, nb_credits = _donnees_ues_a_reprendre(etudiant)
+
+    # Regroupement par (année, promotion) : une ligne de délibération
+    # appartient à une promotion donnée pour une année donnée.
+    sections = OrderedDict()
+    for element in elements_ues:
+        clef = (element['annee_academique'], element['promotion'].nom)
+        sections.setdefault(clef, []).append(element)
+
+    tampon = BytesIO()
+    doc = SimpleDocTemplate(
+        tampon, pagesize=A4,
+        leftMargin=15 * mm, rightMargin=15 * mm,
+        topMargin=15 * mm, bottomMargin=15 * mm,
+        title=f"UE a reprendre - {etudiant.noms}")
+    styles = getSampleStyleSheet()
+    elements = [
+        Paragraph("UE à reprendre", styles['Title']),
+        Paragraph(
+            f"{etudiant.noms} · {etudiant.promotion.nom}", styles['Normal']),
+    ]
+    if elements_ues:
+        annees = []
+        for annee, _ in sections:
+            if annee not in annees:
+                annees.append(annee)
+        annees.sort(key=_cle_annee, reverse=True)
+        elements.append(Paragraph(
+            f"{len(elements_ues)} UE · {nb_credits} crédit(s) à reprendre · "
+            f"{len(annees)} année(s) : "
+            f"{', '.join(annee or '—' for annee in annees)}",
+            styles['Normal']))
+    else:
+        elements.append(Paragraph(
+            "Aucune UE à reprendre sur l'ensemble des années.",
+            styles['Normal']))
+    elements.append(Spacer(1, 6 * mm))
+
+    if elements_ues:
+        en_tete = ['UE', 'Cr.', 'Note', 'Sem.', 'Décision']
+        for (annee, promotion_nom), lignes_annee in sorted(
+                sections.items(), key=lambda item: _cle_annee(item[0][0]),
+                reverse=True):
+            elements.append(Paragraph(
+                f"{annee or '—'} — {promotion_nom}", styles['Heading2']))
+            lignes = [en_tete[:]]
+            for element in lignes_annee:
+                note = element['note']
+                lignes.append([
+                    element['ue'].intitule,
+                    str(element['ue'].credits),
+                    f"{note.note_affichee}/20" if note else '—',
+                    str(element['ue'].semestre),
+                    element['ligne'].decision or '—',
+                ])
+            lignes.append([
+                'Total',
+                str(sum(item['ue'].credits for item in lignes_annee)),
+                '', '', ''])
+            tableau = Table(
+                lignes, colWidths=[92 * mm, 14 * mm, 18 * mm, 16 * mm,
+                                   20 * mm])
+            tableau.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#212529')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('GRID', (0, 0), (-1, -1), 0.4, colors.grey),
+                ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f2f2f2')),
+                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -2),
+                 [colors.white, colors.HexColor('#fafafa')]),
+            ]))
+            elements.append(tableau)
+            elements.append(Spacer(1, 5 * mm))
+
+    doc.build(elements)
+    tampon.seek(0)
+    # `as_attachment=False` : le PDF s'ouvre dans l'onglet (donc
+    # immédiatement imprimable) au lieu d'être téléchargé — c'est un
+    # document de travail à remettre à l'étudiant, pas une archive.
+    return FileResponse(
+        tampon, as_attachment=False, content_type='application/pdf',
+        filename=f"ues-reprendre-{slugify(etudiant.noms)}.pdf")
+
+
 def session_grille_apercu(request, pk, grille_pk):
     """Aperçu plein écran d'une grille de délibération (sans sidebar).
 
