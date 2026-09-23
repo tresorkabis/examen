@@ -2915,4 +2915,53 @@ class UesAReprendreTests(TestCase):
             reponse,
             reverse('etudiant_ues_reprendre_pdf', args=[self.etudiant.pk]))
 
+    def test_aucun_commentaire_de_gabarit_dans_le_rendu(self):
+        """Aucun `{# ... #}` ne doit fuir dans la page (ni dans le PDF).
+
+        Un commentaire Django ne vaut que sur **une seule ligne** : une ligne
+        orpheline (contenant `#}` sans `{#`) est rendue comme du texte et se
+        retrouve imprimée dans le relevé.
+        """
+        ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=8)
+
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('etudiant_detail', args=[self.etudiant.pk]))
+        contenu = reponse.content.decode()
+
+        self.assertNotIn('{#', contenu)
+        self.assertNotIn('#}', contenu)
+        self.assertNotIn("qu'une note existe et passe sous 10/20", contenu)
+
+
+class GabaritsCommentairesTests(TestCase):
+    """Garde-fou : aucun commentaire Django mal formé dans les gabarits.
+
+    `{# ... #}` ne fonctionne que sur une seule ligne. Un `{#` non fermé sur
+    sa ligne casse le rendu ; une ligne orpheline `#}` s'affiche à l'écran et
+    à l'impression (défaut constaté sur la fiche étudiant).
+    """
+
+    def test_aucun_commentaire_mal_forme(self):
+        from pathlib import Path
+
+        racine = Path(__file__).resolve().parent / 'templates'
+        anomalies = []
+        for gabarit in sorted(racine.rglob('*.html')):
+            for numero, ligne in enumerate(
+                    gabarit.read_text(encoding='utf-8').splitlines(), start=1):
+                ouvrant = '{#' in ligne
+                fermant = '#}' in ligne
+                if ouvrant and not fermant:
+                    anomalies.append(
+                        f'{gabarit.name}:{numero} — « {{# » non fermé sur la '
+                        f'ligne : {ligne.strip()[:60]}')
+                elif fermant and not ouvrant:
+                    anomalies.append(
+                        f'{gabarit.name}:{numero} — ligne orpheline rendue '
+                        f'comme texte : {ligne.strip()[:60]}')
+
+        self.assertEqual(anomalies, [], '\n'.join(anomalies))
+
 

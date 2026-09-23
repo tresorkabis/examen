@@ -685,9 +685,9 @@
     {% endif %}
 
     {# =================================================================== #}
-    {# UE À REPRENDRE : consolidé sur toutes les grilles de l'étudiant —   #}
-    # promotion courante ET années antérieures. Une UE figure ici dès    #}
-    # qu'une note existe et passe sous 10/20 (règle de délibération).    #}
+    {# UE À REPRENDRE : toutes les grilles de l'étudiant — promotion       #}
+    {# courante ET années antérieures. Une UE y figure dès qu'elle n'est   #}
+    {# pas acquise : note sous 10/20 ou case vide (UE non notée).          #}
     {# =================================================================== #}
     {% if ues_a_reprendre %}
     <div class="card shadow-sm mb-4 no-print border-warning border-4">
