@@ -43,6 +43,7 @@ ENTETE_UE = "UNITES D'ENSEIGNEMENT"
 # Grilles prises en charge : fichier -> promotion.
 GRILLES = {
     'L1 INFO LMD A_2025_2026.xlsx': 'L1 INFO A',
+    'L2 INFO LMD A_2024_2025.xlsx': 'L2 INFO A',
     'L2 SCF_LMD 2025_2026.xlsx': 'L2 SCF LMD',
     'L3 TS_LMD A 2025_2026.xlsx': 'L3 SD A',
 }
@@ -192,10 +193,43 @@ CORRECTIONS_L3_SD = {
     'Méthode de recherche scientifique': 'Méthode de Recherche Scientifique',
 }
 
+# UE de la grille L2 INFO (intitulé exact) -> cours en base. `None` = à créer.
+# L'UE « Stage » (2 crédits) n'a pas de cours : elle est créée sans enseignant.
+CORRESPONDANCES_L2_INFO = {
+    'Algorithmique Avancé': 'ALGORITHMIQUE AVANCEES',
+    'Langage VB': 'PROGRAMMATION VB.NET',
+    'Anglais Techniques': 'ANGLAIS DES TIC',
+    'Méthodologie du travail': 'MRS',
+    'Législation sociale': 'LEGISLATION',
+    'Math Analyse': 'MATHEMATIQUES',
+    'Statistique Inférentielle': 'STATISTIQUES',
+    'Cloud Computing': 'CLOUD COMPUTING',
+    'Modelisation SI': 'MODELISATION SI',
+    'Langage PHP': 'FRAMEWORK LARAVEL',
+    'Gestion des Entreprises': 'GESTION DES ENTREPRISES',
+    'Marketing': 'MARKETING',
+    'Comptabilité de gestion': 'CPTE ANALYTIQUE',
+    'Langage Java': 'PROGRAMMATION JAVA SE',
+    'Langage C++': 'PROGRAMMATION C++',
+    'Langage Python': 'FRAMEWORK DJANGO',
+    'Oracle': 'BDD - ORACLE',
+    'Sql Serveur': 'BDD - SQL SERVEUR',
+    'Electronique': 'ELECTRONIQUE GENERALE',
+    'Administration Système': 'ADMINISTRATION SYSTÈME',
+    'Télématique': 'TELEMATIQUE',
+    'Recherche Operationelle': 'RO',
+    'Gestion Financière': 'GESTION FINANCIERE',
+    'Bilan et Projet Pro': 'BILAN ET PROJET PRO',
+    'Projet Tutoré': 'PROJET TUTORE',
+    'Stage': None,
+}
+
 # Fichier -> (promotion, correspondances, corrections).
 CONFIGS = {
     'L1 INFO LMD A_2025_2026.xlsx': (
         'L1 INFO A', CORRESPONDANCES_L1, CORRECTIONS_L1),
+    'L2 INFO LMD A_2024_2025.xlsx': (
+        'L2 INFO A', CORRESPONDANCES_L2_INFO, {}),
     'L2 SCF_LMD 2025_2026.xlsx': (
         'L2 SCF LMD', CORRESPONDANCES_L2_SCF, {}),
     'L3 SCF_LMD 2025_2026.xlsx': (
@@ -286,6 +320,7 @@ CORRECTIONS_L2_SD = {
 CORRESPONDANCES_PAR_PROMOTION = {
     'L1 SCF LMD': (CORRESPONDANCES_L1_SCF, CORRECTIONS_L1_SCF),
     'L2 SD A': (CORRESPONDANCES_L2_SD, CORRECTIONS_L2_SD),
+    'L2 INFO A': (CORRESPONDANCES_L2_INFO, {}),
 }
 
 
