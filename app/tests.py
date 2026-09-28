@@ -1788,6 +1788,43 @@ class AlignerCoursGrilleCommandTest(TestCase):
             sorted([('Informatique Générale', 4), ('Bureautique', 4),
                     ("Stage d'observation", 2)]))
 
+    def test_grille_l1_sd_renomme_les_sigles_et_cree_les_ue_absentes(self):
+        """Grille L1 SD A : sigles développés, crédits reportés, UE créées.
+
+        Décisions métier : « Comptabilité financière 1 » désigne COMPTABILITE
+        GENERALE (CCF reste hors grille) ; « Grammaire francaise 1 » et
+        « Stage d'observation » n'existaient pas et sont créés sans
+        enseignant (à renseigner ensuite depuis l'interface).
+        """
+        self._contexte(
+            promo='L1 SD A', grille='L1 TS LMD A_2023_2024.xlsx',
+            ues=[
+                ("Techniques d'expression orale et écrite", 5),
+                ('Initiation à la recherche scientifique', 2),
+                ('Bureautique 1', 3),
+                ('Comptabilité financière 1', 5),
+                ('Grammaire francaise 1', 3),
+                ("Stage d'observation", 2),
+            ],
+            cours_existants=[('TOE', 1), ('IRS', 1), ('BUREAUTIQUE 1', 1),
+                             ('COMPTABILITE GENERALE', 1), ('CCF', 1)])
+
+        call_command('aligner_cours_grille')
+
+        self.assertEqual(
+            sorted(Cours.objects.values_list('nom', 'coefficient')),
+            sorted([
+                ("Techniques d'expression orale et écrite", 5),
+                ('Initiation à la recherche scientifique', 2),
+                ('Bureautique 1', 3),
+                ('Comptabilité financière 1', 5),
+                ('Grammaire francaise 1', 3),
+                ("Stage d'observation", 2),
+                ('CCF', 1),
+            ]))
+        self.assertIsNone(
+            Cours.objects.get(nom='Grammaire francaise 1').enseignant)
+
     def test_dry_run_ne_modifie_pas_la_base(self):
         """--dry-run affiche sans écrire : intitulés et crédits intacts."""
         self._contexte(

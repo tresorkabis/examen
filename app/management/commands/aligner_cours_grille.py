@@ -44,6 +44,7 @@ ENTETE_UE = "UNITES D'ENSEIGNEMENT"
 GRILLES = {
     'L1 INFO LMD A_2025_2026.xlsx': 'L1 INFO A',
     'L2 INFO LMD A_2024_2025.xlsx': 'L2 INFO A',
+    'L1 TS LMD A_2023_2024.xlsx': 'L1 SD A',
     'L2 SCF_LMD 2025_2026.xlsx': 'L2 SCF LMD',
     'L3 TS_LMD A 2025_2026.xlsx': 'L3 SD A',
 }
@@ -224,10 +225,40 @@ CORRESPONDANCES_L2_INFO = {
     'Stage': None,
 }
 
+# UE de la grille L1 SD A (intitulé exact) -> cours en base. `None` = à créer.
+# Décisions métier : « Comptabilité financière 1 » désigne COMPTABILITE
+# GENERALE (CCF reste un cours hors grille) ; « Grammaire francaise 1 » et
+# « Stage d'observation » n'ont pas de cours et sont créés (le premier est
+# ensuite confié à NAKUSAMWANA SERGE).
+CORRESPONDANCES_L1_SD = {
+    "Techniques d'expression orale et écrite": 'TOE',
+    'Correspondance commerciale et adminstrative 1': 'CORR COMM FR',
+    "Initiation à l'informatique": 'INFO GENERALE',
+    'Initiation à la recherche scientifique': 'IRS',
+    'Bureautique 1': 'BUREAUTIQUE 1',
+    'Organisation et techniques de secrétariat': 'OTS',
+    'Archivage 1': 'ARCHIVAGE 1',
+    'Education à la citoyeneté': 'EDUCIT',
+    'Eléments de droit civil et constitutionnel': 'DROIT CIVIL',
+    'Comptabilité financière 1': 'COMPTABILITE GENERALE',
+    'Technique du commerce': 'TECOM',
+    'Eléments de marketing': 'ELEMENT DE MARKETING',
+    'Anglais 1': 'ANGLAIS',
+    'Grammaire francaise 1': None,
+    'Rédaction française': 'REDACTION FRANCAISE',
+    "Initiation à l'internet et au courrier éléctronique":
+        "INITIATION A L'INTERNET",
+    'Statistique descriptive': 'STATISTIQUE',
+    'Pratique professionnelle 1': 'PRATIQUE PROFESSIONNELLE',
+    "Stage d'observation": None,
+}
+
 # Fichier -> (promotion, correspondances, corrections).
 CONFIGS = {
     'L1 INFO LMD A_2025_2026.xlsx': (
         'L1 INFO A', CORRESPONDANCES_L1, CORRECTIONS_L1),
+    'L1 TS LMD A_2023_2024.xlsx': (
+        'L1 SD A', CORRESPONDANCES_L1_SD, {}),
     'L2 INFO LMD A_2024_2025.xlsx': (
         'L2 INFO A', CORRESPONDANCES_L2_INFO, {}),
     'L2 SCF_LMD 2025_2026.xlsx': (
@@ -321,6 +352,7 @@ CORRESPONDANCES_PAR_PROMOTION = {
     'L1 SCF LMD': (CORRESPONDANCES_L1_SCF, CORRECTIONS_L1_SCF),
     'L2 SD A': (CORRESPONDANCES_L2_SD, CORRECTIONS_L2_SD),
     'L2 INFO A': (CORRESPONDANCES_L2_INFO, {}),
+    'L1 SD A': (CORRESPONDANCES_L1_SD, {}),
 }
 
 
