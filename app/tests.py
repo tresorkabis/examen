@@ -2847,8 +2847,9 @@ class UesAReprendreTests(TestCase):
         self.assertIn('Non notée', texte)
         self.assertNotIn('8,00', texte)
         self.assertNotIn('8.00', texte)
-        # Nom de fichier explicite, ouvert dans l'onglet (imprimable).
-        self.assertIn('ues-reprendre-apota-kisoki-collins.pdf',
+        # Nom de fichier explicite (nom de l'étudiant en tête), ouvert dans
+        # l'onglet (imprimable).
+        self.assertIn('APOTA KISOKI COLLINS - UE a reprendre.pdf',
                       reponse['Content-Disposition'])
         self.assertIn('inline', reponse['Content-Disposition'])
 

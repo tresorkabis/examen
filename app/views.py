@@ -1094,9 +1094,12 @@ def etudiant_ues_reprendre_pdf(request, pk):
     # `as_attachment=False` : le PDF s'ouvre dans l'onglet (donc
     # immédiatement imprimable) au lieu d'être téléchargé — c'est un
     # document de travail à remettre à l'étudiant, pas une archive.
+    # Le nom de fichier commence par le nom de l'étudiant : le document est
+    # identifiable au premier coup d'œil (et dans un dossier de fiches).
+    # Django encode les accents en RFC 5987 (`filename*`) le cas échéant.
     return FileResponse(
         tampon, as_attachment=False, content_type='application/pdf',
-        filename=f"ues-reprendre-{slugify(etudiant.noms)}.pdf")
+        filename=f"{etudiant.noms} - UE a reprendre.pdf")
 
 
 def session_grille_apercu(request, pk, grille_pk):
