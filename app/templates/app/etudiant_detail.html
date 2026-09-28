@@ -18,7 +18,9 @@
     /* ===== Éléments réservés à l'impression ===== */
     .print-only-header,
     .print-only-summary,
-    .print-only-footer {
+    .print-only-footer,
+    .print-only-footer-ue,
+    .titre-ue {
         display: none;
     }
 
@@ -178,6 +180,23 @@
             page-break-inside: avoid !important;
             break-inside: avoid !important;
         }
+
+        /* Impression ciblée « UE à reprendre » (bouton de la fiche) :
+           `imprimerUesAReprendre()` pose la classe `impression-ue` sur
+           <body> ; le relevé est alors masqué au profit de la seule liste
+           des UE non acquises, sous le même en-tête officiel et avec le même
+           emplacement de signature que le relevé. */
+        body.impression-ue .titre-releve { display: none !important; }
+        body.impression-ue .titre-ue { display: block !important; }
+        body.impression-ue .print-only-summary,
+        body.impression-ue .card-releve,
+        body.impression-ue .card-parcours,
+        body.impression-ue .card-examens,
+        body.impression-ue .print-only-footer-releve {
+            display: none !important;
+        }
+        body.impression-ue .card-ue-a-reprendre { display: block !important; }
+        body.impression-ue .print-only-footer-ue { display: block !important; }
     }
 </style>
 {% endblock %}
@@ -186,7 +205,8 @@
     <!-- En-tête officiel imprimable (visible uniquement à l'impression) -->
     <div class="print-only-header">
         <h1>ÉCOLE SUPÉRIEURE DE FORMATION DES CADRES</h1>
-        <h2>RELEVÉ DE NOTES</h2>
+        <h2 class="titre-releve">RELEVÉ DE NOTES</h2>
+        <h2 class="titre-ue">LISTE DES UE À REPRENDRE</h2>
         <div class="print-header-meta">
             Étudiant(e) : <strong>{{ etudiant.noms }}</strong> &nbsp;|&nbsp;
             Matricule : <strong>{{ etudiant.numero_etudiant }}</strong> &nbsp;|&nbsp;
@@ -208,11 +228,11 @@
                 <i class="bi bi-printer me-1"></i>Imprimer le relevé
             </button>
             {% if ues_a_reprendre %}
-            <a href="{% url 'etudiant_ues_reprendre_pdf' etudiant.pk %}"
-               class="btn btn-warning" target="_blank" rel="noopener"
-               title="Imprimer uniquement les UE à reprendre (année courante et années antérieures)">
-                <i class="bi bi-arrow-repeat me-1"></i>UE à reprendre
-            </a>
+            <button type="button" class="btn btn-warning"
+                    onclick="imprimerUesAReprendre()"
+                    title="Imprimer uniquement les UE à reprendre (année courante et années antérieures)">
+                <i class="bi bi-printer me-1"></i>UE à reprendre
+            </button>
             {% endif %}
             {% if grille_ligne and grille_ligne.grille.session %}
             <a href="{% url 'session_grille_apercu' grille_ligne.grille.session.pk grille_ligne.grille.pk %}" class="btn btn-outline-info" title="Consulter la grille de délibération de toute la promotion">
@@ -276,7 +296,7 @@
         {# =================================================================== #}
         {# SECTION 1 : RELEVÉ DE DÉLIBÉRATION OFFICIEL (GRILLE DE LA PROMOTION) #}
         {# =================================================================== #}
-        <div class="card shadow-sm deliberation-card mb-4">
+        <div class="card shadow-sm deliberation-card card-releve mb-4">
             <!-- En-tête de carte (écran uniquement) -->
             <div class="card-header bg-white py-3 no-print">
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -591,7 +611,7 @@
         </div>
 
         <!-- Emplacement officiel de signature à l'impression : seul le Secrétaire Général Académique signe -->
-        <div class="print-only-footer mt-4 pt-1">
+        <div class="print-only-footer print-only-footer-releve mt-4 pt-1">
             <div class="d-flex justify-content-end text-center">
                 <div style="width: 250px;">
                     <p class="mb-1 text-muted" style="font-size: 8pt;">Fait à ........................................, le ..............................</p>
@@ -618,7 +638,7 @@
     {# l'import de chaque grille de délibération.                           #}
     {# =================================================================== #}
     {% if parcours %}
-    <div class="card shadow-sm mb-4 no-print">
+    <div class="card shadow-sm card-parcours mb-4 no-print">
         <div class="card-header bg-white py-2">
             <h5 class="mb-0 fw-semibold">
                 <i class="bi bi-signpost-split me-2 text-secondary"></i>Parcours académique ({{ parcours|length }} année{{ parcours|length|pluralize }})
@@ -690,18 +710,18 @@
     {# pas acquise : note sous 10/20 ou case vide (UE non notée).          #}
     {# =================================================================== #}
     {% if ues_a_reprendre %}
-    <div class="card shadow-sm mb-4 no-print border-warning border-4">
+    <div class="card shadow-sm card-ue-a-reprendre mb-4 no-print border-warning border-4">
         <div class="card-header bg-warning bg-opacity-10 py-2 d-flex justify-content-between align-items-center">
             <h5 class="mb-0 fw-semibold">
                 <i class="bi bi-arrow-repeat me-2 text-warning"></i>UE à reprendre ({{ nb_ues_a_reprendre }})
             </h5>
             <div class="d-flex align-items-center gap-2">
                 <span class="badge text-bg-warning text-dark">{{ nb_credits_a_reprendre }} crédit{{ nb_credits_a_reprendre|pluralize }}</span>
-                <a href="{% url 'etudiant_ues_reprendre_pdf' etudiant.pk %}"
-                   class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener"
-                   title="Imprimer uniquement ces UE (toutes années)">
+                <button type="button" class="btn btn-sm btn-outline-dark"
+                        onclick="imprimerUesAReprendre()"
+                        title="Imprimer uniquement ces UE (toutes années)">
                     <i class="bi bi-printer me-1"></i>Imprimer
-                </a>
+                </button>
             </div>
         </div>
         <div class="card-body p-0">
@@ -713,16 +733,25 @@
                             <th class="text-center">Crédits</th>
                             <th class="text-center">Note</th>
                             <th class="text-center">Semestre</th>
-                            <th>Année — Promotion</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for item in ues_a_reprendre %}
                         <tr class="table-light">
-                            <td colspan="5" class="small fw-semibold text-muted">
+                            <td colspan="4" class="small fw-semibold text-muted">
                                 <i class="bi bi-table me-1"></i>
                                 {{ item.grille.annee_academique|default:"—" }} — {{ item.grille.promotion.nom }}
                                 <span class="ms-2 text-muted">({{ item.credits }} crédit{{ item.credits|pluralize }} à repasser)</span>
+                                {% comment %}
+                                La décision est celle de la délibération annuelle
+                                dans cette promotion : elle est portée par la
+                                ligne de grille, pas par chaque UE.
+                                {% endcomment %}
+                                <span class="ms-2">Décision de délibération (promotion)&nbsp;:
+                                    {% if item.ligne.decision %}
+                                    <span class="badge {% if item.ligne.decision == 'V' %}text-bg-success{% elif item.ligne.decision == 'VC' %}text-bg-warning text-dark{% else %}text-bg-danger{% endif %}" title="{{ item.ligne.get_decision_display }}">{{ item.ligne.decision }}</span>
+                                    {% else %}—{% endif %}
+                                </span>
                             </td>
                         </tr>
                         {% for note in item.ues %}
@@ -737,12 +766,6 @@
                                 {% endif %}
                             </td>
                             <td class="text-center">S{{ note.ue.semestre|default:"?" }}</td>
-                            <td class="small text-muted">
-                                {% if item.ligne.decision %}
-                                Décision délibérée :
-                                <span class="badge {% if item.ligne.decision == 'V' %}text-bg-success{% elif item.ligne.decision == 'VC' %}text-bg-warning text-dark{% else %}text-bg-danger{% endif %}">{{ item.ligne.decision }}</span>
-                                {% else %}—{% endif %}
-                            </td>
                         </tr>
                         {% endfor %}
                         {% endfor %}
@@ -755,13 +778,25 @@
                 note inférieure à 10/20 <strong>ou</strong> UE non notée (case vide de la grille).
             </div>
         </div>
+
+        <!-- Emplacement officiel de signature, réservé à l'impression de
+             cette liste (même présentation que le pied du relevé). -->
+        <div class="print-only-footer print-only-footer-ue mt-4 pt-1">
+            <div class="d-flex justify-content-end text-center">
+                <div style="width: 250px;">
+                    <p class="mb-1 text-muted" style="font-size: 8pt;">Fait à ........................................, le ..............................</p>
+                    <p class="fw-bold mb-4" style="font-size: 9pt;">Le Secrétaire Général Académique</p>
+                    <p class="text-muted border-top border-dark pt-1 mx-2" style="font-size: 7.5pt;">Sceau &amp; Signature</p>
+                </div>
+            </div>
+        </div>
     </div>
     {% endif %}
 
     {# =================================================================== #}
     {# SECTION 2 : ÉVALUATION CONTINUE & FICHES DE COTE DES EXAMENS        #}
     {# =================================================================== #}
-    <div class="card shadow-sm mb-4 no-print">
+    <div class="card shadow-sm card-examens mb-4 no-print">
         <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
             <h5 class="mb-0 fw-semibold">
                 <i class="bi bi-journal-check me-2 text-secondary"></i>Fiches de cotation &amp; Examens enregistrés ({{ nb_examens }})
@@ -821,4 +856,36 @@
             </div>
         </div>
     </div>
+{% endblock %}
+
+{% block extra_script %}
+{% if ues_a_reprendre %}
+<script>
+    /* Impression ciblée « UE à reprendre » — même mécanique que « Imprimer le
+       relevé » (impression navigateur) : la classe `impression-ue` posée sur
+       <body> masque le relevé via les règles @media print et ne garde que la
+       liste des UE non acquises, sous l'en-tête officiel et avec l'emplacement
+       de signature. La classe est retirée après l'impression ou si elle est
+       annulée, pour que l'écran reste inchangé.
+
+       Le titre du document est remplacé le temps de l'impression : c'est lui
+       que propose par défaut « Enregistrer au format PDF ». */
+    var titreUesAReprendre = "UE à reprendre — {{ etudiant.noms|escapejs }}{% if etudiant.numero_etudiant %} ({{ etudiant.numero_etudiant|escapejs }}){% endif %} — {{ etudiant.promotion.nom|escapejs }}";
+    var titreInitial = null;
+
+    function imprimerUesAReprendre() {
+        titreInitial = document.title;
+        document.title = titreUesAReprendre;
+        document.body.classList.add('impression-ue');
+        window.print();
+    }
+
+    window.addEventListener('afterprint', function () {
+        document.body.classList.remove('impression-ue');
+        if (titreInitial) {
+            document.title = titreInitial;
+        }
+    });
+</script>
+{% endif %}
 {% endblock %}

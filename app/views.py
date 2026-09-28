@@ -1008,8 +1008,10 @@ def etudiant_ues_reprendre_pdf(request, pk):
     L'en-tête rappelle l'étudiant, sa promotion actuelle et le total des
     crédits à repasser ; le corps liste, année par année (la plus récente
     d'abord) et par promotion, les UE non acquises — note sous 10/20 ou UE
-    non notée — avec leur note /20 sans décimale, leur semestre, leurs
-    crédits et la décision délibérée. Un total de crédits clôt chaque
+    non notée — avec leur note /20 sans décimale, leur semestre et leurs
+    crédits. La décision de délibération appartient à la *promotion* (la
+    ligne annuelle de l'étudiant), pas à chaque UE : elle est rappelée une
+    seule fois, sous le titre de la section. Un total de crédits clôt chaque
     année : c'est la liste à remettre à l'étudiant pour ses rattrapages.
     """
     from reportlab.lib import colors
@@ -1060,12 +1062,23 @@ def etudiant_ues_reprendre_pdf(request, pk):
     elements.append(Spacer(1, 6 * mm))
 
     if elements_ues:
-        en_tete = ['UE', 'Cr.', 'Note', 'Sem.', 'Décision']
+        en_tete = ['UE', 'Cr.', 'Note', 'Sem.']
         for (annee, promotion_nom), lignes_annee in sorted(
                 sections.items(), key=lambda item: _cle_annee(item[0][0]),
                 reverse=True):
+            # La décision appartient à la *promotion* — c'est la ligne de
+            # délibération annuelle de l'étudiant — et non à chaque UE : elle
+            # est rappelée une seule fois, sous le titre de la section.
+            decisions = []
+            for element in lignes_annee:
+                libelle = element['ligne'].get_decision_display()
+                if libelle and libelle not in decisions:
+                    decisions.append(libelle)
             elements.append(Paragraph(
                 f"{annee or '—'} — {promotion_nom}", styles['Heading2']))
+            elements.append(Paragraph(
+                'Décision de délibération (promotion) : '
+                f"<b>{' / '.join(decisions) or '—'}</b>", styles['Normal']))
             lignes = [en_tete[:]]
             for element in lignes_annee:
                 note = element['note']
@@ -1075,15 +1088,13 @@ def etudiant_ues_reprendre_pdf(request, pk):
                     (f"{note.note_affichee}/20" if note.est_notee
                      else 'Non notée'),
                     str(element['ue'].semestre),
-                    element['ligne'].decision or '—',
                 ])
             lignes.append([
                 'Total',
                 str(sum(item['ue'].credits for item in lignes_annee)),
-                '', '', ''])
+                '', ''])
             tableau = Table(
-                lignes, colWidths=[92 * mm, 14 * mm, 18 * mm, 16 * mm,
-                                   20 * mm])
+                lignes, colWidths=[110 * mm, 14 * mm, 18 * mm, 18 * mm])
             tableau.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#212529')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),

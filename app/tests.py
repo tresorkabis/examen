@@ -2791,7 +2791,37 @@ class UesAReprendreTests(TestCase):
         reponse = self.client.get(
             reverse('etudiant_detail', args=[self.etudiant.pk]))
 
-        self.assertNotContains(reponse, 'UE à reprendre')
+        # Ni la carte, ni son bouton d'impression : le libellé n'apparaît plus
+        # que dans les commentaires CSS/JS de la page.
+        self.assertNotContains(
+            reponse, '<i class="bi bi-arrow-repeat me-2 text-warning"></i>')
+        self.assertNotContains(reponse, 'card-ue-a-reprendre mb-4')
+        self.assertNotContains(reponse, 'onclick="imprimerUesAReprendre()"')
+
+    def test_decision_de_la_promotion_rappelee_une_fois(self):
+        """La décision est celle de la grille (promotion), pas de chaque UE.
+
+        Elle figure une seule fois, sur la ligne de groupe « année —
+        promotion », jamais répétée en face de chaque UE à repasser.
+        """
+        ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
+        ue_anglais = self._ue(self.grille_l2, 'Anglais', 2, 2)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=8)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_anglais, note=6)
+        self.ligne_l2.decision = 'NV'
+        self.ligne_l2.save(update_fields=['decision'])
+
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('etudiant_detail', args=[self.etudiant.pk]))
+        contenu = reponse.content.decode()
+
+        # Deux UE à repasser, une seule décision — celle de la promotion.
+        self.assertContains(reponse, 'UE à reprendre (2)')
+        self.assertEqual(
+            contenu.count('Décision de délibération (promotion)'), 1)
+        self.assertIn('Non validé', contenu)  # libellé complet du badge
+        self.assertNotIn('Décision délibérée', contenu)
 
     # --- Impression dédiée : uniquement les UE à reprendre -----------------
 
@@ -2820,6 +2850,10 @@ class UesAReprendreTests(TestCase):
         GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_anglais,
                                   note=None)
         GrilleNote.objects.create(ligne=self.ligne_l1, ue=ue_compta, note=7)
+        self.ligne_l2.decision = 'NV'
+        self.ligne_l2.save(update_fields=['decision'])
+        self.ligne_l1.decision = 'V'
+        self.ligne_l1.save(update_fields=['decision'])
 
         self.client.force_login(self.user)
         reponse, texte = self._pdf(self.etudiant.pk)
@@ -2834,6 +2868,11 @@ class UesAReprendreTests(TestCase):
         # Une section par année, la plus récente d'abord.
         self.assertIn('2025-2026', texte)
         self.assertIn('2024-2025', texte)
+        # La décision appartient à la promotion : elle est rappelée une fois
+        # par année (2 sections), jamais répétée en face de chaque UE.
+        self.assertEqual(
+            texte.count('Décision de délibération (promotion)'), 2)
+        self.assertIn('Non validé', texte)
         self.assertLess(texte.index('2025-2026'), texte.index('2024-2025'))
         self.assertIn('L1 SCF LMD', texte)
         # Les UE non acquises sont là, l'UE validée non.
@@ -2899,18 +2938,57 @@ class UesAReprendreTests(TestCase):
         self.assertIn('/login/', reponse.url)
 
     def test_boutons_impression_sur_la_fiche(self):
-        """La fiche propose l'impression dédiée à côté du relevé complet."""
+        """« UE à reprendre » s'imprime comme le relevé : impression navigateur.
+
+        Deux déclencheurs (barre d'action et en-tête de carte), et plus aucune
+        ouverture du PDF dans un nouvel onglet.
+        """
         ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
         GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=8)
 
         self.client.force_login(self.user)
         reponse = self.client.get(
             reverse('etudiant_detail', args=[self.etudiant.pk]))
+        contenu = reponse.content.decode()
 
-        url_pdf = reverse('etudiant_ues_reprendre_pdf',
-                          args=[self.etudiant.pk])
-        self.assertContains(reponse, url_pdf)
         self.assertContains(reponse, 'Imprimer le relevé')
+        self.assertEqual(
+            contenu.count('onclick="imprimerUesAReprendre()"'), 2)
+        self.assertNotContains(
+            reponse,
+            reverse('etudiant_ues_reprendre_pdf', args=[self.etudiant.pk]))
+
+    def test_impression_ue_reutilise_le_cadre_du_releve(self):
+        """Le mode d'impression « UE » s'appuie sur les blocs du relevé.
+
+        Chaque classe visée par le CSS doit exister dans la page : un
+        renommage silencieux ferait retomber l'impression ciblée sur le relevé
+        complet, ou masquerait la liste.
+        """
+        ue_droit = self._ue(self.grille_l2, 'Droit administratif', 3, 1)
+        GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=8)
+
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('etudiant_detail', args=[self.etudiant.pk]))
+        contenu = reponse.content.decode()
+
+        # Deux titres : le relevé (masqué en mode « UE ») et la liste.
+        self.assertIn('class="titre-releve"', contenu)
+        self.assertIn('class="titre-ue"', contenu)
+        self.assertIn('LISTE DES UE À REPRENDRE', contenu)
+        # Règles d'impression ciblée et classes des blocs qu'elles ciblent.
+        self.assertIn('body.impression-ue .card-ue-a-reprendre', contenu)
+        self.assertIn('body.impression-ue .card-releve', contenu)
+        self.assertIn('body.impression-ue .card-parcours', contenu)
+        self.assertIn('body.impression-ue .card-examens', contenu)
+        for classe in ('card-releve', 'card-ue-a-reprendre',
+                       'print-only-footer-releve', 'print-only-footer-ue'):
+            with self.subTest(classe=classe):
+                self.assertIn(classe, contenu)
+        # Même pied de signature que le relevé (un par document imprimable).
+        self.assertEqual(
+            contenu.count('Le Secrétaire Général Académique'), 2)
 
     def test_bouton_impression_absent_sans_echec(self):
         """Pas d'UE à reprendre → pas de bouton d'impression dédié."""
