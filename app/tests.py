@@ -2847,10 +2847,12 @@ class UesAReprendreTests(TestCase):
         self.assertIn('Non notée', texte)
         self.assertNotIn('8,00', texte)
         self.assertNotIn('8.00', texte)
-        # Nom de fichier explicite (nom de l'étudiant en tête), ouvert dans
-        # l'onglet (imprimable).
-        self.assertIn('APOTA KISOKI COLLINS - UE a reprendre.pdf',
-                      reponse['Content-Disposition'])
+        # Nom de fichier auto-explicatif : nature du document, étudiant,
+        # matricule, promotion et période couverte.
+        self.assertIn(
+            'UE a reprendre - APOTA KISOKI COLLINS (L2SCFLMD-001) - '
+            'L2 SCF LMD - 2024-2025 a 2025-2026.pdf',
+            reponse['Content-Disposition'])
         self.assertIn('inline', reponse['Content-Disposition'])
 
     def test_pdf_sans_ue_a_reprendre(self):
@@ -2859,11 +2861,15 @@ class UesAReprendreTests(TestCase):
         GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_droit, note=12)
 
         self.client.force_login(self.user)
-        _, texte = self._pdf(self.etudiant.pk)
+        reponse, texte = self._pdf(self.etudiant.pk)
 
         self.assertIn("Aucune UE à reprendre sur l'ensemble des années.",
                       texte)
         self.assertNotIn('Droit administratif', texte)
+        # Aucune année à reprendre : la période est omise du nom de fichier.
+        self.assertIn(
+            'UE a reprendre - APOTA KISOKI COLLINS (L2SCFLMD-001) - '
+            'L2 SCF LMD.pdf', reponse['Content-Disposition'])
 
     def test_pdf_ue_non_notee_avec_toutes_les_ue_vides(self):
         """Une année entièrement non notée reste une année à repasser."""
@@ -2873,13 +2879,16 @@ class UesAReprendreTests(TestCase):
         GrilleNote.objects.create(ligne=self.ligne_l2, ue=ue_alg, note=None)
 
         self.client.force_login(self.user)
-        _, texte = self._pdf(self.etudiant.pk)
+        reponse, texte = self._pdf(self.etudiant.pk)
 
         self.assertIn('2 UE', texte)
         self.assertIn('7 crédit(s) à reprendre', texte)
         self.assertIn('Non notée', texte)
         self.assertIn('Droit administratif', texte)
         self.assertIn('Algèbre', texte)
+        # Une seule année concernée : elle figure seule dans le nom.
+        self.assertIn('L2 SCF LMD - 2025-2026.pdf',
+                      reponse['Content-Disposition'])
 
     def test_pdf_anonyme_redirige_vers_login(self):
         """L'impression est réservée aux utilisateurs connectés."""

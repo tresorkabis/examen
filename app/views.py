@@ -961,6 +961,16 @@ def _cle_annee(annee):
             if partie.isdigit()]
 
 
+def _libelle_annee(annee):
+    """Année académique présentable : « 2023 - 2024 » -> « 2023-2024 ».
+
+    Les grilles importées portent parfois l'année avec des espaces autour du
+    tiret ; le libellé est normalisé pour les noms de fichiers et les titres.
+    """
+    return '-'.join(partie for partie in annee.replace(' ', '').split('-')
+                    if partie)
+
+
 def _donnees_ues_a_reprendre(etudiant):
     """UE à reprendre d'un étudiant, toutes années confondues.
 
@@ -1091,15 +1101,33 @@ def etudiant_ues_reprendre_pdf(request, pk):
 
     doc.build(elements)
     tampon.seek(0)
+    # Nom de fichier auto-explicatif, lisible sans ouvrir le PDF : nature du
+    # document, étudiant, matricule, promotion et période couverte — c'est le
+    # nom attendu dans un dossier de rattrapages (« qui ? quoi ? où ?
+    # quand ? »). Django encode les accents en RFC 5987 (`filename*`) si le
+    # nom de l'étudiant en contient.
+    annees = sorted(
+        {element['annee_academique'] for element in elements_ues
+         if element['annee_academique']}, key=_cle_annee)
+    if len(annees) > 1:
+        periode = f"{_libelle_annee(annees[0])} a {_libelle_annee(annees[-1])}"
+    else:
+        periode = _libelle_annee(annees[0]) if annees else None
+    # « NOM PRÉNOM (matricule) » d'un seul tenant : deux séparateurs d'affilée
+    # (« NOM - (matricule) ») se liraient mal.
+    identite = etudiant.noms
+    if etudiant.numero_etudiant:
+        identite = f"{identite} ({etudiant.numero_etudiant})"
+    parties = ['UE a reprendre', identite, etudiant.promotion.nom]
+    if periode:
+        parties.append(periode)
+    nom_fichier = ' - '.join(parties) + '.pdf'
     # `as_attachment=False` : le PDF s'ouvre dans l'onglet (donc
     # immédiatement imprimable) au lieu d'être téléchargé — c'est un
     # document de travail à remettre à l'étudiant, pas une archive.
-    # Le nom de fichier commence par le nom de l'étudiant : le document est
-    # identifiable au premier coup d'œil (et dans un dossier de fiches).
-    # Django encode les accents en RFC 5987 (`filename*`) le cas échéant.
     return FileResponse(
         tampon, as_attachment=False, content_type='application/pdf',
-        filename=f"{etudiant.noms} - UE a reprendre.pdf")
+        filename=nom_fichier)
 
 
 def session_grille_apercu(request, pk, grille_pk):
