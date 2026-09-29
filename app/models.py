@@ -36,6 +36,18 @@ class Promotion(models.Model):
         ordering = ['nom']
 
 
+def normaliser_annee(annee):
+    """Année académique canonique : « 2023 - 2024 » -> « 2023-2024 ».
+
+    Les grilles importées portent parfois l'année avec des espaces autour du
+    tiret, d'autres non. Sans normalisation, la même année s'écrit de deux
+    façons et le parcours d'un étudiant se retrouve avec deux étapes
+    identiques — dont une sans résultats.
+    """
+    return '-'.join(partie for partie in (annee or '').replace(' ', '')
+                    .split('-') if partie)
+
+
 class HistoriquePromotion(models.Model):
     """Étape du parcours d'un étudiant : une promotion fréquentée une année.
 
@@ -72,13 +84,24 @@ class HistoriquePromotion(models.Model):
         `Etudiant.save` lors d'un changement de promotion) reçoit l'année et
         la grille de l'import. L'opération est donc idempotente.
 
+        Les deux écritures d'une même année — « 2023-2024 » (grilles L1 INFO A)
+        et « 2023 - 2024 » (grilles L1 SD A) — désignent la même année : la
+        comparaison ignore les espaces et l'année est enregistrée sous forme
+        canonique, sinon chaque import créait une seconde étape, sans
+        résultats.
+
         Retourne ``(etape, cree)``.
         """
-        etape = (cls.objects
-                 .filter(etudiant=etudiant, promotion=promotion)
-                 .filter(models.Q(annee_academique=annee)
-                         | models.Q(annee_academique=''))
-                 .first())
+        annee = normaliser_annee(annee)
+        candidats = list(cls.objects.filter(etudiant=etudiant,
+                                            promotion=promotion))
+        etape = next(
+            (e for e in candidats
+             if normaliser_annee(e.annee_academique) == annee), None)
+        if etape is None:
+            # Étape créée sans année (changement de promotion) : c'est elle
+            # que l'import complète.
+            etape = next((e for e in candidats if not e.annee_academique), None)
         if etape is None:
             return cls.objects.create(
                 etudiant=etudiant, promotion=promotion,

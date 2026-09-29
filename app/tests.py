@@ -20,7 +20,7 @@ from .excel_import import _alerte_decisions
 
 from .models import (Promotion, Enseignant, Etudiant, Cours, Session,
                      Examen, Inscription, Grille, GrilleUE, GrilleEtudiant,
-                     GrilleNote, HistoriquePromotion)
+                     GrilleNote, HistoriquePromotion, normaliser_annee)
 from .forms import ExamenForm
 
 
@@ -2499,6 +2499,115 @@ class ParcoursAcademiqueTests(TestCase):
             reverse('promotion_detail', args=[self.promotion_l1.pk]))
         self.assertEqual(reponse.context['nb_avec_antecedents'], 0)
         self.assertEqual(reponse.context['etudiants'][0].antecedents, [])
+
+    # --- Écriture des années et étapes sans résultats ---------------------
+
+    def _grille_avec_resultats(self, promotion, annee):
+        """Grille minimale portant la ligne délibérée de l'étudiant."""
+        grille = Grille.objects.create(
+            promotion=promotion, session=self.session,
+            annee_academique=annee, total_credits=13)
+        ue = GrilleUE.objects.create(
+            grille=grille, intitule='Informatique Générale', credits=4,
+            semestre=1, groupe='IBA', ordre=1)
+        ligne = GrilleEtudiant.objects.create(
+            grille=grille, etudiant=self.etudiant, rang=1, credits_total=12,
+            moyenne='13.31', decision='V')
+        GrilleNote.objects.create(ligne=ligne, ue=ue, note='12')
+        return grille
+
+    def test_normaliser_annee_supprime_les_espaces_du_tiret(self):
+        """« 2023 - 2024 » et « 2023-2024 » ont une seule écriture canonique."""
+        self.assertEqual(normaliser_annee('2023 - 2024'), '2023-2024')
+        self.assertEqual(normaliser_annee('2023-2024'), '2023-2024')
+        self.assertEqual(normaliser_annee(' 2023  -  2024 '), '2023-2024')
+        self.assertEqual(normaliser_annee(''), '')
+        self.assertEqual(normaliser_annee(None), '')
+
+    def test_deux_ecritures_d_une_meme_annee_une_seule_etape(self):
+        """Les grilles L1 INFO A et L1 SD A n'écrivent pas l'année pareil.
+
+        « 2023-2024 » (les unes) et « 2023 - 2024 » (les autres) désignent la
+        même année : sans normalisation, la seconde écriture créait une étape
+        **sans résultats**, qui s'affichait en tirets sur la fiche.
+        """
+        grille = self._grille_avec_resultats(self.promotion_l1, '2023-2024')
+
+        HistoriquePromotion.enregistrer(
+            self.etudiant, self.promotion_l1, '2023-2024', grille)
+        HistoriquePromotion.enregistrer(
+            self.etudiant, self.promotion_l1, '2023 - 2024', grille)
+
+        etapes = HistoriquePromotion.objects.filter(
+            etudiant=self.etudiant, promotion=self.promotion_l1)
+        self.assertEqual(etapes.count(), 1)
+        self.assertEqual(etapes.get().annee_academique, '2023-2024')
+        self.assertEqual(etapes.get().grille_id, grille.pk)
+
+    def test_etape_sans_resultats_n_apparait_pas_sur_la_fiche(self):
+        """Une année jamais délibérée reste en base mais ne s'affiche pas."""
+        self._importer()
+        self._passer_en_l2()
+        promotion_oubliée = Promotion.objects.create(nom='L1 RTM')
+        HistoriquePromotion.objects.create(
+            etudiant=self.etudiant, promotion=promotion_oubliée,
+            annee_academique='2022-2023')
+
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('etudiant_detail', args=[self.etudiant.pk]))
+        vues = {item['etape'].promotion_id
+                for item in reponse.context['parcours']}
+        self.assertNotIn(promotion_oubliée.pk, vues)
+        self.assertEqual(len(reponse.context['parcours']), 2)
+        # L'étape reste en base : elle atteste le passage par la promotion.
+        self.assertTrue(HistoriquePromotion.objects.filter(
+            etudiant=self.etudiant, promotion=promotion_oubliée).exists())
+
+    def test_annee_en_cours_reste_visible_sans_resultats(self):
+        """L'année que l'étudiant suit s'affiche même non encore délibérée.
+
+        Seules les années **passées** sans résultats sont masquées : l'année
+        en cours n'a pas encore de procès-verbal, c'est normal — elle doit
+        rester lisible sur la fiche, marquée « résultats non importés ».
+        """
+        self._importer()
+        self._passer_en_l2()
+
+        etape_l2 = HistoriquePromotion.objects.get(
+            etudiant=self.etudiant, promotion=self.promotion_l2)
+        self.assertIsNone(etape_l2.grille_id)
+
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('etudiant_detail', args=[self.etudiant.pk]))
+        courant = [item for item in reponse.context['parcours']
+                   if item['est_courante']]
+        self.assertEqual(len(courant), 1)
+        self.assertEqual(courant[0]['etape'].promotion_id,
+                         self.promotion_l2.pk)
+        self.assertIsNone(courant[0]['ligne'])
+        contenu = reponse.content.decode()
+        self.assertIn('résultats non importés', contenu)
+        self.assertIn('Année en cours', contenu)
+
+    def test_etape_sans_resultats_n_apparait_pas_en_antecedents(self):
+        """Sur la page d'une promotion, l'année vide est masquée aussi."""
+        self._importer()
+        self._passer_en_l2()
+        promotion_oubliée = Promotion.objects.create(nom='L1 RTM')
+        HistoriquePromotion.objects.create(
+            etudiant=self.etudiant, promotion=promotion_oubliée,
+            annee_academique='2022-2023')
+
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('promotion_detail', args=[self.promotion_l2.pk]))
+        antecedents = reponse.context['etudiants'][0].antecedents
+        self.assertEqual(len(antecedents), 1)
+        self.assertEqual(antecedents[0]['etape'].promotion,
+                         self.promotion_l1)
+        self.assertIsNotNone(antecedents[0]['ligne'])
 
 
 class PromouvoirEtudiantsCommandTests(TestCase):

@@ -437,17 +437,28 @@ class EtudiantDetailView(DetailView):
         # leurs années antérieures (promotion, année, crédits, décision et
         # moyenne délibérées), renseigné à l'import de chaque grille.
         lignes_par_grille = {ligne.grille_id: ligne for ligne in grille_lignes}
-        parcours = [
-            {
+        # Une année **passée** dont les résultats n'ont jamais été importés
+        # n'est pas affichée : réduite à des tirets, elle ne dirait rien. C'est
+        # le cas des années dont la pièce délibérée n'a pas été archivée — la
+        # grille a pu être supprimée (`grille` est en SET_NULL, l'étape
+        # survit) ou n'a jamais été importée. L'étape reste en base pour la
+        # mémoire du parcours, elle ne se montre juste pas.
+        # L'année en cours, elle, reste visible même sans délibération :
+        # c'est celle que l'étudiant suit actuellement.
+        parcours = []
+        for etape in (HistoriquePromotion.objects
+                      .filter(etudiant=etudiant)
+                      .select_related('promotion', 'grille')):
+            est_courante = (etape.promotion_id == etudiant.promotion_id
+                            and etape.date_fin is None)
+            ligne = lignes_par_grille.get(etape.grille_id)
+            if ligne is None and not est_courante:
+                continue
+            parcours.append({
                 'etape': etape,
-                'ligne': lignes_par_grille.get(etape.grille_id),
-                'est_courante': (etape.promotion_id == etudiant.promotion_id
-                                 and etape.date_fin is None),
-            }
-            for etape in (HistoriquePromotion.objects
-                          .filter(etudiant=etudiant)
-                          .select_related('promotion', 'grille'))
-        ]
+                'ligne': ligne,
+                'est_courante': est_courante,
+            })
 
         # --- UE à reprendre : consolidé sur TOUTES les grilles de
         # l'étudiant (promotion courante et années antérieures) — c'est ce
@@ -526,9 +537,14 @@ class PromotionDetailView(DetailView):
         }
         antecedents = {}
         for etape in etapes:
+            ligne = lignes.get((etape.grille_id, etape.etudiant_id))
+            if ligne is None:
+                # Année sans résultats importés : elle resterait réduite à
+                # des tirets, comme sur la fiche de l'étudiant — non affichée.
+                continue
             antecedents.setdefault(etape.etudiant_id, []).append({
                 'etape': etape,
-                'ligne': lignes.get((etape.grille_id, etape.etudiant_id)),
+                'ligne': ligne,
             })
         for etudiant in etudiants:
             etudiant.antecedents = antecedents.get(etudiant.pk, [])
