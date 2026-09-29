@@ -1872,6 +1872,109 @@ class AlignerCoursGrilleCommandTest(TestCase):
             call_command('aligner_cours_grille')
 
 
+class RattacherLignesGrilleCommandTest(TestCase):
+    """Commande `rattacher_lignes_grille` : archiver une ligne à une fiche.
+
+    L'import n'apparie que les noms identiques : une ligne dont le nom diffère
+    de la fiche est archivée (nom conservé). La commande la rattache
+    explicitement, sans toucher au nom du fichier.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.promo_2023 = Promotion.objects.create(nom='L1 SCF LMD')
+        cls.promo_2025 = Promotion.objects.create(nom='L3 SCF LMD')
+        cls.etudiant = Etudiant.objects.create(
+            noms='KADUMBI KAYA YEDDYDIA', numero_etudiant='SCF-001',
+            promotion=cls.promo_2025)
+        cls.autre = Etudiant.objects.create(
+            noms='LOHAMBE WELO PAUL', numero_etudiant='SCF-002',
+            promotion=cls.promo_2025)
+        cls.grille = Grille.objects.create(
+            promotion=cls.promo_2023, annee_academique='2023-2024',
+            total_credits=3)
+        cls.ligne = GrilleEtudiant.objects.create(
+            grille=cls.grille, rang=8, noms='KADUMBI KAYA')
+        GrilleUE.objects.create(grille=cls.grille, intitule='Algorithmique',
+                                credits=3, semestre=1, ordre=1)
+        GrilleNote.objects.create(ligne=cls.ligne,
+                                  ue=cls.grille.ues.first(), note=8)
+
+    def test_rattache_la_ligne_et_ouvre_l_annee_dans_le_parcours(self):
+        """La ligne rejoint la fiche et l'étape de parcours est complétée."""
+        self.assertIsNone(self.ligne.etudiant)
+
+        call_command('rattacher_lignes_grille', grille=self.grille.pk,
+                     lignes=['KADUMBI KAYA=%d' % self.etudiant.pk])
+
+        self.ligne.refresh_from_db()
+        self.assertEqual(self.ligne.etudiant, self.etudiant)
+        # Le nom du fichier est conservé (traçabilité de la pièce délibérée).
+        self.assertEqual(self.ligne.noms, 'KADUMBI KAYA')
+        etape = self.etudiant.historique_promotions.get(promotion=self.promo_2023)
+        self.assertEqual(etape.annee_academique, '2023-2024')
+        self.assertEqual(etape.grille, self.grille)
+
+    def test_commande_est_idempotente(self):
+        """Relancer la commande ne duplique ni ligne ni étape de parcours."""
+        for _ in range(2):
+            call_command('rattacher_lignes_grille', grille=self.grille.pk,
+                         lignes=['KADUMBI KAYA=%d' % self.etudiant.pk])
+
+        self.assertEqual(
+            GrilleEtudiant.objects.filter(etudiant=self.etudiant).count(), 1)
+        self.assertEqual(
+            self.etudiant.historique_promotions.count(), 1)
+
+    def test_dry_run_ne_modifie_pas_la_base(self):
+        """--dry-run simule : la ligne reste archivée."""
+        call_command('rattacher_lignes_grille', grille=self.grille.pk,
+                     lignes=['KADUMBI KAYA=%d' % self.etudiant.pk],
+                     dry_run=True)
+
+        self.ligne.refresh_from_db()
+        self.assertIsNone(self.ligne.etudiant)
+        self.assertEqual(self.etudiant.historique_promotions.count(), 0)
+
+    def test_format_invalide_leve_une_erreur(self):
+        """Un nom sans « =id » explicite est refusé."""
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command('rattacher_lignes_grille', grille=self.grille.pk,
+                         lignes=['KADUMBI KAYA'])
+
+    def test_nom_absent_de_la_grille_leve_une_erreur(self):
+        """Un nom inconnu de la grille échoue sans rien modifier."""
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command('rattacher_lignes_grille', grille=self.grille.pk,
+                         lignes=['NOM INCONNU=%d' % self.autre.pk])
+
+    def test_etudiant_introuvable_leve_une_erreur(self):
+        """Un id de fiche inexistant échoue sans rien modifier."""
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command('rattacher_lignes_grille', grille=self.grille.pk,
+                         lignes=['KADUMBI KAYA=999999'])
+
+    def test_ligne_deja_rattachee_a_une_autre_fiche_refuse(self):
+        """Une ligne déjà rattachée n'est jamais déplacée silencieusement."""
+        from django.core.management.base import CommandError
+
+        self.ligne.etudiant = self.autre
+        self.ligne.save(update_fields=['etudiant'])
+
+        with self.assertRaises(CommandError):
+            call_command('rattacher_lignes_grille', grille=self.grille.pk,
+                         lignes=['KADUMBI KAYA=%d' % self.etudiant.pk])
+
+        self.ligne.refresh_from_db()
+        self.assertEqual(self.ligne.etudiant, self.autre)
+
+
 class GrilleModelesTests(TestCase):
     """Modèles de grille de délibération : structure, contraintes, barème."""
 
