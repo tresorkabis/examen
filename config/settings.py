@@ -35,9 +35,20 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 # « testserver » est ajouté pour la suite de tests de Django.
 ALLOWED_HOSTS = [
     h.strip() for h in os.environ.get(
-        'ALLOWED_HOSTS', 'localhost,127.0.0.1,testserver'
+        'ALLOWED_HOSTS', 'localhost,127.0.0.1,testserver,.pythonanywhere.com'
     ).split(',') if h.strip()
 ]
+
+# Origines de confiance CSRF (nécessaire en HTTPS sur PythonAnywhere)
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip() for origin in os.environ.get(
+        'CSRF_TRUSTED_ORIGINS',
+        'https://*.pythonanywhere.com,http://localhost,http://127.0.0.1'
+    ).split(',') if origin.strip()
+]
+
+# Entête pour reverse-proxy HTTPS (PythonAnywhere / Nginx)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # Application definition
@@ -131,7 +142,20 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
+# Sécurité des cookies en production (HTTPS)
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 
 # Email

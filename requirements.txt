@@ -13,6 +13,10 @@ six==1.17.0
 
 # Export PDF
 reportlab==5.0.1
+pillow==12.3.0
 
 # Utilitaires (lecture de PDF de référence)
 pypdf==6.18.0
+
+# Production / Fichiers statiques
+whitenoise==6.12.0
