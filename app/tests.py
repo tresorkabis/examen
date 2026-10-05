@@ -2907,6 +2907,101 @@ class GrillesPromotionTests(TestCase):
         self.assertEqual(reponse.status_code, 405)
         self.assertTrue(Grille.objects.filter(pk=grille.pk).exists())
 
+class ApercuGrilleImpressionTests(TestCase):
+    """Garde-fous du rendu imprimable de l'aperçu de grille.
+
+    Deux défauts constatés à l'impression sont ici verrouillés :
+    - les intitulés d'UE, écrits à la verticale, s'affichaient en une seule
+      ligne pivotée qui chevauchait toutes les colonnes (le bloc `@media print`
+      forçait `writing-mode: horizontal-tb` sur le titre) ;
+    - toutes les colonnes étant en largeur automatique, `table-layout: fixed`
+      les répartissait à ÉGALITÉ : la colonne des noms tombait à ~25 px, aussi
+      étroite qu'une colonne d'UE, et les noms débordaient sur la première
+      colonne de notes.
+    """
+
+    def _gabarit(self):
+        from pathlib import Path
+
+        return (Path(__file__).resolve().parent / 'templates' / 'app'
+                / 'grille_apercu.html').read_text(encoding='utf-8')
+
+    def test_le_titre_d_ue_se_replie_au_lieu_de_deborder(self):
+        """Le titre vertical est un bloc borné, autorisé à se replier."""
+        gabarit = self._gabarit()
+        self.assertIn('writing-mode: vertical-rl', gabarit)
+        self.assertNotIn(
+            'writing-mode: horizontal-tb', gabarit,
+            "un titre horizontal dans un parent vertical forme une seule ligne "
+            "pivotée qui chevauche toutes les colonnes")
+        self.assertIn('max-height: calc(var(--hauteur-entete) - 16px)', gabarit)
+        self.assertIn(
+            'max-height: calc(var(--hauteur-entete-impression) - 8px)', gabarit)
+
+    def test_la_hauteur_d_entete_est_bornee(self):
+        """Hauteur fixe : elle était calculée par la vue, proportionnelle au
+        plus long intitulé, et atteignait plusieurs centaines de pixels."""
+        gabarit = self._gabarit()
+        self.assertIn('--hauteur-entete: 200px;', gabarit)
+        self.assertIn('--hauteur-entete-impression: 170px;', gabarit)
+        self.assertNotIn('{{ hauteur_entete', gabarit)
+
+    def test_les_titres_d_ue_sont_suffisamment_grands(self):
+        """Les intitulés verticaux étaient illisibles : 10 px à l'écran et
+        6 pt à l'impression, soit PLUS PETITS que les notes (7 pt). Le titre se
+        replie en colonnes verticales dans la largeur de la colonne : l'objectif
+        est le plus gros possible, à condition de ne jamais être rogné par
+        `overflow: hidden` (vérifié sur les 14 grilles de la base par la sonde
+        de rendu, jusqu'à la colonne de 24,75 px des grilles à 29 UE)."""
+        gabarit = self._gabarit()
+        self.assertIn('font-size: 12px;', gabarit)
+        self.assertIn('font-size: 7.5pt;', gabarit)
+        self.assertNotIn(
+            'font-size: 6pt;', gabarit,
+            "6 pt rendait l'intitulé plus petit que les notes en 7 pt")
+
+    def test_les_colonnes_fixes_ont_une_largeur_calibree(self):
+        """Sans largeur explicite, `table-layout: fixed` égalise les colonnes."""
+        gabarit = self._gabarit()
+        attendus = {
+            '.col-num': '24px',
+            '.col-etudiant': '165px',
+            '.col-moy': '26px',
+            '.col-dec': '34px',
+            '.col-mention': '70px',
+        }
+        for classe, largeur in attendus.items():
+            with self.subTest(classe=classe):
+                self.assertIn(f'{classe} {{ width: {largeur};', gabarit)
+
+    def test_la_colonne_des_noms_autorise_le_repli(self):
+        """Le nom est le seul contenu long des colonnes fixes."""
+        gabarit = self._gabarit()
+        self.assertIn('td.col-etudiant', gabarit)
+        self.assertIn('overflow-wrap: break-word', gabarit)
+
+    def test_aucune_cellule_ne_deborde_a_l_impression(self):
+        """Le débordement visible dessinerait le texte sur les colonnes voisines.
+
+        Seul le conteneur `.table-responsive` rétablit le débordement (sinon le
+        tableau, plus large que la page, serait rogné par ce conteneur) ; aucune
+        cellule ne doit le faire.
+        """
+        gabarit = self._gabarit()
+        self.assertIn('.table-responsive { overflow: visible !important; }', gabarit)
+        occurrences = gabarit.count('overflow: visible')
+        self.assertEqual(
+            occurrences, 1,
+            f'« overflow: visible » trouvé {occurrences} fois : une cellule qui '
+            'déborde dessine son texte par-dessus les colonnes voisines')
+
+    def test_impression_en_paysage_et_en_tete_repetee(self):
+        gabarit = self._gabarit()
+        self.assertIn('@page { size: A4 landscape;', gabarit)
+        self.assertIn('display: table-header-group', gabarit)
+
+
+
 class UesAReprendreTests(TestCase):
     """Section consolidée « UE à reprendre » de la fiche étudiant.
 

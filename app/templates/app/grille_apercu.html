@@ -19,34 +19,161 @@
         .table-grille .col-moy { width: 60px; min-width: 60px; max-width: 60px; }
         .table-grille .col-dec { width: 56px; min-width: 56px; max-width: 56px; }
         .table-grille .col-mention { width: 140px; min-width: 140px; }
-        /* Intitulés d'UE affichés verticalement (bas vers haut), comme
-           dans la grille Excel d'origine où l'en-tête est étroit.
-           Hauteur d'en-tête commune dimensionnée pour l'intitulé le plus
-           long : plus aucune colonne tronquée. */
+        /* En-tête des colonnes d'UE : intitulés écrits verticalement, du bas
+           vers le haut, comme dans la grille Excel d'origine où les colonnes
+           sont étroites.
+           Deux règles sont indispensables au bon rendu :
+           1. le titre est un BLOC dont la course verticale est bornée
+              (`max-height`) : en écriture verticale, c'est cette borne — et non
+              la largeur de la colonne — qui déclenche le repli ;
+           2. `white-space: normal` autorise ce repli : un intitulé long se
+              répartit alors sur plusieurs colonnes verticales au lieu de
+              déborder en une seule ligne, ce qui chevauchait les colonnes
+              voisines.
+           La hauteur de l'en-tête est donc FIXE : elle n'a plus à être
+           proportionnelle au plus long intitulé (le plus long de la base fait
+           51 caractères et se replie sur deux colonnes verticales). */
         .table-grille thead th.th-ue,
         .table-grille tbody td.td-ue {
             width: 38px; min-width: 38px; max-width: 38px;
             text-align: center;
         }
+        :root {
+            --hauteur-entete: 200px;
+            /* 170 px (et non 150) : l'en-tête plus haut réduit le nombre de
+               colonnes verticales nécessaires — « Management et organisation
+               de l'entreprise » passait de 3 à 2, et un bloc de 2 colonnes
+               (22 px) tient alors même dans les colonnes étroites à 23 UE
+               (31,2 px), là où 3 colonnes débordaient de 0,8 px. */
+            --hauteur-entete-impression: 170px;
+        }
         .table-grille thead th.th-ue {
-            height: 250px;
+            height: var(--hauteur-entete);
             vertical-align: bottom;
-            padding: 8px 4px;
+            /* Marges latérales réduites : chaque pixel gagné permet à un
+               titre replié d'occuper une colonne verticale de plus. */
+            padding: 6px 3px;
             white-space: normal;
-            overflow: visible;
+            overflow: hidden;
+            /* Titre nettement plus gros que les notes : en vertical il est
+               lues à mi-distance de la feuille, et 10 px le rendait presque
+               illisible. 12 px × 1,15 = 13,8 px par colonne verticale, soit
+               2 colonnes dans la largeur utile (38 − 6 = 32 px). */
+            font-size: 12px;
+            line-height: 1.15;
         }
         .table-grille thead th.th-ue > span {
             writing-mode: vertical-rl;
             transform: rotate(180deg);
+            /* `text-align: start` est INDISPENSABLE ici : en écriture verticale,
+               l'axe en ligne est la verticale, donc `text-align` agit sur la
+               HAUTEUR du texte et non sur sa largeur. Le `text-align: center`
+               hérité de la cellule centrait chaque titre sur la hauteur de
+               l'en-tête : les titres repliés sur deux colonnes verticales
+               flottaient au milieu, décalés de (hauteur utile − longueur)/2 px
+               (jusqu'à +34 px), alors que les titres tenant sur une seule
+               colonne restaient au bas — d'où un alignement en dents de scie.
+               `start` (= le bas après la rotation de 180°) ramène toutes les
+               lignes au même point de départ, donc au même niveau. */
+            text-align: start;
+            /* `inline-block` — et non `block` : un enfant de type bloc ignore
+               le `text-align: center` de la cellule, s'ancre au bord GAUCHE et
+               se réduit à la largeur de son contenu (12 px pour une ligne) ;
+               le titre apparaissait alors décalé d'une demi-colonne, au-dessus
+               de la colonne voisine. En `inline-block`, la cellule le centre
+               horizontalement, comme le sont les notes. */
             display: inline-block;
-            white-space: nowrap;
-            line-height: 1.25;
+            vertical-align: bottom;
+            max-height: calc(var(--hauteur-entete) - 16px);
+            white-space: normal;
+            overflow-wrap: break-word;
+            /* Cassage partout et non aux seuls espaces : le repli « aux mots »
+               produisait des lignes RAPIDES à remplir (ex. « Communication /
+               et correspondance / administrative » : 3 lignes pour 32 px de
+               place, la troisième entièrement rognée). Le remplissage
+               greedy limite le nombre de colonnes verticales à
+               ceil(longueur ÷ hauteur utile) — soit 2 au plus pour les
+               51 caractères du plus long intitulé de la base. */
+            word-break: break-all;
         }
         .col-etudiant { position: sticky; left: 0; background: #fff; z-index: 1; }
         thead .col-etudiant { z-index: 3; }
         @media print {
+            /* Impression : la grille ne doit surtout pas être tronquée.
+               Par défaut le conteneur .table-responsive continue de rogner le
+               débordement à l'impression et le tableau (width: max-content)
+               est plus large que la page : on le neutralise, on compacte les
+               colonnes et on impose le paysage. Une grille compactée tient
+               dans la largeur imprimable de l'A4 paysage (≈ 1 060 px), même
+               pour la plus large (29 UE ≈ 930 px), sans format sur mesure. */
+            @page { size: A4 landscape; margin: 8mm; }
             .no-print { display: none !important; }
             body { background: #fff; }
+            .table-responsive { overflow: visible !important; }
+            .table-grille { width: 100% !important; min-width: 0 !important; }
+            .table-grille th, .table-grille td {
+                overflow: hidden;
+                font-size: 7pt;
+                padding: 1px 3px;
+            }
+            /* En-tête des UE : même principe qu'à l'écran, en 8 pt pour
+               dépasser les notes (7 pt) tout en restant lisible. La hauteur
+               étant bornée (170 px), le nombre de colonnes verticales est
+               borné lui aussi par le remplissage greedy : l'intitulé le plus
+               long de la base (51 caractères) en occupe deux. D'où le contrôle
+               de non-rognage dans les tests et la sonde de rendu. */
+            .table-grille thead th.th-ue {
+                height: var(--hauteur-entete-impression);
+                padding: 3px 0;
+                /* 6 pt rendait les intitulés plus petits que les notes (7 pt) :
+                   on passe à 8 pt (2 pt de plus). Aucune marge latérale : sur
+                   les 14 grilles du projet le repli plafonne à 2 colonnes
+                   verticales et le bloc le plus large mesure 23,2 px, dans la
+                   colonne la plus étroite (26,1 px — grille à 29 UE). */
+                font-size: 8pt;
+                line-height: 1.05;
+                overflow: hidden;
+            }
+            .table-grille thead th.th-ue > span {
+                max-height: calc(var(--hauteur-entete-impression) - 8px);
+            }
+            /* Colonnes fixes : largeur calibrée sur leur contenu le plus long
+               réellement présent en base (n° 2 caractères, nom 38, moyenne 2,
+               décision 2, mention 10) — et non « auto ».
+               Motif : avec `table-layout: fixed`, des colonnes toutes
+               automatiques se partagent la largeur À ÉGALITÉ ; la colonne des
+               noms tombait alors à ~25 px, aussi étroite qu'une colonne d'UE,
+               et les noms débordaient sur la première colonne de notes (ils
+               étaient dessinés par-dessus les cotes).
+               Les colonnes d'UE restent automatiques : elles se partagent la
+               place restante (≈ 26 px pour la grille la plus large, 29 UE).
+               Chaque pixel pris aux colonnes fixes est rendu aux intitulés :
+               c'est ce qui fait tenir un titre à 3 colonnes verticales
+               (grilles 10 et 51, « Management et organisation… » : 32 px
+               d'encre) dans sa colonne (32,8 px au lieu de 31,2). */
+            .table-grille .col-num { width: 22px; min-width: 22px; max-width: 22px; }
+            .table-grille .col-etudiant { width: 145px; min-width: 145px; max-width: 145px; }
+            .table-grille .col-moy { width: 24px; min-width: 24px; max-width: 24px; }
+            .table-grille .col-dec { width: 30px; min-width: 30px; max-width: 30px; }
+            .table-grille .col-mention { width: 60px; min-width: 60px; max-width: 60px; }
+            .table-grille thead th.th-ue,
+            .table-grille tbody td.td-ue {
+                width: auto; min-width: 0; max-width: none;
+            }
+            /* Le nom est le seul contenu long des colonnes fixes : il se replie
+               (deux lignes au plus) au lieu de déborder sur les notes. */
+            .table-grille thead th.col-etudiant,
+            .table-grille tbody td.col-etudiant {
+                white-space: normal;
+                overflow-wrap: break-word;
+            }
+            /* Le collage (sticky) perturbe le rendu et la répétition des
+               en-têtes en impression. */
+            .table-grille thead th,
+            .col-etudiant, thead .col-etudiant { position: static; }
+            /* En-tête répété sur chaque page, lignes non coupées. */
+            thead { display: table-header-group; }
+            tr { page-break-inside: avoid; }
         }
     </style>
 </head>
@@ -65,6 +192,11 @@
             <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print()">
                 <i class="bi bi-printer me-1"></i>Imprimer
             </button>
+            <span class="text-muted small">
+                <i class="bi bi-info-circle me-1"></i>
+                Impression : choisir <strong>paysage</strong> et « taille réelle »
+                pour afficher toutes les colonnes.
+            </span>
         </div>
 
         <div class="d-flex align-items-baseline flex-wrap gap-2 mb-1">
@@ -120,5 +252,47 @@
             </table>
         </div>
     </div>
+    <script>
+        /* Filet de sécurité : si la largeur utile de la page est inférieure
+           à celle du tableau (par ex. impression en portrait), la grille est
+           réduite pour que TOUTES les colonnes restent visibles au lieu d'être
+           tronquées. `zoom` est pris en charge par les moteurs récents ;
+           ailleurs le CSS @media print reste la protection principale. */
+        (function () {
+            /* Largeur utile de la feuille, en px CSS (96 px/pouce).
+               Le gabarit impose un A4 PAYSAGE avec 8 mm de marge
+               (@page size: A4 landscape), pas un portrait : l'estimer en
+               portrait rendait la grille 2 à 3 fois trop petite que
+               nécessaire. On retient donc la largeur du paysage, minorée
+               pour rester valable si l'utilisateur force le portrait. */
+            var LARGEUR_PAYSAGE = 281 * 96 / 25.4;   // 297 mm − 2 × 8 mm
+            var LARGEUR_PORTRAIT = 194 * 96 / 25.4;  // 210 mm − 2 × 8 mm
+            var tableau = document.querySelector('.table-grille');
+            if (!tableau) { return; }
+
+            function ajuster() {
+                tableau.style.zoom = '';
+                var naturel = tableau.scrollWidth;
+                if (!naturel) { return; }
+                // Le zoom s'appuie sur le format réellement demandé.
+                var paysage = window.matchMedia
+                    && window.matchMedia('print')
+                    && window.innerWidth >= window.innerHeight;
+                var place = paysage ? LARGEUR_PAYSAGE : LARGEUR_PORTRAIT;
+                if (naturel > place) {
+                    tableau.style.zoom = String(place / naturel);
+                }
+            }
+
+            window.addEventListener('beforeprint', ajuster);
+            window.addEventListener('afterprint', function () {
+                tableau.style.zoom = '';
+            });
+            // Aperçu avant impression : ajustement immédiat.
+            document.querySelectorAll('[onclick="window.print()"]').forEach(function (b) {
+                b.addEventListener('click', ajuster);
+            });
+        })();
+    </script>
 </body>
 </html>
