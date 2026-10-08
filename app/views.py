@@ -170,29 +170,33 @@ class PalmaresView(ListView):
         # Paramètre de recherche
         search = self.request.GET.get('q', '').strip()
 
-        # Filtre sur la table GrilleEtudiant : seules les grilles de l'historique
-        # avec étudiant valide, éventuellement filtré par nom ou numéro d'étudiant
+        # Filtre sur la table GrilleEtudiant : toutes les lignes des grilles de
+        # l'historique, y compris celles archivées sans fiche étudiant (nom lu
+        # dans le fichier). Le filtre 'etudiant__isnull=False' a été retiré pour
+        # que les étudiants des grilles soient bien représentés, y compris ceux
+        # qui ont moins de 3 parcours ou dont la fiche n'existe plus.
         queryset = GrilleEtudiant.objects.filter(
             grille__parcours__isnull=False,
-            etudiant__isnull=False,
         )
         if search:
             queryset = queryset.filter(
                 Q(etudiant__noms__icontains=search) |
-                Q(etudiant__numero_etudiant__icontains=search),
+                Q(etudiant__numero_etudiant__icontains=search) |
+                Q(noms__icontains=search),
             )
 
-        # Sous-requête pour obtenir la meilleure performance (meilleur rang) de chaque étudiant
-        # dans les grilles de l'historique (parcours)
+        # Sous-requête pour obtenir la meilleure performance (meilleur rang) de
+        # chaque étudiant à travers l'historique des grilles. On groupe par
+        # étudiant (lié ou non) : les lignes archivées (sans fiche) sont gardées
+        # avec leur nom lu dans le fichier (`noms`).
         meilleures_performances = (
             queryset
-            .values('etudiant')
+            .values('etudiant_id', 'noms')
             .annotate(
                 meilleur_rang=Min('rang'),
                 meilleure_moyenne=Max('moyenne'),
-                nom=F('etudiant__noms'),
+                nom=F('noms'),
                 numero=F('etudiant__numero_etudiant'),
-                etudiant_id=F('etudiant_id'),
             )
             .order_by('meilleur_rang', '-meilleure_moyenne')
         )

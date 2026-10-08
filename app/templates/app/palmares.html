@@ -30,10 +30,14 @@
             <tr>
                 <td>{{ forloop.counter }}</td>
                 <td>{{ item.nom }}</td>
-                <td>{{ item.numero }}</td>
+                <td>{{ item.numero|default:"—" }}</td>
                 <td>{{ item.meilleure_moyenne|floatformat:2 }}</td>
                 <td>{{ item.meilleur_rang }}</td>
-                <td><a href="{% url 'etudiant_detail' item.etudiant_id %}" class="btn btn-sm btn-outline-primary">Voir l'étudiant</a></td>
+                {% if item.etudiant_id %}
+                    <td><a href="{% url 'etudiant_detail' item.etudiant_id %}" class="btn btn-sm btn-outline-primary">Voir l'étudiant</a></td>
+                {% else %}
+                    <td>—</td>
+                {% endif %}
             </tr>
             {% endfor %}
         </tbody>
