@@ -260,9 +260,12 @@ class PalmaresView(ListView):
             .order_by('nom')
         )
         # Liste des années académiques disponibles dans l'historique des grilles
+        # (.order_by() vide le Meta ordering ['-importe_le'] qui, ajouté au
+        # SELECT DISTINCT, ferait apparaître chaque grille en doublon.)
         context['annees'] = sorted(
             Grille.objects
             .exclude(annee_academique='')
+            .order_by()
             .values_list('annee_academique', flat=True)
             .distinct()
         )
