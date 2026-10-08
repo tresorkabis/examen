@@ -6,9 +6,52 @@
 <h2 class="mb-4">{{ title }}</h2>
 
 <form method="get" action="{% url 'palmares' %}" class="mb-4">
-    <div class="input-group">
-        <input type="text" name="q" value="{{ request.GET.q|default_if_none:'' }}" placeholder="Rechercher un étudiant par nom ou numéro..." class="form-control">
-        <button type="submit" class="btn btn-outline-primary">Rechercher</button>
+    <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label" for="id_q">Recherche</label>
+            <input type="text" name="q" id="id_q" value="{{ filtre_q }}" placeholder="Nom ou numéro étudiant..." class="form-control">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label" for="id_promotion">Promotion</label>
+            <select name="promotion" id="id_promotion" class="form-select">
+                <option value="">Toutes</option>
+                {% for promo in promotions %}
+                <option value="{{ promo.pk }}" {% if filtre_promotion == promo.pk|stringformat:"s" %}selected{% endif %}>
+                    {{ promo.nom }} ({{ promo.nb_etudiants_total }})
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label" for="id_annee">Année académique</label>
+            <select name="annee" id="id_annee" class="form-select">
+                <option value="">Toutes</option>
+                {% for an in annees %}
+                <option value="{{ an }}" {% if filtre_annee == an %}selected{% endif %}>{{ an }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label" for="id_rang_max">Top N (rang max)</label>
+            <input type="number" name="rang_max" id="id_rang_max" value="{{ filtre_rang_max }}" min="1" placeholder="Ex. 10" class="form-control">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label" for="id_moyenne_min">Moyenne min.</label>
+            <input type="number" name="moyenne_min" id="id_moyenne_min" value="{{ filtre_moyenne_min }}" min="0" max="20" step="0.01" placeholder="Ex. 12" class="form-control">
+        </div>
+    </div>
+    <div class="row g-2 mt-1">
+        <div class="col-auto">
+            <button type="submit" class="btn btn-outline-primary">Filtrer</button>
+            <a href="{% url 'palmares' %}" class="btn btn-outline-secondary">Réinitialiser</a>
+        </div>
+        <div class="col-auto">
+            <span class="me-2">Tri :</span>
+            <a href="?{% if filtre_q %}q={{ filtre_q|urlencode }}&{% endif %}{% if filtre_promotion %}promotion={{ filtre_promotion }}&{% endif %}{% if filtre_annee %}annee={{ filtre_annee|urlencode }}&{% endif %}{% if filtre_rang_max %}rang_max={{ filtre_rang_max }}&{% endif %}{% if filtre_moyenne_min %}moyenne_min={{ filtre_moyenne_min }}&{% endif %}"
+               class="btn btn-sm {% if tri != 'nom' %}btn-dark{% else %}btn-outline-dark{% endif %}">Rang</a>
+            <a href="?tri=nom{% if filtre_q %}&q={{ filtre_q|urlencode }}{% endif %}{% if filtre_promotion %}&promotion={{ filtre_promotion }}{% endif %}{% if filtre_annee %}&annee={{ filtre_annee|urlencode }}{% endif %}{% if filtre_rang_max %}&rang_max={{ filtre_rang_max }}{% endif %}{% if filtre_moyenne_min %}&moyenne_min={{ filtre_moyenne_min }}{% endif %}"
+               class="btn btn-sm {% if tri == 'nom' %}btn-dark{% else %}btn-outline-dark{% endif %}">Nom (A→Z)</a>
+        </div>
     </div>
 </form>
 

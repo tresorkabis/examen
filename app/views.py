@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from decimal import Decimal
 from io import BytesIO
 
 from django.contrib import messages
@@ -167,14 +168,17 @@ class PalmaresView(ListView):
     
     def get_queryset(self):
         """Récupère les meilleures performances de chaque étudiant à travers l'historique."""
-        # Paramètre de recherche
+        # Paramètres de filtre
         search = self.request.GET.get('q', '').strip()
+        promo_pk = self.request.GET.get('promotion', '').strip()
+        annee = self.request.GET.get('annee', '').strip()
+        rang_max = self.request.GET.get('rang_max', '').strip()
+        moyenne_min = self.request.GET.get('moyenne_min', '').strip()
+        tri = self.request.GET.get('tri', '').strip()
 
         # Filtre sur la table GrilleEtudiant : toutes les lignes des grilles de
         # l'historique, y compris celles archivées sans fiche étudiant (nom lu
-        # dans le fichier). Le filtre 'etudiant__isnull=False' a été retiré pour
-        # que les étudiants des grilles soient bien représentés, y compris ceux
-        # qui ont moins de 3 parcours ou dont la fiche n'existe plus.
+        # dans le fichier).
         queryset = GrilleEtudiant.objects.filter(
             grille__parcours__isnull=False,
         )
@@ -185,8 +189,31 @@ class PalmaresView(ListView):
                 Q(noms__icontains=search),
             )
 
-        # Sous-requête pour obtenir la meilleure performance (meilleur rang) de
-        # chaque étudiant à travers l'historique des grilles. On groupe par
+        # Filtre par promotion
+        if promo_pk.isdigit():
+            queryset = queryset.filter(etudiant__promotion__pk=promo_pk)
+
+        # Filtre par année académique de la grille
+        if annee:
+            queryset = queryset.filter(grille__annee_academique=annee)
+
+        # Filtre par top N (rang des lignes affichées)
+        if rang_max.isdigit():
+            queryset = queryset.filter(rang__lte=int(rang_max))
+
+        # Filtre par moyenne minimale
+        if moyenne_min:
+            try:
+                moyenne_min_val = Decimal(moyenne_min)
+                queryset = queryset.filter(
+                    moyenne__isnull=False,
+                    moyenne__gte=moyenne_min_val,
+                )
+            except Exception:
+                pass
+
+        # Sous-requête pour obtenir la meilleure performance (meilleur rang)
+        # de chaque étudiant à travers l'historique des grilles. On groupe par
         # étudiant (lié ou non) : les lignes archivées (sans fiche) sont gardées
         # avec leur nom lu dans le fichier (`noms`).
         meilleures_performances = (
@@ -198,8 +225,14 @@ class PalmaresView(ListView):
                 nom=F('noms'),
                 numero=F('etudiant__numero_etudiant'),
             )
-            .order_by('meilleur_rang', '-meilleure_moyenne')
         )
+        if tri == 'nom':
+            meilleures_performances = meilleures_performances.order_by('nom')
+        else:
+            # Tri par défaut : meilleur rang, puis meilleure moyenne
+            meilleures_performances = meilleures_performances.order_by(
+                'meilleur_rang', '-meilleure_moyenne'
+            )
 
         # Ajouter les performances filtrées (sans le rang global affiché)
         palmares_list = []
@@ -211,6 +244,28 @@ class PalmaresView(ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['title'] = "Palmares des Étudiants"
+        # Valeurs des filtres pour pré-remplir le formulaire
+        context['filtre_q'] = self.request.GET.get('q', '').strip()
+        context['filtre_promotion'] = self.request.GET.get('promotion', '').strip()
+        context['filtre_annee'] = self.request.GET.get('annee', '').strip()
+        context['filtre_rang_max'] = self.request.GET.get('rang_max', '').strip()
+        context['filtre_moyenne_min'] = self.request.GET.get('moyenne_min', '').strip()
+        context['tri'] = self.request.GET.get('tri', '').strip()
+        # Liste des promotions (avec effectifs) pour le <select>
+        context['promotions'] = (
+            Promotion.objects
+            .filter(etudiants__isnull=False)
+            .distinct()
+            .annotate(nb_etudiants_total=Count('etudiants', distinct=True))
+            .order_by('nom')
+        )
+        # Liste des années académiques disponibles dans l'historique des grilles
+        context['annees'] = sorted(
+            Grille.objects
+            .exclude(annee_academique='')
+            .values_list('annee_academique', flat=True)
+            .distinct()
+        )
         return context
 
 
