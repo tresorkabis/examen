@@ -10,7 +10,7 @@ from django.core.cache import cache
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.http import HttpResponseNotAllowed
-from django.db.models import Count, F, Prefetch, Q
+from django.db.models import Count, F, Min, Max, Prefetch, Q
 from django.http import FileResponse, Http404, HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse_lazy
@@ -155,6 +155,59 @@ class DeleteMessageMixin:
         if self.success_message:
             messages.success(self.request, self.success_message % {"object": self.object})
         return response
+
+
+# --- PALMARES ---
+class PalmaresView(ListView):
+    """Palmares des étudiants : classement incluant les étudiants actuels et anciens."""
+    
+    template_name = "app/palmares.html"
+    context_object_name = "palmares"
+    paginate_by = 50
+    
+    def get_queryset(self):
+        """Récupère les meilleures performances de chaque étudiant à travers l'historique."""
+        # Paramètre de recherche
+        search = self.request.GET.get('q', '').strip()
+
+        # Filtre sur la table GrilleEtudiant : seules les grilles de l'historique
+        # avec étudiant valide, éventuellement filtré par nom ou numéro d'étudiant
+        queryset = GrilleEtudiant.objects.filter(
+            grille__parcours__isnull=False,
+            etudiant__isnull=False,
+        )
+        if search:
+            queryset = queryset.filter(
+                Q(etudiant__noms__icontains=search) |
+                Q(etudiant__numero_etudiant__icontains=search),
+            )
+
+        # Sous-requête pour obtenir la meilleure performance (meilleur rang) de chaque étudiant
+        # dans les grilles de l'historique (parcours)
+        meilleures_performances = (
+            queryset
+            .values('etudiant')
+            .annotate(
+                meilleur_rang=Min('rang'),
+                meilleure_moyenne=Max('moyenne'),
+                nom=F('etudiant__noms'),
+                numero=F('etudiant__numero_etudiant'),
+                etudiant_id=F('etudiant_id'),
+            )
+            .order_by('meilleur_rang', '-meilleure_moyenne')
+        )
+
+        # Ajouter les performances filtrées (sans le rang global affiché)
+        palmares_list = []
+        for perf in meilleures_performances:
+            palmares_list.append(perf)
+
+        return palmares_list
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = "Palmares des Étudiants"
+        return context
 
 
 # --- CRUD ETUDIANT ---

@@ -212,6 +212,9 @@
             <a class="nav-link {% if 'examen' in current_url_name|default:'' %}active{% endif %}" href="{% url 'examen_list' %}">
                 <i class="bi bi-file-earmark-text"></i><span>Examens</span>
             </a>
+            <a class="nav-link" href="{% url 'palmares' %}">
+                <i class="bi bi-trophy"></i><span>Palmares</span>
+            </a>
 
             <span class="sidebar-group">Données</span>
             <a class="nav-link {% if 'import' in current_url_name|default:'' %}active{% endif %}" href="{% url 'import_excel' %}">

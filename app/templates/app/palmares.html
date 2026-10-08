@@ -1,0 +1,49 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Palmares des Étudiants{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">{{ title }}</h2>
+
+<form method="get" action="{% url 'palmares' %}" class="mb-4">
+    <div class="input-group">
+        <input type="text" name="q" value="{{ request.GET.q|default_if_none:'' }}" placeholder="Rechercher un étudiant par nom ou numéro..." class="form-control">
+        <button type="submit" class="btn btn-outline-primary">Rechercher</button>
+    </div>
+</form>
+
+{% if palmares %}
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>#</th>
+                <th>Nom</th>
+                <th>Numéro étudiant</th>
+                <th>Meilleure moyenne</th>
+                <th>Meilleur rang</th>
+                <th>Lien</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in palmares %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ item.nom }}</td>
+                <td>{{ item.numero }}</td>
+                <td>{{ item.meilleure_moyenne|floatformat:2 }}</td>
+                <td>{{ item.meilleur_rang }}</td>
+                <td><a href="{% url 'etudiant_detail' item.etudiant_id %}" class="btn btn-sm btn-outline-primary">Voir l'étudiant</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p class="text-muted">Aucun étudiant trouvé dans l'historique.</p>
+{% endif %}
+
+{% if not palmares and title %}
+<p class="text-muted">Aucun étudiant avec des résultats historiques trouvés.</p>
+{% endif %}
+
+{% endblock %}
