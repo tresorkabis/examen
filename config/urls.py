@@ -16,7 +16,7 @@ from app.views import (
     ExamenListView, ExamenCreateView, ExamenUpdateView, ExamenDeleteView,
     fiche_cote, examen_inscrire, examen_desinscrire, examen_inscrire_tous,
     examen_marquer_notee, examen_non_notes_impression,
-    PalmaresView
+    PalmaresView, palmares_ligne
 )
 
 urlpatterns = [
@@ -86,4 +86,5 @@ urlpatterns = [
     path('examens/<int:pk>/desinscrire/<int:inscription_pk>/', examen_desinscrire, name='examen_desinscrire'),
     path('examens/<int:pk>/notee/', examen_marquer_notee, name='examen_notee'),
     path('palmares/', PalmaresView.as_view(), name='palmares'),
+    path('palmares/lignes/<int:pk>/', palmares_ligne, name='palmares_ligne'),
 ]

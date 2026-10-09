@@ -224,6 +224,11 @@ class PalmaresView(ListView):
                 meilleure_moyenne=Max('moyenne'),
                 nom=F('noms'),
                 numero=F('etudiant__numero_etudiant'),
+                # Ligne représentative du groupe : sert de point d'entrée au
+                # détail des lignes archivées (sans fiche étudiant, donc sans
+                # « Voir l'étudiant »). Min('id') suffit : la page de détail
+                # liste toutes les années portant le même nom.
+                ligne_id=Min('id'),
             )
         )
         if tri == 'nom':
@@ -270,6 +275,76 @@ class PalmaresView(ListView):
             .distinct()
         )
         return context
+
+
+def palmares_ligne(request, pk):
+    """Détail d'une ligne du palmarès : relevé d'une grille archivée.
+
+    Le palmarès regroupe les résultats par étudiant ; une ligne sans fiche
+    (cohorte d'une année antérieure dont les fiches n'existent plus) n'a
+    aucun lien vers une fiche étudiant. Cette vue donne accès, depuis le
+    palmarès, au relevé complet de la ligne : synthèse délibérée (rang,
+    moyenne, décision, crédits) et notes par UE.
+
+    `pk` est la ligne de grille d'une des années de l'étudiant ; le relevé
+    affiché est celui de cette année, et un sélecteur liste les autres
+    années portant le même nom (même cohorte archivée). Si la ligne est en
+    fait rattachée à une fiche, on redirige vers la fiche de l'étudiant :
+    elle offre le même relevé, enrichie de l'identité et de l'inscription.
+    """
+    ligne = get_object_or_404(
+        GrilleEtudiant.objects.select_related(
+            'grille', 'grille__promotion', 'grille__session'),
+        pk=pk,
+    )
+    if ligne.etudiant_id:
+        return redirect('etudiant_detail', pk=ligne.etudiant_id)
+
+    # Toutes les lignes archivées du même nom (une par année de grille) :
+    # c'est l'historique complet de la cohorte, réparti sur les promotions
+    # qui ont importé ce fichier.
+    autres_lignes = list(
+        GrilleEtudiant.objects
+        .filter(etudiant__isnull=True, noms=ligne.noms)
+        .select_related('grille', 'grille__promotion', 'grille__session')
+        .order_by('grille__annee_academique', 'grille__id')
+    )
+
+    # Sélection par ?grille= (comme sur la fiche étudiant) ; par défaut la
+    # ligne d'entrée, ou la plus récente si elle n'appartient plus à la
+    # liste (cas d'une ligne rattachée depuis).
+    select = request.GET.get('grille')
+    selection = next(
+        (l for l in autres_lignes if str(l.grille_id) == select), None)
+    if selection is None:
+        selection = next(
+            (l for l in autres_lignes if l.pk == ligne.pk), ligne)
+
+    # Relevé : une ligne par UE, notes indexées — même construction que la
+    # fiche étudiant (une requête par collection, pas une par cellule).
+    ues = list(selection.grille.ues.order_by('semestre', 'ordre', 'intitule'))
+    notes_map = {
+        n.ue_id: n for n in
+        GrilleNote.objects.filter(ligne=selection).select_related('ue')
+    }
+    relevé = []
+    for ue in ues:
+        relevé.append({'ue': ue, 'note': notes_map.get(ue.pk)})
+
+    nb_ues_validees = sum(
+        1 for item in relevé if item['note'] and item['note'].est_validee)
+    nb_ues_non_notees = sum(
+        1 for item in relevé
+        if item['note'] is None or not item['note'].est_notee)
+
+    return render(request, 'app/palmares_ligne.html', {
+        'ligne': ligne,
+        'selection': selection,
+        'autres_lignes': autres_lignes,
+        'releve': relevé,
+        'nb_ues_validees': nb_ues_validees,
+        'nb_ues_non_notees': nb_ues_non_notees,
+    })
 
 
 # --- CRUD ETUDIANT ---

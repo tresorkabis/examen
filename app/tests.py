@@ -3367,6 +3367,119 @@ class UesAReprendreTests(TestCase):
         self.assertNotIn("qu'une note existe et passe sous 10/20", contenu)
 
 
+class PalmaresLigneDetailTests(TestCase):
+    """Détail d'une ligne archivée du palmarès (sans fiche étudiant).
+
+    Le palmarès regroupe par étudiant ; les lignes de cohorte dont les
+    fiches n'existent plus (etudiant NULL) n'ont aucun lien vers une fiche.
+    La vue `palmares_ligne` donne accès à leur relevé : synthèse
+    délibérée + notes par UE, avec sélecteur d'année.
+    """
+
+    def setUp(self):
+        self.promotion = Promotion.objects.create(nom='L1 INFO A')
+        self.grille = Grille.objects.create(
+            promotion=self.promotion, annee_academique='2023-2024',
+            total_credits=60, fichier_source='L1 INFO A_2023_2024.xlsx')
+        self.ue = GrilleUE.objects.create(
+            grille=self.grille, intitule='Algorithmique 1', credits=5,
+            semestre=1, ordre=1)
+        # Ligne archivée : nom lu dans le fichier, aucune fiche associée.
+        self.ligne = GrilleEtudiant.objects.create(
+            grille=self.grille, noms='BUDWAGA AGANZE MICHEL', rang=3,
+            credits_s1=6, credits_total=6, moyenne='5.07', decision='NV')
+        GrilleNote.objects.create(ligne=self.ligne, ue=self.ue, note='6')
+        # Une étape de parcours rend la grille visible au palmarès
+        # (filtre grille__parcours__isnull=False).
+        self.titulaire = Etudiant.objects.create(
+            noms='AUTRE ETU', numero_etudiant='L1INFOA-099',
+            promotion=self.promotion)
+        HistoriquePromotion.enregistrer(
+            self.titulaire, self.promotion, '2023-2024', self.grille)
+
+    def test_detail_d_une_ligne_archivee(self):
+        """La page montre nom, promotion, année, décision et les notes."""
+        reponse = self.client.get(
+            reverse('palmares_ligne', args=[self.ligne.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        contenu = reponse.content.decode()
+        self.assertIn('BUDWAGA AGANZE MICHEL', contenu)
+        self.assertIn('Ligne archivée', contenu)
+        self.assertIn('L1 INFO A', contenu)
+        self.assertIn('2023-2024', contenu)
+        self.assertIn('Algorithmique 1', contenu)
+        self.assertIn('6/20', contenu)
+        self.assertIn('Retour au palmarès', contenu)
+        # Synthèse délibérée : décision non validé, moyenne du fichier
+        # (affichée au format local, « 5,07 » sous le réglage fr).
+        self.assertIn('Non validé', contenu)
+        self.assertIn('5,07', contenu)
+
+    def test_le_palmares_lie_vers_le_detail(self):
+        """Le palmarès propose « Voir le détail » pour une ligne sans fiche."""
+        reponse = self.client.get(reverse('palmares'))
+        self.assertEqual(reponse.status_code, 200)
+        contenu = reponse.content.decode()
+        self.assertIn('Voir le détail', contenu)
+        self.assertIn(
+            reverse('palmares_ligne', args=[self.ligne.pk]), contenu)
+        # La ligne rattachée garde le lien vers la fiche étudiant.
+        ligne_liee = GrilleEtudiant.objects.create(
+            grille=self.grille, etudiant=self.titulaire,
+            noms='AUTRE ETU', rang=7, moyenne='12.00', decision='V')
+        reponse = self.client.get(reverse('palmares'))
+        contenu = reponse.content.decode()
+        self.assertIn(
+            reverse('etudiant_detail', args=[self.titulaire.pk]), contenu)
+        self.assertNotIn(
+            reverse('palmares_ligne', args=[ligne_liee.pk]), contenu)
+
+    def test_ligne_rattachee_redirige_vers_la_fiche(self):
+        """Une ligne avec fiche redirige : la fiche offre le même relevé."""
+        ligne_liee = GrilleEtudiant.objects.create(
+            grille=self.grille, etudiant=self.titulaire,
+            noms='AUTRE ETU', rang=7, moyenne='12.00', decision='V')
+        reponse = self.client.get(
+            reverse('palmares_ligne', args=[ligne_liee.pk]))
+        self.assertRedirects(
+            reponse,
+            reverse('etudiant_detail', args=[self.titulaire.pk]),
+            fetch_redirect_response=False)
+
+    def test_ligne_inexistante_404(self):
+        """Un pk inconnu renvoie 404, pas d'erreur 500."""
+        reponse = self.client.get(reverse('palmares_ligne', args=[999999]))
+        self.assertEqual(reponse.status_code, 404)
+
+    def test_selecteur_d_annee(self):
+        """Une seconde année pour le même nom affiche le sélecteur."""
+        grille2 = Grille.objects.create(
+            promotion=self.promotion, annee_academique='2024-2025',
+            total_credits=60)
+        ue2 = GrilleUE.objects.create(
+            grille=grille2, intitule='Programmation Web', credits=3,
+            semestre=1, ordre=1)
+        ligne2 = GrilleEtudiant.objects.create(
+            grille=grille2, noms='BUDWAGA AGANZE MICHEL', rang=2,
+            moyenne='8.50', decision='NV')
+        GrilleNote.objects.create(ligne=ligne2, ue=ue2, note='9')
+
+        reponse = self.client.get(
+            reverse('palmares_ligne', args=[self.ligne.pk]))
+        contenu = reponse.content.decode()
+        self.assertIn('2024-2025', contenu)
+        self.assertIn('2023-2024', contenu)
+
+        # ?grille= bascule sur l'autre année.
+        reponse = self.client.get(
+            reverse('palmares_ligne', args=[self.ligne.pk])
+            + f'?grille={grille2.pk}')
+        contenu = reponse.content.decode()
+        self.assertIn('Programmation Web', contenu)
+        self.assertNotIn('Algorithmique 1', contenu)
+        self.assertIn('9/20', contenu)
+
+
 class GabaritsCommentairesTests(TestCase):
     """Garde-fou : aucun commentaire Django mal formé dans les gabarits.
 

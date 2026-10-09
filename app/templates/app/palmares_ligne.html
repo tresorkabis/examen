@@ -1,0 +1,140 @@
+{% extends 'app/base.html' %}
+
+{% block title %}{{ ligne.nom_affiche }} — Détail palmarès{% endblock %}
+
+{% block extra_style %}
+<style>
+    .deliberation-card { border-left: 4px solid #0d6efd; }
+    .badge-decision-v { background-color: #198754; color: #fff; }
+    .badge-decision-vc { background-color: #ffc107; color: #000; }
+    .badge-decision-nv { background-color: #dc3545; color: #fff; }
+    .ue-row-validee { background-color: rgba(25, 135, 84, 0.04); }
+    .ue-row-echec { background-color: rgba(220, 53, 69, 0.04); }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2 class="mb-1">{{ ligne.nom_affiche }}</h2>
+<p class="text-muted mb-4">
+    <span class="badge text-bg-secondary">
+        <i class="bi bi-archive me-1"></i>Ligne archivée (sans fiche étudiant)
+    </span>
+    <span class="ms-2">
+        {{ selection.grille.promotion.nom }}
+        {% if selection.grille.annee_academique %} — {{ selection.grille.annee_academique }}{% endif %}
+        {% if selection.grille.session %} — {{ selection.grille.session.nom }}{% endif %}
+    </span>
+</p>
+
+{# Choix de l'année : une entrée par grille portant ce nom (comme le #}
+{# sélecteur de grille de la fiche étudiant, mais sans fiche liée). #}
+{% if autres_lignes|length > 1 %}
+<div class="mb-4 no-print">
+    <span class="me-2">Année :</span>
+    {% for autre in autres_lignes %}
+    <a href="?grille={{ autre.grille_id }}"
+       class="btn btn-sm {% if autre.grille_id == selection.grille_id %}btn-dark{% else %}btn-outline-dark{% endif %}">
+        {{ autre.grille.annee_academique|default:"—" }}
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+
+{# --- Synthèse délibérée : recopie des colonnes de délibération du #}
+{# fichier — aucun recalcul (cf. GrilleEtudiant). #}
+<div class="card deliberation-card mb-4">
+    <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="bi bi-trophy me-2 text-warning"></i>Résultats de délibération</h5>
+    </div>
+    <div class="card-body">
+        <div class="row text-center">
+            <div class="col">
+                <div class="text-muted small">Rang</div>
+                <div class="fs-5 fw-bold">{{ selection.rang }}</div>
+            </div>
+            <div class="col">
+                <div class="text-muted small">Moyenne</div>
+                <div class="fs-5 fw-bold {% if selection.moyenne_validee %}text-success{% else %}text-danger{% endif %}">
+                    {{ selection.moyenne|default:"—" }} /20
+                </div>
+            </div>
+            <div class="col">
+                <div class="text-muted small">Décision</div>
+                {% if selection.decision %}
+                <span class="badge fs-6 badge-decision-{{ selection.decision|lower }}" title="{{ selection.get_decision_display }}">{{ selection.get_decision_display }}</span>
+                {% else %}<span class="fs-5">—</span>{% endif %}
+            </div>
+            <div class="col">
+                <div class="text-muted small">Mention</div>
+                <div class="fs-5">{{ selection.mention|default:"—" }}</div>
+            </div>
+            <div class="col">
+                <div class="text-muted small">Crédits</div>
+                <div class="fs-5">{{ selection.credits_total }} / {{ selection.grille.total_credits }}</div>
+            </div>
+            <div class="col">
+                <div class="text-muted small">UE validées</div>
+                <div class="fs-5">{{ nb_ues_validees }}</div>
+            </div>
+            <div class="col">
+                <div class="text-muted small">UE non notées</div>
+                <div class="fs-5">{{ nb_ues_non_notees }}</div>
+            </div>
+        </div>
+        <div class="text-muted small mt-3">
+            Crédits S1 : {{ selection.credits_s1 }} — Crédits S2 : {{ selection.credits_s2 }}
+            — UE à reprendre : {{ selection.nb_ue_reprendre }}
+            {% if selection.grille.fichier_source %}
+            — Source : {{ selection.grille.fichier_source }}
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{# --- Relevé par UE : notes /20 telles que délibérées dans la grille. #}
+<div class="card">
+    <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="bi bi-journal-text me-2 text-primary"></i>Relevé par unité d'enseignement</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Unité d'enseignement</th>
+                        <th class="text-center">Crédits</th>
+                        <th class="text-center">Note</th>
+                        <th class="text-center">Semestre</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in releve %}
+                    <tr class="{% if item.note and item.note.est_validee %}ue-row-validee{% elif item.note and item.note.est_notee %}ue-row-echec{% endif %}">
+                        <td class="fw-semibold">{{ item.ue.intitule }}</td>
+                        <td class="text-center">{{ item.ue.credits }}</td>
+                        <td class="text-center fw-semibold">
+                            {% if item.note and item.note.est_notee %}
+                            <span class="{% if item.note.est_validee %}text-success{% else %}text-danger{% endif %}">
+                                {{ item.note.note_affichee }}/20
+                            </span>
+                            {% else %}
+                            <span class="badge text-bg-secondary" title="Case vide dans la grille : UE non évaluée, à repasser">Non notée</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">S{{ item.ue.semestre }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-muted text-center py-3">Aucune UE dans cette grille.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="mt-4">
+    <a href="{% url 'palmares' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Retour au palmarès
+    </a>
+</div>
+{% endblock %}
