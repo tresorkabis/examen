@@ -14,9 +14,11 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import strip_tags
 from decimal import Decimal
 
 from .excel_import import _alerte_decisions
+from .views import _note_ue_proche
 
 from .models import (Promotion, Enseignant, Etudiant, Cours, Session,
                      Examen, Inscription, Grille, GrilleUE, GrilleEtudiant,
@@ -1252,9 +1254,9 @@ class EnseignantDetailViewTest(BaseDataMixin, TestCase):
 
 
 class EtudiantDetailViewTest(BaseDataMixin, TestCase):
-    """Fiche détaillée d'un étudiant : inscriptions, notes et moyenne."""
+    """Fiche détaillée d'un étudiant : infos, relevé de grille, moyenne."""
 
-    def test_detail_affiche_infos_et_notes(self):
+    def test_detail_affiche_infos_etudiant(self):
         self._creer_etudiants(2)
         self._inscriptions(2)
         etudiant = Etudiant.objects.get(numero_etudiant='L3INFOA-000')
@@ -1269,17 +1271,126 @@ class EtudiantDetailViewTest(BaseDataMixin, TestCase):
         self.assertIn('NOM0', contenu)
         self.assertIn('L3INFOA-000', contenu)
         self.assertIn('etu0@example.com', contenu)
+        # Sans grille : la section « Fiches de cotation » liste l'examen avec
+        # une moyenne vide (« — ») — jamais les composantes ni les notes de
+        # fiche, et sans jamais retomber sur le tableau détaillé.
+        self.assertIn(
+            'Fiches de cotation &amp; Examens enregistrés (1)', contenu)
         self.assertIn('Langage de programmation mobile', contenu)
-        self.assertIn('SESSION 1, SEMESTRE 1 2025 - 2026', contenu)
-        # Moyenne 13,50 affichée
-        self.assertIn('13,50', contenu)
+        self.assertIn('Aucune grille de délibération', contenu)
+        self.assertNotIn('13,50', contenu)
+        self.assertNotIn('Interro /5', contenu)
+        self.assertNotIn('Moyenne fiches', contenu)
 
     def test_detail_sans_inscription(self):
         self._creer_etudiants(1)
         etudiant = Etudiant.objects.get(numero_etudiant='L3INFOA-000')
         reponse = self.client.get(reverse('etudiant_detail', args=[etudiant.pk]))
         self.assertEqual(reponse.status_code, 200)
+        self.assertContains(
+            reponse, 'Fiches de cotation &amp; Examens enregistrés (0)')
         self.assertContains(reponse, 'Aucun examen pour cet étudiant.')
+
+    def test_moyennes_par_examen_provenant_des_grilles(self):
+        """La section affiche la moyenne de la grille, par examen.
+
+        Chaque fiche de cotation ne montre que sa moyenne, telle que
+        délibérée dans la grille (UE rattachée au cours de l'examen) —
+        jamais les composantes interro/TP/examen de la fiche. Un examen
+        sans UE correspondante dans la grille affiche « — ».
+        """
+        self._creer_etudiants(1)
+        self._inscriptions(1)
+        etudiant = Etudiant.objects.get(numero_etudiant='L3INFOA-000')
+        ins = Inscription.objects.get(etudiant=etudiant)
+        ins.note_interro = 5
+        ins.note_tp = 5
+        ins.note_examen = 5
+        ins.save()
+        # 2e examen du même étudiant, sans UE correspondante dans la grille.
+        cours_hors = Cours.objects.create(
+            nom='Cours hors grille', coefficient=1,
+            promotion=self.promotion)
+        examen_hors = Examen.objects.create(
+            cours=cours_hors, session=self.session,
+            date_examen=timezone.make_aware(datetime(2026, 1, 20, 8, 0)))
+        Inscription.objects.create(examen=examen_hors, etudiant=etudiant)
+
+        grille = Grille.objects.create(
+            promotion=self.promotion, annee_academique='2025-2026',
+            total_credits=60, fichier_source='L3 INFO A_2025_2026.xlsx')
+        # Intitulé volontairement différent du nom du cours : le
+        # rapprochement se fait par la FK `GrilleUE.cours`, et la ligne du
+        # tableau reste identifiable dans les assertions.
+        ue = GrilleUE.objects.create(
+            grille=grille, intitule='Programmation mobile (grille)',
+            credits=5, semestre=1, ordre=1, cours=self.cours)
+        ligne = GrilleEtudiant.objects.create(
+            grille=grille, etudiant=etudiant, noms=etudiant.noms, rang=1,
+            moyenne='17.00', decision='V')
+        GrilleNote.objects.create(ligne=ligne, ue=ue, note='17')
+
+        reponse = self.client.get(reverse('etudiant_detail', args=[etudiant.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        contenu = reponse.content.decode()
+        texte = ' '.join(strip_tags(contenu).split())
+        self.assertIn(
+            'Fiches de cotation &amp; Examens enregistrés (2)', contenu)
+        self.assertIn('Moyennes : grille 2025-2026', texte)
+        # Ligne 1 : moyenne de la grille (17,00), pas la note de fiche.
+        self.assertIn('Langage de programmation mobile 17,00', texte)
+        self.assertNotIn('15,00', contenu)
+        self.assertNotIn('Interro /5', contenu)
+        # Ligne 2 : hors grille, la moyenne reste vide.
+        self.assertIn('Cours hors grille —', texte)
+        self.assertNotIn('Moyenne fiches', contenu)
+
+    def test_moyenne_ue_rapprochee_par_intitule_proche(self):
+        """Un intitulé d'UE proche du cours est rapproché par similarité.
+
+        UE « Langage de programation mobile » (coquille d'import, un « m »
+        manquant) **sans** lien `GrilleUE.cours` : la note de la grille est
+        malgré tout rattachée à l'examen du cours. Un cours sans candidat
+        plausible conserve « — ».
+        """
+        self._creer_etudiants(1)
+        self._inscriptions(1)
+        etudiant = Etudiant.objects.get(numero_etudiant='L3INFOA-000')
+        # 2e examen du même étudiant, sans UE plausible dans la grille.
+        cours_hors = Cours.objects.create(
+            nom='Protocole et étiquette', coefficient=1,
+            promotion=self.promotion)
+        examen_hors = Examen.objects.create(
+            cours=cours_hors, session=self.session,
+            date_examen=timezone.make_aware(datetime(2026, 1, 20, 8, 0)))
+        Inscription.objects.create(examen=examen_hors, etudiant=etudiant)
+
+        grille = Grille.objects.create(
+            promotion=self.promotion, annee_academique='2025-2026',
+            total_credits=60, fichier_source='L3 INFO A_2025_2026.xlsx')
+        # Coquille d'import, et surtout aucune FK `cours` : seul le
+        # rapprochement par intitulé proche peut retrouver l'UE.
+        ue = GrilleUE.objects.create(
+            grille=grille, intitule='Langage de programation mobile',
+            credits=5, semestre=1, ordre=1)
+        ue_lointaine = GrilleUE.objects.create(
+            grille=grille, intitule='Ethique professionnelle',
+            credits=3, semestre=2, ordre=2)
+        ligne = GrilleEtudiant.objects.create(
+            grille=grille, etudiant=etudiant, noms=etudiant.noms, rang=1,
+            moyenne='14.00', decision='V')
+        GrilleNote.objects.create(ligne=ligne, ue=ue, note='14')
+        GrilleNote.objects.create(ligne=ligne, ue=ue_lointaine, note='9')
+
+        reponse = self.client.get(reverse('etudiant_detail', args=[etudiant.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        contenu = reponse.content.decode()
+        texte = ' '.join(strip_tags(contenu).split())
+        # La coquille est rapprochée du cours : la note apparaît…
+        self.assertIn('Langage de programmation mobile 14,00', texte)
+        # …sans que l'UE lointaine (note 9) ne soit volée : si elle l'était,
+        # la ligne porterait « 9,00 » au lieu du tiret.
+        self.assertIn('Protocole et étiquette —', texte)
 
     def test_detail_inexistant_renvoie_404(self):
         reponse = self.client.get(reverse('etudiant_detail', args=[9999]))
@@ -1300,6 +1411,37 @@ class EtudiantDetailViewTest(BaseDataMixin, TestCase):
             'promotion_detail', args=[self.promotion.pk]))
         self.assertEqual(reponse.status_code, 200)
         self.assertContains(reponse, reverse('etudiant_detail', args=[etudiant.pk]))
+
+
+class NoteUeProcheTests(TestCase):
+    """Rapprochement approché examen → UE (helper de la vue)."""
+
+    def test_intitulé_proche_retenue_et_consommée(self):
+        disponibles = {'langage-de-programation-mobile': Decimal('14')}
+        note = _note_ue_proche('langage-de-programmation-mobile', disponibles)
+        self.assertEqual(note, Decimal('14'))
+        self.assertEqual(disponibles, {})  # l'UE est consommée
+
+    def test_aucun_candidat_assez_proche(self):
+        disponibles = {'langage-de-programation-mobile': Decimal('14')}
+        self.assertIsNone(
+            _note_ue_proche('comptabilite-generale', disponibles))
+        # Rien n'est consommé : l'UE reste offerte aux autres cours.
+        self.assertEqual(disponibles,
+                         {'langage-de-programation-mobile': Decimal('14')})
+
+    def test_intitulé_court_écarté(self):
+        disponibles = {'tsi': Decimal('14')}
+        self.assertIsNone(_note_ue_proche('tsi', disponibles))
+
+    def test_candidats_ambigus_écartés(self):
+        # Deux UE aussi proches : un « — » vaut mieux qu'une fausse note.
+        disponibles = {
+            'programmation-mobile-1': Decimal('14'),
+            'programmation-mobile-2': Decimal('15'),
+        }
+        self.assertIsNone(
+            _note_ue_proche('programmation-mobile-3', disponibles))
 
 
 class CoursDetailViewTest(BaseDataMixin, TestCase):
@@ -3384,11 +3526,15 @@ class PalmaresLigneDetailTests(TestCase):
         self.ue = GrilleUE.objects.create(
             grille=self.grille, intitule='Algorithmique 1', credits=5,
             semestre=1, ordre=1)
+        self.ue_s2 = GrilleUE.objects.create(
+            grille=self.grille, intitule='Anglais', credits=4,
+            semestre=2, ordre=1)
         # Ligne archivée : nom lu dans le fichier, aucune fiche associée.
         self.ligne = GrilleEtudiant.objects.create(
             grille=self.grille, noms='BUDWAGA AGANZE MICHEL', rang=3,
             credits_s1=6, credits_total=6, moyenne='5.07', decision='NV')
         GrilleNote.objects.create(ligne=self.ligne, ue=self.ue, note='6')
+        GrilleNote.objects.create(ligne=self.ligne, ue=self.ue_s2, note='12')
         # Une étape de parcours rend la grille visible au palmarès
         # (filtre grille__parcours__isnull=False).
         self.titulaire = Etudiant.objects.create(
@@ -3403,17 +3549,49 @@ class PalmaresLigneDetailTests(TestCase):
             reverse('palmares_ligne', args=[self.ligne.pk]))
         self.assertEqual(reponse.status_code, 200)
         contenu = reponse.content.decode()
+        texte = ' '.join(strip_tags(contenu).split())
         self.assertIn('BUDWAGA AGANZE MICHEL', contenu)
         self.assertIn('Ligne archivée', contenu)
         self.assertIn('L1 INFO A', contenu)
         self.assertIn('2023-2024', contenu)
-        self.assertIn('Algorithmique 1', contenu)
-        self.assertIn('6/20', contenu)
+        self.assertIn('Algorithmique 1', texte)
+        self.assertIn('6/20', texte)
         self.assertIn('Retour au palmarès', contenu)
         # Synthèse délibérée : décision non validé, moyenne du fichier
         # (affichée au format local, « 5,07 » sous le réglage fr).
         self.assertIn('Non validé', contenu)
         self.assertIn('5,07', contenu)
+
+    def test_releve_colonnes_par_semestre(self):
+        """Chaque semestre du relevé s'affiche dans sa propre colonne.
+
+        Même disposition que la fiche étudiant : S1 et S2 côte à côte
+        (col-lg-6), chacun avec son en-tête (crédits validés / total) et
+        son pied « Total Sx ».
+        """
+        reponse = self.client.get(
+            reverse('palmares_ligne', args=[self.ligne.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        contenu = reponse.content.decode()
+        texte = ' '.join(strip_tags(contenu).split())
+        # Deux colonnes parallèles, une par semestre.
+        self.assertEqual(
+            contenu.count('<div class="col-lg-6 print-semester-col">'), 2)
+        self.assertIn('Semestre 1', contenu)
+        self.assertIn('Semestre 2', contenu)
+        self.assertIn('Algorithmique 1', contenu)
+        self.assertIn('Anglais', contenu)
+        # En-tête de colonne : crédits validés / crédits du semestre.
+        # S1 (note 6, non acquise) : 0/5 — S2 (note 12, acquise) : 4/4.
+        self.assertIn('0 / 5 crédits', texte)
+        self.assertIn('4 / 4 crédits', texte)
+        # Pied de colonne.
+        self.assertIn('Total S1 :', texte)
+        self.assertIn('Total S2 :', texte)
+        self.assertIn('4 cr. validés', texte)
+        # Statut de chaque UE.
+        self.assertIn('À reprendre', contenu)
+        self.assertIn('Validé', contenu)
 
     def test_le_palmares_lie_vers_le_detail(self):
         """Le palmarès propose « Voir le détail » pour une ligne sans fiche."""
@@ -3475,9 +3653,10 @@ class PalmaresLigneDetailTests(TestCase):
             reverse('palmares_ligne', args=[self.ligne.pk])
             + f'?grille={grille2.pk}')
         contenu = reponse.content.decode()
+        texte = ' '.join(strip_tags(contenu).split())
         self.assertIn('Programmation Web', contenu)
         self.assertNotIn('Algorithmique 1', contenu)
-        self.assertIn('9/20', contenu)
+        self.assertIn('9/20', texte)
 
 
     def test_impression_de_la_fiche(self):

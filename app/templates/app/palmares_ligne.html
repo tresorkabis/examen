@@ -319,10 +319,7 @@
                                     <td class="text-center fw-semibold text-secondary">{{ item.ue.credits }}</td>
                                     <td class="text-center">
                                         {% if item.note and item.note.est_notee %}
-                                        <span class="fw-bold {% if item.note.est_validee %}text-success ue-status-valide{% else %}text-danger ue-status-echec{% endif %}">
-                                            {{ item.note.note_affichee }}
-                                        </span>
-                                        <small class="text-muted no-print">/20</small>
+                                        <span class="fw-bold {% if item.note.est_validee %}text-success ue-status-valide{% else %}text-danger ue-status-echec{% endif %}">{{ item.note.note_affichee }}</span><small class="text-muted no-print">/20</small>
                                         {% else %}
                                         <span class="text-muted">—</span>
                                         {% endif %}

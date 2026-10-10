@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from decimal import Decimal
+from difflib import SequenceMatcher
 from io import BytesIO
 
 from django.contrib import messages
@@ -559,6 +560,32 @@ def _ues_a_reprendre(grille_lignes):
     return resultat
 
 
+def _note_ue_proche(slug, disponibles):
+    """Note de l'UE dont l'intitulé est le plus proche de `slug`.
+
+    Troisième niveau de rapprochement examen → UE, pour les intitulés que
+    l'import n'a pas alignés (coquilles et abréviations, ex. « Protocole et
+    ethiquette » pour « Protocole et étiquette »). Un candidat n'est retenu
+    que si son ratio de ressemblance est élevé (≥ 0,8) et s'il domine
+    nettement le second : un rapprochement erroné afficherait une fausse
+    note. Les intitulés courts sont écartés, trop peu significatifs.
+
+    L'UE retenue est retirée de `disponibles` (elle est consommée) et sa
+    note renvoyée ; `None` si aucun candidat n'est sûr.
+    """
+    if len(slug) < 6:
+        return None
+    scores = sorted(
+        ((SequenceMatcher(None, slug, s).ratio(), s)
+         for s in disponibles if len(s) >= 6),
+        reverse=True)
+    if not scores or scores[0][0] < 0.8:
+        return None
+    if len(scores) > 1 and scores[1][0] >= scores[0][0] - 0.05:
+        return None  # deux UE aussi plausibles : on ne devine pas
+    return disponibles.pop(scores[0][1])
+
+
 class EtudiantDetailView(DetailView):
     """Fiche détaillée d'un étudiant : inscriptions, notes et examens."""
 
@@ -569,14 +596,6 @@ class EtudiantDetailView(DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         etudiant = self.object
-        inscriptions = (etudiant.inscriptions
-                        .select_related(
-                            'examen__cours__promotion',
-                            'examen__cours__enseignant',
-                            'examen__session')
-                        .order_by('examen__date_examen'))
-        notes = [i.note for i in inscriptions if i.note is not None]
-        moyenne = (sum(notes) / len(notes)) if notes else None
 
         # --- Relevé de grille de délibération (si la promotion possède une
         # grille importée) : une ligne par UE avec la note /20, crédits,
@@ -608,6 +627,8 @@ class EtudiantDetailView(DetailView):
         nb_ues_validees = 0
         nb_ues_echouees = 0
         nb_ues_non_notees = 0
+        ues = []
+        notes_map = {}
 
         if grille_ligne is not None:
             ues = list(grille_ligne.grille.ues.order_by(
@@ -638,6 +659,61 @@ class EtudiantDetailView(DetailView):
                     nb_ues_echouees += 1
                 else:
                     nb_ues_non_notees += 1
+
+        # --- Moyennes par examen : une ligne par fiche de cotation, la
+        # seule valeur affichée étant la moyenne délibérée dans la grille
+        # sélectionnée (la délibération fait foi — les composantes
+        # interro/TP/examen et le détail de session ne sont pas affichés).
+        # Rapprochement examen → UE, par ordre de confiance :
+        #   1. `GrilleUE.cours` (lien posé à l'import et par la commande
+        #      `aligner_cours_grille`) ;
+        #   2. intitulé identique (accents et ponctuation ignorés) ;
+        #   3. intitulé très proche (coquilles et abréviations d'import,
+        #      ex. « Protocole et ethiquette » pour « Protocole et étiquette »),
+        #      réservé à un candidat unique — un « — » vaut mieux qu'une
+        #      fausse note.
+        # Une UE rattachée à un examen n'est jamais réattribuée à un autre :
+        # le pool d'UE s'épuise à chaque examen.
+        inscriptions = list(
+            etudiant.inscriptions
+            .select_related('examen__cours', 'examen__session')
+            .order_by('examen__date_examen', 'examen_id'))
+
+        notes_par_cours = {}     # niveau 1 : lien direct `GrilleUE.cours`
+        notes_par_intitule = {}  # niveau 2 : intitulé identique
+        for ue in ues:
+            note_obj = notes_map.get(ue.pk)
+            note = note_obj.note if note_obj else None
+            ue_slug = slugify(ue.intitule)
+            if ue.cours_id:
+                notes_par_cours.setdefault(ue.cours_id, (note, ue_slug))
+            notes_par_intitule.setdefault(ue_slug, note)
+
+        # Pool d'UE encore offertes au rapprochement : une UE consommée
+        # (lien, intitulé ou similarité) n'est jamais réattribuée, un même
+        # cours garde la même note pour toutes ses sessions.
+        disponibles = dict(notes_par_intitule)
+        notes_cours_cache = {}
+        examens = []
+        for ins in inscriptions:
+            cours = ins.examen.cours
+            if cours.pk not in notes_cours_cache:
+                slug = slugify(cours.nom)
+                liee = notes_par_cours.get(cours.pk)
+                if liee is not None:
+                    # Lien `cours` : la bonne UE, fût-elle non notée.
+                    moyenne, ue_slug = liee
+                    disponibles.pop(ue_slug, None)
+                elif slug in disponibles:
+                    moyenne = disponibles.pop(slug)  # intitulé identique
+                else:
+                    moyenne = _note_ue_proche(slug, disponibles)
+                notes_cours_cache[cours.pk] = moyenne
+            examens.append({'inscription': ins,
+                            'moyenne': notes_cours_cache[cours.pk]})
+        # Nombre de fiches de cotation (titre de la section « Fiches de
+        # cotation & Examens enregistrés »).
+        nb_examens = len(examens)
 
         # --- Parcours de l'étudiant : une étape par année fréquentée. C'est
         # ici que les étudiants de L2 et de L3 retrouvent l'historique de
@@ -673,9 +749,8 @@ class EtudiantDetailView(DetailView):
         ues_a_reprendre = _ues_a_reprendre(grille_lignes)
 
         ctx.update({
-            'inscriptions': inscriptions,
-            'nb_examens': len(inscriptions),
-            'moyenne_generale': moyenne,
+            'nb_examens': nb_examens,
+            'examens': examens,
             'parcours': parcours,
             'grille_ligne': grille_ligne,
             'grille_lignes': grille_lignes,
