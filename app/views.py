@@ -331,6 +331,22 @@ def palmares_ligne(request, pk):
     for ue in ues:
         relevé.append({'ue': ue, 'note': notes_map.get(ue.pk)})
 
+    # Relevé groupé par semestre : une colonne par semestre, comme la
+    # fiche étudiant (S1 et S2 côte à côte). Crédits validés = crédits
+    # des UE acquises (note >= 10), sur le total des crédits listés.
+    semestres = []
+    for numéro in sorted({item['ue'].semestre for item in relevé}):
+        items = [item for item in relevé
+                 if item['ue'].semestre == numéro]
+        semestres.append({
+            'numero': numéro,
+            'items': items,
+            'credits_total': sum(item['ue'].credits for item in items),
+            'credits_valides': sum(
+                item['ue'].credits for item in items
+                if item['note'] and item['note'].est_validee),
+        })
+
     nb_ues_validees = sum(
         1 for item in relevé if item['note'] and item['note'].est_validee)
     nb_ues_non_notees = sum(
@@ -342,6 +358,7 @@ def palmares_ligne(request, pk):
         'selection': selection,
         'autres_lignes': autres_lignes,
         'releve': relevé,
+        'semestres': semestres,
         'nb_ues_validees': nb_ues_validees,
         'nb_ues_non_notees': nb_ues_non_notees,
     })

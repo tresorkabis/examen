@@ -3480,6 +3480,33 @@ class PalmaresLigneDetailTests(TestCase):
         self.assertIn('9/20', contenu)
 
 
+    def test_impression_de_la_fiche(self):
+        """La page est imprimable dans le cadre officiel du relevé.
+
+        Même cadre que la fiche étudiant : en-tête ECOLE SUPÉRIEURE /
+        RELEVÉ DE NOTES (masqué à l'écran), bouton d'impression, styles
+        @media print et emplacement du Secrétaire Général Académique.
+        """
+        reponse = self.client.get(
+            reverse('palmares_ligne', args=[self.ligne.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        contenu = reponse.content.decode()
+        # Bouton d'impression (écran).
+        self.assertIn('Imprimer la fiche', contenu)
+        self.assertIn('window.print()', contenu)
+        # En-tête officiel imprimable, masqué à l'écran.
+        self.assertIn('print-only-header', contenu)
+        self.assertIn('ÉCOLE SUPÉRIEURE DE FORMATION DES CADRES', contenu)
+        self.assertIn('RELEVÉ DE NOTES', contenu)
+        self.assertIn('relevé établi d\'après la grille archivée', contenu)
+        # Règles d'impression A4 + emplacement de signature officiel.
+        self.assertIn('@media print', contenu)
+        self.assertIn('print-only-footer', contenu)
+        self.assertIn('Le Secrétaire Général Académique', contenu)
+        # L'identité imprimée reprend le nom de la ligne archivée.
+        self.assertIn('BUDWAGA AGANZE MICHEL', contenu)
+
+
 class GabaritsCommentairesTests(TestCase):
     """Garde-fou : aucun commentaire Django mal formé dans les gabarits.
 

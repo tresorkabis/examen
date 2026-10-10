@@ -10,12 +10,196 @@
     .badge-decision-nv { background-color: #dc3545; color: #fff; }
     .ue-row-validee { background-color: rgba(25, 135, 84, 0.04); }
     .ue-row-echec { background-color: rgba(220, 53, 69, 0.04); }
+
+    /* ===== Éléments réservés à l'impression (même cadre que la fiche
+       étudiant : en-tête officiel + emplacement de signature). ===== */
+    .print-only-header,
+    .print-only-footer {
+        display: none;
+    }
+
+    /* ===== Optimisation de la disposition d'impression (A4 portrait) ===== */
+    @media print {
+        @page {
+            size: A4 portrait;
+            margin: 8mm 10mm 10mm 10mm;
+        }
+
+        #sidebar, nav.navbar, .breadcrumb, .alert, .no-print, .btn, footer {
+            display: none !important;
+        }
+
+        body {
+            background: #fff !important;
+            color: #000 !important;
+            font-size: 8.5pt !important;
+            line-height: 1.25 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        .main-content {
+            margin-left: 0 !important;
+            padding: 0 !important;
+            min-height: 0 !important;
+        }
+
+        .container, .container-fluid {
+            max-width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+
+        .card {
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+            margin-bottom: 8px !important;
+        }
+
+        .card-header {
+            padding: 3px 6px !important;
+            font-size: 9pt !important;
+            background-color: #f1f3f5 !important;
+            border: 1px solid #444 !important;
+            border-bottom: none !important;
+        }
+
+        .card-body {
+            padding: 4px 6px !important;
+            border: 1px solid #444 !important;
+        }
+
+        /* En-tête académique officiel */
+        .print-only-header {
+            display: block !important;
+            text-align: center;
+            border-bottom: 2px solid #000;
+            padding-bottom: 5px;
+            margin-bottom: 8px;
+        }
+        .print-only-header h1 {
+            font-size: 11pt;
+            font-weight: 700;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+        }
+        .print-only-header h2 {
+            font-size: 11pt;
+            font-weight: 700;
+            margin: 2px 0 0;
+            letter-spacing: .05em;
+        }
+        .print-header-meta {
+            font-size: 8.5pt;
+            margin-top: 3px;
+            color: #111;
+        }
+
+        /* Synthèse délibérée compacte, sans fonds teintés */
+        .deliberation-card { border-left: none !important; }
+        .row > .col { padding: 2px 4px !important; }
+        .fs-5 { font-size: 1rem !important; }
+        .badge-decision-v,
+        .badge-decision-vc,
+        .badge-decision-nv {
+            border: 1px solid #333 !important;
+        }
+
+        /* Relevé par UE : tableau bordé, fonds teintés neutralisés,
+           en-tête répété sur chaque page */
+        .table {
+            border: 1px solid #333 !important;
+            border-collapse: collapse !important;
+            width: 100% !important;
+            font-size: 7.8pt !important;
+        }
+        .table th, .table td {
+            border: 1px solid #777 !important;
+            padding: 2px 5px !important;
+        }
+        .table th {
+            background-color: #f1f3f5 !important;
+            font-weight: 700 !important;
+        }
+        .table thead { display: table-header-group !important; }
+        .table tr { page-break-inside: avoid !important; }
+        .ue-row-validee, .ue-row-echec { background: transparent !important; }
+        .table-responsive { overflow: visible !important; }
+
+        /* Disposition des 2 semestres côte à côte (mêmes règles que la
+           fiche étudiant : 2 colonnes parallèles à l'écran et au papier) */
+        .print-semester-row {
+            display: flex !important;
+            flex-direction: row !important;
+            gap: 8px !important;
+            width: 100% !important;
+            margin: 0 !important;
+        }
+        .print-semester-col {
+            width: calc(50% - 4px) !important;
+            flex: 0 0 calc(50% - 4px) !important;
+            max-width: calc(50% - 4px) !important;
+            padding: 0 !important;
+        }
+        .semester-card {
+            border: 1px solid #444 !important;
+            border-radius: 0 !important;
+        }
+        .semester-card .card-header {
+            padding: 3px 6px !important;
+            font-size: 8.5pt !important;
+            background-color: #e9ecef !important;
+            border-bottom: 1px solid #444 !important;
+            font-weight: 700;
+        }
+        .table-ue {
+            font-size: 7.6pt !important;
+            margin-bottom: 0 !important;
+        }
+        .ue-status-valide {
+            font-weight: 700;
+            color: #0f5132 !important;
+        }
+        .ue-status-echec {
+            font-weight: 700;
+            color: #842029 !important;
+        }
+
+        /* Emplacement officiel de signature */
+        .print-only-footer {
+            display: block !important;
+            margin-top: 12px !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<h2 class="mb-1">{{ ligne.nom_affiche }}</h2>
-<p class="text-muted mb-4">
+<!-- En-tête officiel imprimable (visible uniquement à l'impression) :
+     même cadre que le relevé de la fiche étudiant. -->
+<div class="print-only-header">
+    <h1>ÉCOLE SUPÉRIEURE DE FORMATION DES CADRES</h1>
+    <h2>RELEVÉ DE NOTES</h2>
+    <div class="print-header-meta">
+        Étudiant(e) : <strong>{{ ligne.nom_affiche }}</strong> &nbsp;|&nbsp;
+        Promotion : <strong>{{ selection.grille.promotion.nom }}</strong> &nbsp;|&nbsp;
+        Année académique : <strong>{{ selection.grille.annee_academique|default:"—" }}</strong>
+        &nbsp;|&nbsp; <em>(relevé établi d'après la grille archivée)</em>
+    </div>
+</div>
+
+<!-- Barre d'action supérieure (écran uniquement) -->
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3 no-print">
+    <h2 class="mb-0">{{ ligne.nom_affiche }}</h2>
+    <button type="button" class="btn btn-primary" onclick="window.print()">
+        <i class="bi bi-printer me-1"></i>Imprimer la fiche
+    </button>
+</div>
+<p class="text-muted mb-4 no-print">
     <span class="badge text-bg-secondary">
         <i class="bi bi-archive me-1"></i>Ligne archivée (sans fiche étudiant)
     </span>
@@ -91,43 +275,106 @@
     </div>
 </div>
 
-{# --- Relevé par UE : notes /20 telles que délibérées dans la grille. #}
+{# --- Relevé par UE : une colonne par semestre, comme la fiche        #}
+{# étudiant (S1 et S2 côte à côte), notes /20 telles que délibérées.   #}
 <div class="card">
     <div class="card-header bg-white">
         <h5 class="mb-0"><i class="bi bi-journal-text me-2 text-primary"></i>Relevé par unité d'enseignement</h5>
     </div>
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Unité d'enseignement</th>
-                        <th class="text-center">Crédits</th>
-                        <th class="text-center">Note</th>
-                        <th class="text-center">Semestre</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in releve %}
-                    <tr class="{% if item.note and item.note.est_validee %}ue-row-validee{% elif item.note and item.note.est_notee %}ue-row-echec{% endif %}">
-                        <td class="fw-semibold">{{ item.ue.intitule }}</td>
-                        <td class="text-center">{{ item.ue.credits }}</td>
-                        <td class="text-center fw-semibold">
-                            {% if item.note and item.note.est_notee %}
-                            <span class="{% if item.note.est_validee %}text-success{% else %}text-danger{% endif %}">
-                                {{ item.note.note_affichee }}/20
-                            </span>
-                            {% else %}
-                            <span class="badge text-bg-secondary" title="Case vide dans la grille : UE non évaluée, à repasser">Non notée</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-center">S{{ item.ue.semestre }}</td>
-                    </tr>
-                    {% empty %}
-                    <tr><td colspan="4" class="text-muted text-center py-3">Aucune UE dans cette grille.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    <div class="card-body p-3">
+        <div class="row g-4 print-semester-row">
+            {% for semestre in semestres %}
+            <!-- SEMESTRE {{ semestre.numero }} -->
+            <div class="col-lg-6 print-semester-col">
+                <div class="card h-100 border semester-card">
+                    <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                        <span class="fw-bold text-primary">
+                            <i class="bi bi-calendar-event me-1 no-print"></i>Semestre {{ semestre.numero }}
+                        </span>
+                        <span class="badge text-bg-light border small">
+                            {{ semestre.credits_valides }} / {{ semestre.credits_total }} crédits
+                        </span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0 table-ue">
+                            <thead class="table-light small">
+                                <tr>
+                                    <th style="width: 24px;" class="text-center">#</th>
+                                    <th>Unité d'Enseignement (UE)</th>
+                                    <th class="text-center" style="width: 32px;" title="Crédits">Cr.</th>
+                                    <th class="text-center" style="width: 48px;">Note</th>
+                                    <th class="text-center" style="width: 68px;">Statut</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in semestre.items %}
+                                <tr class="{% if item.note and item.note.est_validee %}ue-row-validee{% elif item.note and item.note.est_notee %}ue-row-echec{% endif %}">
+                                    <td class="text-center text-muted small">{{ forloop.counter }}</td>
+                                    <td>
+                                        <span class="fw-semibold">{{ item.ue.intitule }}</span>
+                                        {% if item.ue.groupe %}
+                                        <span class="badge text-bg-light border font-monospace ms-1 small no-print">{{ item.ue.groupe }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center fw-semibold text-secondary">{{ item.ue.credits }}</td>
+                                    <td class="text-center">
+                                        {% if item.note and item.note.est_notee %}
+                                        <span class="fw-bold {% if item.note.est_validee %}text-success ue-status-valide{% else %}text-danger ue-status-echec{% endif %}">
+                                            {{ item.note.note_affichee }}
+                                        </span>
+                                        <small class="text-muted no-print">/20</small>
+                                        {% else %}
+                                        <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if item.note and item.note.est_validee %}
+                                        <span class="badge text-bg-success-subtle text-success border border-success-subtle small ue-status-valide">
+                                            Validé
+                                        </span>
+                                        {% elif item.note and item.note.est_notee %}
+                                        <span class="badge text-bg-danger-subtle text-danger border border-danger-subtle small ue-status-echec">
+                                            À reprendre
+                                        </span>
+                                        {% else %}
+                                        <span class="badge text-bg-light border text-muted small">Non notée</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-3">Aucune UE au Semestre {{ semestre.numero }}.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="table-light small fw-bold">
+                                <tr>
+                                    <td colspan="2" class="text-end">Total S{{ semestre.numero }} :</td>
+                                    <td class="text-center">{{ semestre.credits_total }}</td>
+                                    <td colspan="2" class="text-center text-primary">
+                                        {{ semestre.credits_valides }} cr. validés
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <p class="text-muted text-center py-3 mb-0">Aucune UE dans cette grille.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{# Emplacement officiel de signature à l'impression : seul le Secrétaire #}
+{# Général Académique signe (même bloc que le relevé de la fiche). #}
+<div class="print-only-footer mt-4 pt-1">
+    <div class="d-flex justify-content-end text-center">
+        <div style="width: 250px;">
+            <p class="mb-1 text-muted" style="font-size: 8pt;">Fait à ........................................, le ..............................</p>
+            <p class="fw-bold mb-4" style="font-size: 9pt;">Le Secrétaire Général Académique</p>
+            <p class="text-muted border-top border-dark pt-1 mx-2" style="font-size: 7.5pt;">Sceau &amp; Signature</p>
         </div>
     </div>
 </div>
