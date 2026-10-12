@@ -2,6 +2,7 @@ import random
 import string
 from decimal import Decimal, ROUND_HALF_UP
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -151,6 +152,10 @@ class HistoriquePromotion(models.Model):
 
 
 class Enseignant(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='enseignant',
+        help_text="Compte utilisateur autorisé à se connecter pour cet enseignant.")
     noms = models.CharField(max_length=200, default='')
     email = models.EmailField(unique=True)
 
@@ -970,4 +975,3 @@ class CotationProjetTutore(models.Model):
                 ),
             ),
         ]
-

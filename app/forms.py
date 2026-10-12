@@ -124,8 +124,9 @@ class CotationProjetTutoreForm(BootstrapModelForm):
             'lecteur2': '2ème Lecteur (jury)',
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, membre_autorise=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.membre_autorise = membre_autorise
         # Jury : listes déroulantes triées, avec une option vide explicite.
         for champ in ('directeur', 'lecteur1', 'lecteur2'):
             self.fields[champ].queryset = (
@@ -146,6 +147,16 @@ class CotationProjetTutoreForm(BootstrapModelForm):
                     'max': bareme[membre],
                     'inputmode': 'decimal',
                 })
+
+        if membre_autorise:
+            champs_autorises = {
+                CotationProjetTutore.champ_de(rubrique, membre_autorise)
+                for rubrique, *_ in CotationProjetTutore.RUBRIQUES
+            }
+            for nom_champ, champ in self.fields.items():
+                if nom_champ not in champs_autorises:
+                    champ.disabled = True
+                    champ.widget.attrs['disabled'] = 'disabled'
 
     def clean(self):
         """Refuse qu'un même enseignant cumule deux rôles dans le jury."""

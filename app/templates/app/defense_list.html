@@ -137,6 +137,7 @@
                 <tbody>
                     {% for etudiant in etudiants %}
                     <tr>
+                        {% with fiche=etudiant.cotations_tutore.first %}
                         <td>
                             <a href="{% url 'etudiant_detail' etudiant.pk %}"
                                class="fw-semibold text-decoration-none">{{ etudiant.noms }}</a>
@@ -146,11 +147,12 @@
                         </td>
                         <td class="cell-note">{{ etudiant.promotion.nom }}</td>
                         <td class="zone-jury">
-                            {% with fiche = etudiant.cotations_tutore.first %}
                             {% if fiche %}
-                                <span class="badge bg-{{ 'success' if fiche.jury_complet else 'warning' }} badge-jury">
-                                    {{ 'Complet' if fiche.jury_complet else 'Incomplet' }}
-                                </span>
+                                {% if fiche.jury_complet %}
+                                <span class="badge bg-success badge-jury">Complet</span>
+                                {% else %}
+                                <span class="badge bg-warning badge-jury">Incomplet</span>
+                                {% endif %}
                                 <ul class="mb-0 small text-muted">
                                     <li><strong>Directeur :</strong>{% if fiche.directeur %}<a href="{% url 'enseignant_detail' fiche.directeur.pk %}">{{ fiche.directeur }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</li>
                                     <li><strong>1er Lecteur :</strong>{% if fiche.lecteur1 %}<a href="{% url 'enseignant_detail' fiche.lecteur1.pk %}">{{ fiche.lecteur1 }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</li>
@@ -159,25 +161,20 @@
                             {% else %}
                                 <span class="badge bg-light border text-secondary">Aucun jury</span>
                             {% endif %}
-                            {% endwith %}
                         </td>
                         <td class="cell-note">
-                            {% with fiche = etudiant.cotations_tutore.first %}
                             {% if fiche and fiche.total_general is not None %}
                                 {{ fiche.total_general|floatformat:2 }} / 200
                             {% else %}
                                 <span class="text-muted">—</span>
                             {% endif %}
-                            {% endwith %}
                         </td>
                         <td class="cell-note">
-                            {% with fiche = etudiant.cotations_tutore.first %}
                             {% if fiche %}
                                 {% if fiche.est_complete %}<span class="badge text-bg-success">Complète</span>
                                 {% elif fiche.jury_complet %}<span class="badge text-bg-warning">Brouillon</span>
                                 {% else %}<span class="badge text-bg-light border">Partielle</span>{% endif %}
                             {% else %}<span class="badge text-bg-light border">—</span>{% endif %}
-                            {% endwith %}
                         </td>
                         <td class="text-end">
                             {% if fiche %}
@@ -192,6 +189,7 @@
                             </a>
                             {% endif %}
                         </td>
+                        {% endwith %}
                     </tr>
                     {% empty %}
                     <tr>

@@ -6,6 +6,7 @@ from io import BytesIO
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import PermissionDenied
 from django.contrib.messages.views import SuccessMessageMixin
 from django.core.exceptions import ValidationError
 from django.core.cache import cache
@@ -2205,24 +2206,50 @@ def cotation_tutore_saisie(request, pk):
         Etudiant.objects.select_related('promotion'), pk=pk)
     fiche = (CotationProjetTutore.objects.filter(etudiant=etudiant)
              .select_related('directeur', 'lecteur1', 'lecteur2').first())
+    membre_autorise = _membre_jury_autorise(request.user, fiche)
     if request.method == 'POST':
-        form = CotationProjetTutoreForm(request.POST, instance=fiche)
+        form = CotationProjetTutoreForm(
+            request.POST, instance=fiche, membre_autorise=membre_autorise)
         if form.is_valid():
             fiche = form.save(commit=False)
             fiche.etudiant = etudiant
             fiche.save()
-            messages.success(request,
-                             "La cotation du projet tutoré a été enregistrée.")
+            if membre_autorise:
+                messages.success(
+                    request, "Votre cotation du projet tutoré a été enregistrée.")
+            else:
+                messages.success(
+                    request, "La cotation du projet tutoré a été enregistrée.")
             return redirect('cotation_tutore_impression', pk=etudiant.pk)
     else:
-        form = CotationProjetTutoreForm(instance=fiche)
+        form = CotationProjetTutoreForm(
+            instance=fiche, membre_autorise=membre_autorise)
     return render(request, 'app/cotation_tutore_form.html', {
         'form': form,
         'etudiant': etudiant,
         'fiche': fiche,
         'lignes_cotation': _lignes_cotation(form),
         'membres': CotationProjetTutore.MEMBRES,
+        'membre_autorise': membre_autorise,
     })
+
+
+def _membre_jury_autorise(user, fiche):
+    """Retourne le rôle coté par l'utilisateur, ou None pour gestionnaire."""
+    if user.is_staff or user.is_superuser:
+        return None
+    enseignant_connecte = getattr(user, 'enseignant', None)
+    if enseignant_connecte is None:
+        return None
+    if fiche is None:
+        raise PermissionDenied(
+            "La fiche doit d'abord être créée par un gestionnaire.")
+    for membre, _libelle in CotationProjetTutore.MEMBRES:
+        enseignant = getattr(fiche, membre, None)
+        if enseignant and enseignant.pk == enseignant_connecte.pk:
+            return membre
+    raise PermissionDenied(
+        "Votre compte n'est pas affecté au jury de cet étudiant.")
 
 
 def _lignes_cotation(form):
@@ -2332,4 +2359,3 @@ def cotation_tutore_supprimer(request, pk):
         messages.success(request,
                          "La cotation du projet tutoré a été supprimée.")
     return redirect('etudiant_detail', pk=etudiant.pk)
-

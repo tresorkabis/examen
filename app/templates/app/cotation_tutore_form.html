@@ -47,6 +47,11 @@
         {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
     </div>
     {% endif %}
+    {% if membre_autorise %}
+    <div class="alert alert-info py-2">
+        Vous êtes connecté comme membre du jury : seule votre colonne de cotation est modifiable.
+    </div>
+    {% endif %}
 
     <!-- En-tête de la fiche (reprise des champs d'identification du .docx) -->
     <div class="card shadow-sm mb-4">
