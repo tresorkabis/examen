@@ -4,8 +4,9 @@
 
 {% block extra_style %}
 <style>
-    /* En-tête imprimé : masqué à l'écran */
+    /* En-têtes imprimés (liste des étudiants / cours) : masqués à l'écran */
     .print-only { display: none; }
+    .titre-cours { display: none; }
 
     /* ===== Impression : uniquement la liste des étudiants ===== */
     @media print {
@@ -56,6 +57,56 @@
         }
         .students-print-table td.nom { width: 91% !important; font-weight: 600; }
 
+        /* ===== Impression ciblée « Cours + enseignants » (bouton dédié) =====
+           `imprimerCours()` pose la classe `impression-cours` sur <body> :
+           la liste des étudiants est remplacée par la carte « Cours » —
+           via un tableau réservé à l'impression (N°, cours, enseignant,
+           coefficient, sans liens) — et par la carte des enseignants
+           affectés à la promotion, sous le titre de la promotion. */
+        .titre-cours { display: none !important; }
+        body.impression-cours .titre-students { display: none !important; }
+        body.impression-cours .titre-cours { display: block !important; }
+        body.impression-cours .col-etudiants { display: none !important; }
+        body.impression-cours .students-print-table { display: none !important; }
+        body.impression-cours .col-cours-impression { display: block !important; }
+        body.impression-cours .cours-screen-block { display: none !important; }
+        body.impression-cours .carte-enseignants { display: block !important; }
+        body.impression-cours .cours-print-table {
+            display: table !important;
+            width: 100% !important;
+            border-collapse: collapse !important;
+        }
+        body.impression-cours .cours-print-table th,
+        body.impression-cours .cours-print-table td {
+            padding: .3rem .4rem !important;
+            border-bottom: 1px solid #dee2e6 !important;
+            text-align: left !important;
+            vertical-align: top !important;
+        }
+        body.impression-cours .cours-print-table thead th {
+            border-bottom: 2px solid #212529 !important;
+            font-size: 10pt;
+            text-transform: uppercase;
+        }
+        body.impression-cours .cours-print-table th.num,
+        body.impression-cours .cours-print-table td.num {
+            width: 8% !important;
+            text-align: center !important;
+        }
+
+        /* En impression « liste étudiants » (par défaut), la colonne Cours,
+           son tableau d'impression et la carte des enseignants restent
+           masqués : ils n'apparaissent qu'en mode « Cours » (bouton dédié). */
+        .col-cours-impression { display: none !important; }
+        .cours-print-table { display: none !important; }
+        .carte-enseignants { display: none !important; }
+        /* En mode « Cours », les liens de la carte enseignants s'impriment
+           comme du simple texte (pastille « N cours » conservée). */
+        body.impression-cours .carte-enseignants a {
+            text-decoration: none !important;
+            color: inherit !important;
+        }
+
         /* Marge verticale suffisante pour l'en-tête et le pied de page du navigateur */
         @page { size: A4 portrait; margin: 16mm 12mm; }
     }
@@ -66,8 +117,13 @@
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <div>
             <h2 class="mb-0">{{ promotion.nom }}</h2>
-            <div class="print-only small text-muted mt-1">
+            <div class="print-only small text-muted mt-1 titre-students">
                 Liste des étudiants — {{ etudiants|length }} étudiant{{ etudiants|length|pluralize }}
+                · imprimé le {% now 'd/m/Y à H:i' %}
+            </div>
+            <div class="print-only small text-muted mt-1 titre-cours">
+                Cours et enseignants affectés — {{ cours|length }} cours{{ cours|length|pluralize }}
+                dispensé{{ cours|length|pluralize }} par {{ enseignants|length }} enseignant{{ enseignants|length|pluralize }}
                 · imprimé le {% now 'd/m/Y à H:i' %}
             </div>
         </div>
@@ -75,6 +131,12 @@
             <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
                 <i class="bi bi-printer me-1"></i>Imprimer la liste
             </button>
+            {% if cours %}
+            <button type="button" class="btn btn-outline-primary" onclick="imprimerCours()"
+                    title="Imprimer les cours de la promotion avec les enseignants affectés">
+                <i class="bi bi-printer me-1"></i>Imprimer les cours
+            </button>
+            {% endif %}
             <a href="{% url 'promotion_update' promotion.pk %}" class="btn btn-outline-secondary">
                 <i class="bi bi-pencil me-1"></i>Modifier
             </a>
@@ -118,7 +180,7 @@
     </div>
 
     <div class="row g-3">
-        <div class="col-lg-6">
+        <div class="col-lg-6 col-etudiants">
             <div class="card shadow-sm h-100">
                 <div class="card-header fw-semibold no-print d-flex justify-content-between align-items-center">
                     <span><i class="bi bi-people me-1"></i>Étudiants ({{ etudiants|length }})</span>
@@ -187,7 +249,7 @@
             </div>
         </div>
 
-        <div class="col-lg-6 no-print">
+        <div class="col-lg-6 no-print cours-screen-block">
             <div class="card shadow-sm h-100">
                 <div class="card-header fw-semibold"><i class="bi bi-book me-1"></i>Cours ({{ cours|length }})</div>
                 <div class="card-body p-0" style="max-height: 480px; overflow-y: auto;">
@@ -220,13 +282,51 @@
                 </div>
             </div>
         </div>
+
+        {# Colonne réservée à l'impression « Cours + enseignants » : masquée à #}
+        {# l'écran (règles @media print), elle n'apparaît qu'en mode #}
+        {# « Cours » via `imprimerCours()`. Tableau N° + cours + enseignant + #}
+        {# coefficient, sans liens — même mécanique que students-print-table. #}
+        <div class="col-lg-6 col-cours-impression d-none">
+            <div class="card shadow-sm h-100">
+                <div class="card-header fw-semibold"><i class="bi bi-book me-1"></i>Cours ({{ cours|length }})</div>
+                <div class="card-body p-0">
+                    <table class="cours-print-table d-none">
+                        <thead>
+                            <tr>
+                                <th class="num">N°</th>
+                                <th>Cours</th>
+                                <th>Enseignant</th>
+                                <th class="text-center">Coef.</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in cours %}
+                            <tr>
+                                <td class="num">{{ forloop.counter }}</td>
+                                <td class="fw-semibold">{{ c.nom }}</td>
+                                <td>{{ c.enseignant|default:"—" }}</td>
+                                <td class="text-center">{{ c.coefficient }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted py-4">
+                                    Aucun cours rattaché à cette promotion.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 
-    {# =================================================================== #}
-    {# GRILLES DE DÉLIBÉRATION : une par année académique. L'aperçu s'ouvre #}
-    {# dans une page autonome (sans sidebar) ; l'import et le retrait se     #}
-    {# font ici, sans dépendre d'une session.                               #}
-    {# =================================================================== #}
+    {# ================================================================ #}
+    {# GRILLES DE DÉLIBÉRATION : une par année académique. L'aperçu #}
+    {# s'ouvre dans une page autonome (sans sidebar) ; l'import et le #}
+    {# retrait se font ici, sans dépendre d'une session. #}
+    {# ================================================================ #}
     <div class="card shadow-sm mt-3 no-print">
         <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span class="fw-semibold">
@@ -295,7 +395,7 @@
         </div>
     </div>
 
-    <div class="card shadow-sm mt-3 no-print">
+    <div class="card shadow-sm mt-3 no-print carte-enseignants">
         <div class="card-header fw-semibold"><i class="bi bi-person-badge me-1"></i>Enseignants intervenant dans cette promotion ({{ enseignants|length }})</div>
         <div class="card-body p-0" style="max-height: 320px; overflow-y: auto;">
             <div class="list-group list-group-flush">
@@ -315,4 +415,35 @@
             </div>
         </div>
     </div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    /* Impression ciblée « Cours + enseignants » — même mécanique que
+       « Imprimer la liste » (impression navigateur) : la classe
+       `impression-cours` posée sur <body> remplace la liste des étudiants
+       par le tableau des cours (N°, cours, enseignant, coefficient, sans
+       liens) et la carte des enseignants affectés, sous le titre de la promotion.
+       La classe est retirée après l'impression ou si elle est annulée, pour
+       que l'écran reste inchangé.
+
+       Le titre du document est remplacé le temps de l'impression : c'est lui
+       que propose par défaut « Enregistrer au format PDF ». */
+    var titreCours = "Cours et enseignants — {{ promotion.nom|escapejs }}";
+    var titreInitial = null;
+
+    function imprimerCours() {
+        titreInitial = document.title;
+        document.title = titreCours;
+        document.body.classList.add('impression-cours');
+        window.print();
+    }
+
+    window.addEventListener('afterprint', function () {
+        document.body.classList.remove('impression-cours');
+        if (titreInitial) {
+            document.title = titreInitial;
+        }
+    });
+</script>
 {% endblock %}

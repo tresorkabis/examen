@@ -784,6 +784,128 @@ class EtudiantDetailView(DetailView):
         return ctx
 
 
+def etudiant_releve_global(request, pk):
+    """Relevé global : toutes les années du parcours, une page par année.
+
+    Un étudiant de L3 imprime d'un seul tenant son relevé L3 + L2 + L1 ;
+    un étudiant de L2, L2 + L1. Le document s'ouvre sur une synthèse
+    globale (une ligne par année, cumul des crédits et moyenne pondérée),
+    puis chaque année occupe sa propre page à l'impression, avec sa
+    synthèse délibérée et ses notes par semestre — même cadre officiel
+    (en-tête, signature) que le relevé annuel de la fiche.
+
+    Les années sont ordonnées de la plus récente à la plus ancienne (L3
+    d'abord). Seules les lignes de grille existantes sont imprimées : une
+    année antérieure sans résultats archivés n'a rien à détailler, comme
+    sur la carte « Parcours ». L'année en cours sans délibération est
+    rappelée dans la synthèse (« résultats non importés ») — et seulement
+    si sa promotion n'a aucun résultat, pour ne pas contredire une section
+    déjà imprimée.
+
+    La moyenne pondérée n'est qu'un indicateur de parcours : la
+    délibération de chaque année reste seule fait foi.
+    """
+    etudiant = get_object_or_404(
+        Etudiant.objects.select_related('promotion'), pk=pk)
+
+    grille_lignes = list(
+        GrilleEtudiant.objects
+        .select_related('grille', 'grille__promotion')
+        .filter(etudiant=etudiant)
+        .order_by('-grille__annee_academique', '-grille__id'))
+
+    # Une requête par collection (UE et notes), pas une par année : les
+    # résultats sont indexés en mémoire, comme sur la fiche étudiant.
+    ues_par_grille = defaultdict(list)
+    for ue in (GrilleUE.objects
+               .filter(grille_id__in=[l.grille_id for l in grille_lignes])
+               .order_by('grille_id', 'semestre', 'ordre', 'intitule')):
+        ues_par_grille[ue.grille_id].append(ue)
+    notes_par_ligne = defaultdict(dict)
+    for note in (GrilleNote.objects
+                 .filter(ligne_id__in=[l.pk for l in grille_lignes])
+                 .select_related('ue')):
+        notes_par_ligne[note.ligne_id][note.ue_id] = note
+
+    annees = []
+    for ligne in grille_lignes:
+        notes_map = notes_par_ligne[ligne.pk]
+        items = [{'ue': ue, 'note': notes_map.get(ue.pk)}
+                 for ue in ues_par_grille[ligne.grille_id]]
+        # Relevé groupé par semestre : S1 et S2 côte à côte. Crédits
+        # validés = crédits des UE acquises (note >= 10).
+        semestres = []
+        for numéro in sorted({item['ue'].semestre for item in items}):
+            du_semestre = [i for i in items if i['ue'].semestre == numéro]
+            semestres.append({
+                'numero': numéro,
+                'items': du_semestre,
+                'credits_total': sum(i['ue'].credits for i in du_semestre),
+                'credits_valides': sum(
+                    i['ue'].credits for i in du_semestre
+                    if i['note'] and i['note'].est_validee),
+            })
+        annees.append({
+            'ligne': ligne,
+            'grille': ligne.grille,
+            'semestres': semestres,
+            'nb_ues': len(items),
+            'nb_ues_validees': sum(
+                1 for i in items if i['note'] and i['note'].est_validee),
+        })
+
+    # --- Cumuls de parcours : crédits sur toutes les années, et moyenne
+    # pondérée par les crédits exigés (indicative). Une année sans moyenne
+    # ou sans crédits est exclue du calcul plutôt que comptée pour zéro.
+    credits_valides = sum(a['ligne'].credits_total for a in annees)
+    credits_exiges = sum(a['grille'].total_credits for a in annees)
+    ponderes = [(a['ligne'], a['grille']) for a in annees
+                if a['ligne'].moyenne is not None
+                and a['grille'].total_credits]
+    poids = sum(g.total_credits for _, g in ponderes)
+    moyenne_globale = None
+    if poids:
+        moyenne_globale = (
+            sum(l.moyenne * g.total_credits for l, g in ponderes) / poids
+        ).quantize(Decimal('0.01'))
+
+    # Période couverte : « 2023-2024 à 2025-2026 » (années normalisées).
+    libelles = sorted(
+        {_libelle_annee(a['grille'].annee_academique)
+         for a in annees if a['grille'].annee_academique},
+        key=_cle_annee)
+    if len(libelles) > 1:
+        periode = f"{libelles[0]} à {libelles[-1]}"
+    elif libelles:
+        periode = libelles[0]
+    else:
+        periode = None
+
+    # Année en cours sans résultats : étape active de la promotion actuelle,
+    # affichée seulement si cette promotion n'a aucune ligne de grille.
+    promotions_avec_resultats = {a['grille'].promotion_id for a in annees}
+    etape_courante = None
+    if etudiant.promotion_id not in promotions_avec_resultats:
+        etape_courante = next(
+            iter(HistoriquePromotion.objects
+                 .filter(etudiant=etudiant,
+                         promotion_id=etudiant.promotion_id,
+                         date_fin__isnull=True)
+                 .select_related('promotion')),
+            None)
+
+    return render(request, 'app/etudiant_releve_global.html', {
+        'etudiant': etudiant,
+        'annees': annees,
+        'nb_annees': len(annees),
+        'credits_valides': credits_valides,
+        'credits_exiges': credits_exiges,
+        'moyenne_globale': moyenne_globale,
+        'periode': periode,
+        'etape_courante': etape_courante,
+    })
+
+
 # --- CRUD PROMOTION ---
 class PromotionListView(SafePaginationMixin, ListView):
     model = Promotion

@@ -227,6 +227,12 @@
             <button type="button" class="btn btn-primary" onclick="window.print()">
                 <i class="bi bi-printer me-1"></i>Imprimer le relevé
             </button>
+            {% if grille_lignes|length > 1 %}
+            <a href="{% url 'etudiant_releve_global' etudiant.pk %}" class="btn btn-outline-primary"
+               title="Imprimer toutes les années du parcours ({{ grille_lignes|length }} années) sur un seul document">
+                <i class="bi bi-collection me-1"></i>Relevé global
+            </a>
+            {% endif %}
             {% if ues_a_reprendre %}
             <button type="button" class="btn btn-warning"
                     onclick="imprimerUesAReprendre()"

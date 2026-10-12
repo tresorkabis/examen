@@ -1415,6 +1415,183 @@ class EtudiantDetailViewTest(BaseDataMixin, TestCase):
         self.assertContains(reponse, reverse('etudiant_detail', args=[etudiant.pk]))
 
 
+class ReleveGlobalTests(TestCase):
+    """Relevé global : toutes les années du parcours, un seul document.
+
+    Un étudiant de L3 imprime L3 + L2 + L1 ; un étudiant de L2, L2 + L1.
+    Chaque année occupe sa section (et sa page à l'impression), sous le
+    cadre officiel du relevé, ouvert par une synthèse globale cumulée.
+    """
+
+    def setUp(self):
+        self.promotion_l1 = Promotion.objects.create(nom='L1 INFO A')
+        self.promotion_l2 = Promotion.objects.create(nom='L2 INFO A')
+        self.promotion_l3 = Promotion.objects.create(nom='L3 INFO A')
+        self.etudiant = Etudiant.objects.create(
+            noms='KALALA MUKENDI JOEL', numero_etudiant='L3INFOA-042',
+            promotion=self.promotion_l3)
+
+    def _grille(self, promotion, annee, moyenne='14.00', credits_total=25,
+                etudiant=None):
+        """Grille d'une année : une UE par semestre, la ligne étudiant.
+
+        UE S1 notée 15 (acquise), UE S2 notée 9 (à reprendre) : les deux
+        statuts sont visibles à l'impression.
+        """
+        etudiant = etudiant or self.etudiant
+        grille = Grille.objects.create(
+            promotion=promotion, annee_academique=annee, total_credits=30)
+        ue1 = GrilleUE.objects.create(
+            grille=grille, intitule=f'UE {annee} S1', credits=15,
+            semestre=1, ordre=1)
+        ue2 = GrilleUE.objects.create(
+            grille=grille, intitule=f'UE {annee} S2', credits=15,
+            semestre=2, ordre=2)
+        ligne = GrilleEtudiant.objects.create(
+            grille=grille, etudiant=etudiant, noms=etudiant.noms, rang=1,
+            credits_total=credits_total, moyenne=moyenne, decision='V')
+        GrilleNote.objects.create(ligne=ligne, ue=ue1, note='15')
+        GrilleNote.objects.create(ligne=ligne, ue=ue2, note='9')
+        return grille, ligne
+
+    def _url(self, etudiant=None):
+        return reverse('etudiant_releve_global',
+                       args=[(etudiant or self.etudiant).pk])
+
+    def test_l3_imprime_l3_puis_l2_puis_l1(self):
+        """Les trois années du L3, de la plus récente à la plus ancienne."""
+        self._grille(self.promotion_l1, '2023-2024')
+        self._grille(self.promotion_l2, '2024-2025')
+        self._grille(self.promotion_l3, '2025-2026')
+
+        reponse = self.client.get(self._url())
+        self.assertEqual(reponse.status_code, 200)
+        annees = reponse.context['annees']
+        self.assertEqual(
+            [a['grille'].annee_academique for a in annees],
+            ['2025-2026', '2024-2025', '2023-2024'])
+        self.assertEqual(reponse.context['nb_annees'], 3)
+        self.assertEqual(reponse.context['periode'], '2023-2024 à 2025-2026')
+        texte = ' '.join(strip_tags(reponse.content.decode()).split())
+        # Une section par année, la L3 en tête (L3 → L2 → L1).
+        positions = [texte.index(f'Année {annee} —')
+                     for annee in ('2025-2026', '2024-2025', '2023-2024')]
+        self.assertEqual(positions, sorted(positions))
+        for promotion in ('L3 INFO A', 'L2 INFO A', 'L1 INFO A'):
+            self.assertIn(promotion, texte)
+
+    def test_l2_imprime_l2_et_l1_uniquement(self):
+        """Le L2 couvre L2 + L1, sans trace de L3."""
+        etu_l2 = Etudiant.objects.create(
+            noms='ILUNGA GRACE', numero_etudiant='L2INFOA-011',
+            promotion=self.promotion_l2)
+        self._grille(self.promotion_l1, '2023-2024', etudiant=etu_l2)
+        self._grille(self.promotion_l2, '2024-2025', etudiant=etu_l2)
+
+        reponse = self.client.get(self._url(etu_l2))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse.context['nb_annees'], 2)
+        self.assertEqual(reponse.context['periode'], '2023-2024 à 2024-2025')
+        texte = ' '.join(strip_tags(reponse.content.decode()).split())
+        self.assertIn('Année 2024-2025 — L2 INFO A', texte)
+        self.assertIn('Année 2023-2024 — L1 INFO A', texte)
+        self.assertNotIn('L3 INFO A', texte)
+
+    def test_synthese_globale_cumule_credits_et_moyenne(self):
+        """La synthèse additionne les crédits et pondère les moyennes."""
+        self._grille(self.promotion_l1, '2023-2024',
+                     moyenne='12.00', credits_total=20)
+        self._grille(self.promotion_l2, '2024-2025',
+                     moyenne='15.00', credits_total=30)
+        self._grille(self.promotion_l3, '2025-2026',
+                     moyenne='10.00', credits_total=25)
+
+        reponse = self.client.get(self._url())
+        self.assertEqual(reponse.context['credits_valides'], 75)
+        self.assertEqual(reponse.context['credits_exiges'], 90)
+        # (12×30 + 15×30 + 10×30) / 90 = 12,33 (pondéré par les crédits).
+        self.assertEqual(reponse.context['moyenne_globale'], Decimal('12.33'))
+        texte = ' '.join(strip_tags(reponse.content.decode()).split())
+        self.assertIn('Cumul du parcours', texte)
+        self.assertIn('75/90', texte)
+        self.assertIn('12,33/20', texte)
+
+    def test_cadre_impression_officiel_et_signature(self):
+        """Même cadre que le relevé annuel : en-tête, A4, signature SGA."""
+        self._grille(self.promotion_l3, '2025-2026')
+        reponse = self.client.get(self._url())
+        contenu = reponse.content.decode()
+        self.assertIn('print-only-header', contenu)
+        self.assertIn('RELEVÉ DE NOTES GLOBAL', contenu)
+        self.assertIn('ÉCOLE SUPÉRIEURE DE FORMATION DES CADRES', contenu)
+        self.assertIn('print-only-footer', contenu)
+        self.assertIn('Le Secrétaire Général Académique', contenu)
+        self.assertIn('@media print', contenu)
+        # Chaque année ouvre une nouvelle page à l'impression.
+        self.assertIn('.releve-annee', contenu)
+        self.assertIn('break-before: page', contenu)
+        self.assertIn('window.print()', contenu)
+
+    def test_notes_et_statuts_par_semestre(self):
+        """Les notes /20 et les statuts (Validé / À reprendre) sont imprimés."""
+        self._grille(self.promotion_l3, '2025-2026')
+        reponse = self.client.get(self._url())
+        texte = ' '.join(strip_tags(reponse.content.decode()).split())
+        self.assertIn('UE 2025-2026 S1', texte)
+        self.assertIn('UE 2025-2026 S2', texte)
+        self.assertIn('Validé', texte)
+        self.assertIn('À reprendre', texte)
+        # Notes : S1 notée 15 (acquise), S2 notée 9 (échec).
+        self.assertIn('15', texte)
+        self.assertIn(' 9', texte)
+
+    def test_fiche_propose_le_lien_releve_global(self):
+        """La fiche boutonne le relevé global dès deux années de parcours."""
+        self._grille(self.promotion_l2, '2024-2025')
+        self._grille(self.promotion_l3, '2025-2026')
+        reponse = self.client.get(
+            reverse('etudiant_detail', args=[self.etudiant.pk]))
+        self.assertContains(
+            reponse, reverse('etudiant_releve_global',
+                             args=[self.etudiant.pk]))
+
+    def test_fiche_sans_lien_pour_une_seule_annee(self):
+        """Une seule année : le relevé annuel suffit, pas de lien global."""
+        self._grille(self.promotion_l3, '2025-2026')
+        reponse = self.client.get(
+            reverse('etudiant_detail', args=[self.etudiant.pk]))
+        self.assertNotContains(
+            reponse, reverse('etudiant_releve_global',
+                             args=[self.etudiant.pk]))
+
+    def test_etudiant_sans_grille_affiche_le_message(self):
+        """Aucun résultat importé : le message d'import à la place."""
+        reponse = self.client.get(self._url())
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'Aucune grille de délibération')
+
+    def test_etudiant_inexistant_renvoie_404(self):
+        reponse = self.client.get(
+            reverse('etudiant_releve_global', args=[9999]))
+        self.assertEqual(reponse.status_code, 404)
+
+    def test_etape_en_cours_sans_resultats_rappelee(self):
+        """L'année en cours sans délibération reste visible en synthèse."""
+        self._grille(self.promotion_l1, '2023-2024')
+        self._grille(self.promotion_l2, '2024-2025')
+        # L'étudiant est en L3 (fiche actuelle) sans grille L3 importée.
+        etape = HistoriquePromotion.enregistrer(
+            self.etudiant, self.promotion_l3, '2025-2026')[0]
+        etape.date_fin = None
+        etape.save(update_fields=['date_fin'])
+
+        reponse = self.client.get(self._url())
+        self.assertEqual(reponse.status_code, 200)
+        self.assertIsNotNone(reponse.context['etape_courante'])
+        texte = ' '.join(strip_tags(reponse.content.decode()).split())
+        self.assertIn('résultats non importés', texte)
+
+
 class NoteUeProcheTests(TestCase):
     """Rapprochement approché examen → UE (helper de la vue)."""
 
@@ -4115,5 +4292,113 @@ class CotationProjetTutoreVueTests(BaseDataMixin, TestCase):
                         f'comme texte : {ligne.strip()[:60]}')
 
         self.assertEqual(anomalies, [], '\n'.join(anomalies))
+
+
+class ImpressionCoursPromotionTests(BaseDataMixin, TestCase):
+    """Impression « Cours + enseignants » de la fiche promotion.
+
+    Même mécanique que « Imprimer la liste » (impression navigateur) : le
+    bouton `imprimerCours()` pose la classe `impression-cours` sur <body>,
+    qui remplace la liste des étudiants par le tableau des cours (N°,
+    cours, enseignant, coefficient, sans liens) et la carte des
+    enseignants affectés, sous le titre de la promotion avec son
+    sous-titre dédié.
+    """
+
+    def test_bouton_impression_cours_sur_la_fiche(self):
+        """Le bouton « Imprimer les cours » appelle `imprimerCours()`."""
+        self._creer_etudiants(1)
+
+        reponse = self.client.get(
+            reverse('promotion_detail', args=[self.promotion.pk]))
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'Imprimer les cours')
+        self.assertContains(reponse, 'onclick="imprimerCours()"')
+        self.assertContains(reponse, 'function imprimerCours()')
+
+    def test_bouton_impression_cours_absent_sans_cours(self):
+        """Sans cours : pas de bouton d'impression dédié (rien à imprimer)."""
+        self.cours.delete()
+
+        reponse = self.client.get(
+            reverse('promotion_detail', args=[self.promotion.pk]))
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertNotContains(reponse, 'onclick="imprimerCours()"')
+        # La liste des étudiants reste imprimable, elle.
+        self.assertContains(reponse, 'Imprimer la liste')
+
+    def test_impression_cours_reutilise_le_cadre_officiel(self):
+        """Le mode « Cours » s'appuie sur les blocs de la page.
+
+        Chaque classe visée par le CSS doit exister dans la page : un
+        renommage silencieux ferait retomber l'impression ciblée sur la
+        liste des étudiants, ou masquerait les cours.
+        """
+        self._creer_etudiants(1)
+
+        reponse = self.client.get(
+            reverse('promotion_detail', args=[self.promotion.pk]))
+        contenu = reponse.content.decode()
+
+        # Deux titres : la liste (masquée en mode « Cours ») et les cours.
+        self.assertIn('titre-students', contenu)
+        self.assertIn('titre-cours', contenu)
+        self.assertIn('Cours et enseignants affectés', contenu)
+        # Tableaux d'impression : étudiants ET cours (sans liens).
+        self.assertIn('class="students-print-table', contenu)
+        self.assertIn('class="cours-print-table', contenu)
+        # Règles d'impression ciblée et classes des blocs qu'elles ciblent.
+        self.assertIn('body.impression-cours .titre-cours', contenu)
+        self.assertIn('body.impression-cours .col-etudiants', contenu)
+        self.assertIn('body.impression-cours .col-cours-impression', contenu)
+        self.assertIn('body.impression-cours .carte-enseignants', contenu)
+        for classe in ('col-etudiants', 'col-cours-impression',
+                       'cours-screen-block', 'carte-enseignants',
+                       'cours-print-table', 'titre-cours'):
+            with self.subTest(classe=classe):
+                self.assertIn(classe, contenu)
+
+    def test_tableau_impression_cours_avec_enseignant(self):
+        """Le tableau d'impression liste chaque cours et son enseignant."""
+        self._creer_etudiants(1)
+
+        reponse = self.client.get(
+            reverse('promotion_detail', args=[self.promotion.pk]))
+        contenu = reponse.content.decode()
+
+        self.assertIn('Langage de programmation mobile', contenu)
+        self.assertIn('KABISAYI TRESOR', contenu)
+        # Enseignant affecté : rappelé dans la carte des enseignants.
+        self.assertIn('Enseignants intervenant dans cette promotion (1)',
+                      contenu)
+
+    def test_tableau_impression_cours_sans_enseignant(self):
+        """Un cours sans enseignant s'imprime avec un tiret (pas d'erreur)."""
+        Cours.objects.create(nom='Anglais', coefficient=2,
+                             promotion=self.promotion)
+
+        reponse = self.client.get(
+            reverse('promotion_detail', args=[self.promotion.pk]))
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'Anglais')
+
+    def test_aucun_commentaire_de_gabarit_dans_le_rendu(self):
+        """Aucun `{# ... #}` ne doit fuir dans la page.
+
+        Un commentaire Django ne vaut que sur **une seule ligne** : une ligne
+        orpheline (contenant `#}` sans `{#`) est rendue comme du texte et se
+        retrouve imprimée dans la liste des cours.
+        """
+        self._creer_etudiants(1)
+
+        reponse = self.client.get(
+            reverse('promotion_detail', args=[self.promotion.pk]))
+        contenu = reponse.content.decode()
+
+        self.assertNotIn('{#', contenu)
+        self.assertNotIn('#}', contenu)
 
 
