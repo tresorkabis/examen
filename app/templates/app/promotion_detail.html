@@ -7,6 +7,10 @@
     /* En-têtes imprimés (liste des étudiants / cours) : masqués à l'écran */
     .print-only { display: none; }
     .titre-cours { display: none; }
+    /* Colonne d'impression « Cours » : jamais visible à l'écran (elle
+       doublonnerait la carte « Cours de la promotion » en bas de page).
+       Elle n'apparaît qu'à l'impression, en mode `impression-cours`. */
+    .col-cours-impression { display: none; }
 
     /* ===== Impression : uniquement la liste des étudiants ===== */
     @media print {
@@ -57,12 +61,24 @@
         }
         .students-print-table td.nom { width: 91% !important; font-weight: 600; }
 
+        /* Les grilles de délibération ne font jamais partie des impressions
+           « Liste des étudiants » ni « Cours + enseignants » : elles
+           s'impriment depuis leur propre page d'aperçu. */
+        .card-grilles { display: none !important; }
+
+        /* La carte « Cours » affichée à l'écran (liens, badges) ne s'imprime
+           jamais : l'impression utilise le tableau dédié ci-dessous. */
+        .cours-screen-block { display: none !important; }
+        /* Colonne d'impression « Cours » : masquée par défaut (y compris en
+           impression « Liste »), affichée uniquement en mode
+           `impression-cours`. */
+        .col-cours-impression { display: none !important; }
+
         /* ===== Impression ciblée « Cours + enseignants » (bouton dédié) =====
            `imprimerCours()` pose la classe `impression-cours` sur <body> :
-           la liste des étudiants est remplacée par la carte « Cours » —
-           via un tableau réservé à l'impression (N°, cours, enseignant,
-           coefficient, sans liens) — et par la carte des enseignants
-           affectés à la promotion, sous le titre de la promotion. */
+           la colonne des étudiants est remplacée par le tableau réservé à
+           l'impression (N°, cours, enseignant, coefficient, sans liens) et
+           par la carte des enseignants affectés à la promotion. */
         .titre-cours { display: none !important; }
         body.impression-cours .titre-students { display: none !important; }
         body.impression-cours .titre-cours { display: block !important; }
@@ -70,7 +86,9 @@
         body.impression-cours .students-print-table { display: none !important; }
         body.impression-cours .col-cours-impression { display: block !important; }
         body.impression-cours .cours-screen-block { display: none !important; }
-        body.impression-cours .carte-enseignants { display: block !important; }
+        /* En mode « Cours », la carte des enseignants reste masquée
+           (classe `no-print`) : le tableau des cours affiche déjà
+           l'enseignant de chaque cours, la liste du bas ferait doublon. */
         body.impression-cours .cours-print-table {
             display: table !important;
             width: 100% !important;
