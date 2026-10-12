@@ -42,6 +42,11 @@ BREADCRUMB_MAP = {
     "session_update": ("Modifier une Session", [("Sessions", "session_list")]),
     "examen_update": ("Modifier un Examen", [("Examens", "examen_list")]),
 
+    # Cotation du projet tutoré (défense L3)
+    "cotation_tutore_saisie": ("Cotation Projet Tutoré", [("Étudiants", "etudiant_list")]),
+    "cotation_tutore_impression": ("Impression Cotation", [("Étudiants", "etudiant_list")]),
+    "cotation_tutore_supprimer": ("Supprimer la Cotation", [("Étudiants", "etudiant_list")]),
+
     # Suppressions
     "etudiant_delete": ("Supprimer un Étudiant", [("Étudiants", "etudiant_list")]),
     "cours_delete": ("Supprimer un Cours", [("Cours", "cours_list")]),

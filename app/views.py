@@ -22,10 +22,11 @@ from django.views.generic import (ListView, CreateView, UpdateView, DeleteView,
                                   DetailView)
 
 from .forms import (PromotionForm, EnseignantForm, EtudiantForm, CoursForm,
-                    SessionForm, ExamenForm, ExcelImportForm)
+                    SessionForm, ExamenForm, ExcelImportForm,
+                    CotationProjetTutoreForm)
 from .models import (Etudiant, Cours, Session, Enseignant, Promotion, Examen,
                      Inscription, Grille, GrilleUE, GrilleEtudiant, GrilleNote,
-                     HistoriquePromotion)
+                     HistoriquePromotion, CotationProjetTutore)
 from .excel_import import (import_etudiants_excel, import_enseignants_excel,
                           import_cours_excel, import_grille_excel)
 
@@ -748,6 +749,15 @@ class EtudiantDetailView(DetailView):
         # que la délibération exige de repasser pour obtenir son année.
         ues_a_reprendre = _ues_a_reprendre(grille_lignes)
 
+        # --- Cotation du projet tutoré (défense L3) : la fiche étudiant
+        # n'en affiche le raccourci que pour les promotions L3 — ou dès
+        # qu'une fiche existe (elle reste accessible si l'étudiant change
+        # de promotion).
+        cotation_tutore = (CotationProjetTutore.objects
+                           .filter(etudiant=etudiant)
+                           .select_related('etudiant', 'directeur',
+                                           'lecteur1', 'lecteur2').first())
+
         ctx.update({
             'nb_examens': nb_examens,
             'examens': examens,
@@ -767,6 +777,8 @@ class EtudiantDetailView(DetailView):
             'ues_a_reprendre': ues_a_reprendre,
             'nb_ues_a_reprendre': sum(len(e['ues']) for e in ues_a_reprendre),
             'nb_credits_a_reprendre': sum(e['credits'] for e in ues_a_reprendre),
+            'cotation_tutore': cotation_tutore,
+            'est_l3': etudiant.promotion.est_l3,
         })
         return ctx
 
@@ -974,11 +986,20 @@ class EnseignantDetailView(DetailView):
                         .filter(promotion__cours__enseignant=enseignant)
                         .distinct()
                         .count())
+        # Jurys de défense : étudiants L3 pour lesquels cet enseignant est
+        # Directeur, 1er ou 2ème Lecteur (fiche de cotation du projet tutoré).
+        jurys = (CotationProjetTutore.objects
+                 .filter(Q(directeur=enseignant) | Q(lecteur1=enseignant)
+                         | Q(lecteur2=enseignant))
+                 .select_related('etudiant', 'etudiant__promotion',
+                                 'directeur', 'lecteur1', 'lecteur2')
+                 .order_by('etudiant__noms'))
         ctx.update({
             'cours': cours,
             'promotions': promotions,
             'examens': examens,
             'nb_etudiants': nb_etudiants,
+            'jurys': jurys,
         })
         return ctx
 
@@ -2044,4 +2065,271 @@ def import_excel_view(request):
         'promotions': Promotion.objects.all(),
     }
     return render(request, 'app/import_excel.html', context)
+
+
+# --- DÉFENSES (PROJET TUTORÉ L3) ---
+
+class DefenseListView(SafePaginationMixin, ListView):
+    """Défenses L3 : jury affecté et cotation, par étudiant.
+
+    Une ligne par étudiant des promotions L3 (« L3 … », même convention que
+    ``Promotion.est_l3``), avec la fiche de cotation préchargée (jury en
+    ``select_related`` : aucune requête N+1). Filtres GET : recherche « q »
+    (nom / numéro / email), promotion L3, état du jury (complet ou non) et
+    état de la cotation (sans fiche, brouillon, complète). Les cartes
+    d'en-tête portent les compteurs globaux (indépendants des filtres),
+    comme sur la page des examens.
+    """
+    model = Etudiant
+    template_name = "app/defense_list.html"
+    context_object_name = "etudiants"
+    paginate_by = 25
+
+    def get_queryset(self):
+        qs = (Etudiant.objects
+              .filter(promotion__nom__istartswith='L3')
+              .select_related('promotion')
+              .prefetch_related(Prefetch(
+                  'cotations_tutore',
+                  queryset=(CotationProjetTutore.objects
+                            .select_related('directeur', 'lecteur1',
+                                            'lecteur2')))))
+        params = self.request.GET
+        self.filters = {}
+
+        q = params.get('q', '').strip()
+        if q:
+            qs = qs.filter(Q(noms__icontains=q)
+                           | Q(numero_etudiant__icontains=q)
+                           | Q(email__icontains=q))
+            self.filters['q'] = q
+
+        promo = params.get('promotion', '').strip()
+        if promo.isdigit():
+            qs = qs.filter(promotion__pk=promo)
+            self.filters['promotion'] = int(promo)
+
+        jury = params.get('jury', '').strip()
+        if jury in ('complet', 'incomplet'):
+            complets = set(CotationProjetTutore.objects.filter(
+                etudiant__promotion__nom__istartswith='L3',
+                directeur__isnull=False,
+                lecteur1__isnull=False,
+                lecteur2__isnull=False,
+            ).values_list('etudiant_id', flat=True))
+            if jury == 'complet':
+                qs = qs.filter(pk__in=complets)
+            else:
+                qs = qs.exclude(pk__in=complets)
+            self.filters['jury'] = jury
+
+        cotation = params.get('cotation', '').strip()
+        if cotation == 'sans':
+            qs = qs.filter(cotations_tutore__isnull=True)
+            self.filters['cotation'] = 'sans'
+        elif cotation in ('brouillon', 'complete'):
+            # `cases_renseignees` est une propriété Python (compte les notes
+            # non nulles sur les 18 champs) : on partitionne les fiches en
+            # une seule requête `values`, puis on filtre par ids.
+            etat = {}
+            for fiche in (CotationProjetTutore.objects
+                          .filter(etudiant__in=qs.values('pk'))
+                          .values('etudiant_id', *[
+                              CotationProjetTutore.champ_de(r, m)
+                              for r, *_ in CotationProjetTutore.RUBRIQUES
+                              for m, _ in CotationProjetTutore.MEMBRES
+                          ])):
+                eid = fiche.pop('etudiant_id')
+                etat[eid] = sum(1 for v in fiche.values() if v is not None)
+            total_cases = (len(CotationProjetTutore.RUBRIQUES)
+                           * len(CotationProjetTutore.MEMBRES))
+            if cotation == 'complete':
+                qs = qs.filter(pk__in=[e for e, n in etat.items()
+                                       if n == total_cases])
+            else:
+                qs = qs.filter(pk__in=[e for e, n in etat.items()
+                                       if n < total_cases])
+            self.filters['cotation'] = cotation
+
+        return qs.order_by('promotion__nom', 'noms')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Compteurs globaux (scope L3, sans les filtres) pour les cartes.
+        nb_etudiants = Etudiant.objects.filter(
+            promotion__nom__istartswith='L3').count()
+        fiches = list(CotationProjetTutore.objects.filter(
+            etudiant__promotion__nom__istartswith='L3').values(
+                'directeur_id', 'lecteur1_id', 'lecteur2_id', *[
+                    CotationProjetTutore.champ_de(r, m)
+                    for r, *_ in CotationProjetTutore.RUBRIQUES
+                    for m, _ in CotationProjetTutore.MEMBRES
+                ]))
+        total_cases = (len(CotationProjetTutore.RUBRIQUES)
+                       * len(CotationProjetTutore.MEMBRES))
+        context['stats_defenses'] = {
+            'etudiants': nb_etudiants,
+            'jurys_complets': sum(
+                1 for f in fiches
+                if f['directeur_id'] and f['lecteur1_id']
+                and f['lecteur2_id']),
+            'fiches': len(fiches),
+            'completes': sum(
+                1 for f in fiches
+                if sum(1 for k, v in f.items()
+                       if not k.endswith('_id') and v is not None)
+                == total_cases),
+        }
+        # Options du filtre promotion : seules les L3 ayant des étudiants.
+        context['filter_promotions'] = (Promotion.objects
+                                        .filter(etudiants__isnull=False,
+                                                nom__istartswith='L3')
+                                        .distinct().order_by('nom'))
+        context['filters'] = self.filters
+        return context
+
+
+# --- COTATION DU PROJET TUTORÉ (DÉFENSE L3) ---
+
+@login_required
+def cotation_tutore_saisie(request, pk):
+    """Saisie de la cotation du projet tutoré (défense) d'un étudiant L3.
+
+    Fiche unique par étudiant (contrainte d'unicité) : la vue crée si elle
+    n'existe pas encore, modifie sinon — un seul et même formulaire dans les
+    deux cas. Les notes acceptent la virgule française ; les totaux, le
+    pourcentage et la mention sont recalculés à chaque enregistrement par le
+    modèle (aucune valeur dérivée n'est stockée).
+    """
+    etudiant = get_object_or_404(
+        Etudiant.objects.select_related('promotion'), pk=pk)
+    fiche = (CotationProjetTutore.objects.filter(etudiant=etudiant)
+             .select_related('directeur', 'lecteur1', 'lecteur2').first())
+    if request.method == 'POST':
+        form = CotationProjetTutoreForm(request.POST, instance=fiche)
+        if form.is_valid():
+            fiche = form.save(commit=False)
+            fiche.etudiant = etudiant
+            fiche.save()
+            messages.success(request,
+                             "La cotation du projet tutoré a été enregistrée.")
+            return redirect('cotation_tutore_impression', pk=etudiant.pk)
+    else:
+        form = CotationProjetTutoreForm(instance=fiche)
+    return render(request, 'app/cotation_tutore_form.html', {
+        'form': form,
+        'etudiant': etudiant,
+        'fiche': fiche,
+        'lignes_cotation': _lignes_cotation(form),
+        'membres': CotationProjetTutore.MEMBRES,
+    })
+
+
+def _lignes_cotation(form):
+    """Une ligne par rubrique, avec les champs BoundField des 3 membres.
+
+    Les gabarits ne peuvent pas construire un nom de champ dynamiquement
+    (« {{ form.exactitude_directeur }} » en dur × 18) : la structure est
+    assemblée ici, une fois, pour la saisie comme pour l'impression (où
+    `form` sera remplacé par les valeurs de la fiche).
+    """
+    lignes = []
+    groupe_prec = None
+    for cle, numero, groupe, libelle, bareme in CotationProjetTutore.RUBRIQUES:
+        lignes.append({
+            'numero': numero,
+            'groupe': groupe,
+            # En-tête de groupe affiché une seule fois (CONTENU, FORME…).
+            'nouveau_groupe': groupe != groupe_prec,
+            'libelle': libelle,
+            'bareme': bareme,
+            'champs': [
+                (membre, libelle_membre, bareme[membre],
+                 form[CotationProjetTutore.champ_de(cle, membre)])
+                for membre, libelle_membre in CotationProjetTutore.MEMBRES
+            ],
+        })
+        groupe_prec = groupe
+    return lignes
+
+
+@login_required
+def cotation_tutore_impression(request, pk):
+    """Fiche de cotation en lecture seule, destinée à l'impression.
+
+    Reproduit le modèle officiel (``data/FicheMEMOIRE.docx``) : en-tête du
+    jury, tableau des rubriques coté par les trois membres, total général
+    /200, pourcentage et mention. Une fiche vide n'a rien à imprimer :
+    on renvoie vers la saisie.
+    """
+    etudiant = get_object_or_404(
+        Etudiant.objects.select_related('promotion'), pk=pk)
+    fiche = (CotationProjetTutore.objects.filter(etudiant=etudiant)
+             .select_related('directeur', 'lecteur1', 'lecteur2').first())
+    if fiche is None:
+        messages.info(request,
+                      "Aucune cotation du projet tutoré pour cet étudiant — "
+                      "saisissez-la d'abord.")
+        return redirect('cotation_tutore_saisie', pk=etudiant.pk)
+    return render(request, 'app/cotation_tutore_impression.html', {
+        'fiche': fiche,
+        'etudiant': etudiant,
+        'lignes_cotation': _lignes_valeurs(fiche),
+        # Jury affecté (enseignants), dans l'ordre des colonnes du tableau.
+        'jury': [
+            (membre, libelle_membre,
+             getattr(fiche, membre, None))
+            for membre, libelle_membre in CotationProjetTutore.MEMBRES
+        ],
+        'membres': CotationProjetTutore.MEMBRES,
+        # (clé, libellé, total obtenu ou None, maximum du barème) par membre.
+        'totaux': [
+            (membre, libelle_membre, fiche.total_membre(membre),
+             CotationProjetTutore.TOTAL_MEMBRE[membre])
+            for membre, libelle_membre in CotationProjetTutore.MEMBRES
+        ],
+    })
+
+
+def _lignes_valeurs(fiche):
+    """Une ligne par rubrique avec les notes de la fiche (impression).
+
+    Même structure que ``_lignes_cotation`` pour la saisie, mais chaque
+    cellule porte la ``valeur`` notée (None = case vide) au lieu d'un champ
+    de formulaire.
+    """
+    lignes = []
+    groupe_prec = None
+    for cle, numero, groupe, libelle, bareme in CotationProjetTutore.RUBRIQUES:
+        lignes.append({
+            'numero': numero,
+            'groupe': groupe,
+            'nouveau_groupe': groupe != groupe_prec,
+            'libelle': libelle,
+            'bareme': bareme,
+            'cases': [
+                (membre, libelle_membre, bareme[membre],
+                 fiche.valeur(cle, membre))
+                for membre, libelle_membre in CotationProjetTutore.MEMBRES
+            ],
+        })
+        groupe_prec = groupe
+    return lignes
+
+
+@login_required
+def cotation_tutore_supprimer(request, pk):
+    """Supprime la cotation du projet tutoré d'un étudiant (POST uniquement)."""
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    etudiant = get_object_or_404(Etudiant, pk=pk)
+    fiche = CotationProjetTutore.objects.filter(etudiant=etudiant).first()
+    if fiche is None:
+        messages.warning(request,
+                         "Aucune cotation du projet tutoré à supprimer.")
+    else:
+        fiche.delete()
+        messages.success(request,
+                         "La cotation du projet tutoré a été supprimée.")
+    return redirect('etudiant_detail', pk=etudiant.pk)
 

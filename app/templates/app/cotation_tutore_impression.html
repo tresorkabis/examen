@@ -1,0 +1,191 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Fiche de cotation — {{ etudiant.noms }}{% endblock %}
+
+{% block extra_style %}
+<style>
+    /* ===== Fiche de cotation du projet tutoré (impression) ===== */
+    .fiche-memoire { max-width: 860px; }
+    .fiche-header { border-bottom: 3px double #212529; padding-bottom: .5rem; }
+    .fiche-header h1 { font-size: 1.05rem; font-weight: 700; text-transform: uppercase; }
+    .fiche-titre {
+        font-weight: 700; text-transform: uppercase; text-align: center;
+        letter-spacing: .04em; margin: .75rem 0;
+    }
+    .cotation-table th, .cotation-table td {
+        vertical-align: middle; border: 1px solid #adb5bd !important;
+    }
+    .cotation-table thead th {
+        background-color: #f1f3f5; text-align: center; white-space: nowrap;
+    }
+    .cotation-table .groupe td {
+        background-color: #f8f9fa; font-weight: 700; text-transform: uppercase;
+        font-size: .85rem;
+    }
+    .cotation-table .cellule-note { text-align: center; width: 14%; }
+    .cotation-table .cellule-note .valeur { font-weight: 700; }
+    .cotation-table .cellule-note .vide { color: #6c757d; }
+    .cotation-table .bareme { color: #6c757d; font-size: .72rem; }
+    .cotation-table tfoot td { background-color: #e9ecef; font-weight: 700; }
+
+    /* ===== Impression : uniquement la fiche ===== */
+    @media print {
+        #sidebar, nav.navbar, .navbar, header, footer, .offcanvas-backdrop,
+        .no-print, .breadcrumb, .alert { display: none !important; }
+        body { background: #fff !important; -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
+        .main-content { margin-left: 0 !important; min-height: 0 !important; }
+        .container { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
+        .card { border: none !important; box-shadow: none !important; }
+        .card-body { padding: 0 !important; }
+        .fiche-memoire { box-shadow: none !important; max-width: 100% !important; }
+        html, body { overflow: visible !important; }
+        .table-responsive { overflow: visible !important; }
+        .cotation-table { width: 100% !important; table-layout: fixed !important; border-collapse: collapse !important; }
+        .cotation-table td { padding: .2rem .3rem; font-size: 9.5pt; }
+        .cotation-table thead th { font-size: 8.5pt; padding: .2rem .1rem; }
+        .fiche-signatures { page-break-inside: avoid !important; break-inside: avoid !important; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm fiche-memoire mx-auto">
+    <div class="card-body">
+
+        <!-- En-tête officiel (reproduction du modèle Word) -->
+        <div class="fiche-header text-center">
+            <h1>Ministère de l'Enseignement Supérieur et Universitaire</h1>
+            <h1>École Supérieure de Formation des Cadres</h1>
+            <div class="small">Décret d'agrément N° 06/0106 · Secrétariat Général Académique</div>
+            <div class="small mt-1">
+                Section : <strong>{{ fiche.section|default:"………………" }}</strong>
+            </div>
+        </div>
+
+        <div class="fiche-titre">Fiche de cotation de projet tutoré</div>
+
+        <!-- Identification -->
+        <dl class="row small mb-3">
+            <dt class="col-sm-3">Nom de l'étudiant</dt>
+            <dd class="col-sm-9">{{ etudiant.noms }} ({{ etudiant.numero_etudiant }}) — {{ etudiant.promotion.nom }}</dd>
+            <dt class="col-sm-3">Sujet</dt>
+            <dd class="col-sm-9">{{ fiche.sujet|default:"………………" }}</dd>
+            <dt class="col-sm-3">Domaine du sujet</dt>
+            <dd class="col-sm-9">{{ fiche.domaine_sujet|default:"………………" }}</dd>
+            <dt class="col-sm-3">Nom du lecteur</dt>
+            <dd class="col-sm-9">{{ fiche.nom_lecteur|default:"………………" }}{% if fiche.qualite_lecteur %} — {{ fiche.qualite_lecteur }}{% endif %}</dd>
+            {% if fiche.date_cotation %}
+            <dt class="col-sm-3">Date de la défense</dt>
+            <dd class="col-sm-9">{{ fiche.date_cotation|date:"d/m/Y" }}</dd>
+            {% endif %}
+        </dl>
+
+        <!-- Tableau des rubriques -->
+        <div class="table-responsive">
+            <table class="table table-sm cotation-table mb-0">
+                <thead>
+                    <tr>
+                        <th scope="col" style="width: 4%;">N°</th>
+                        <th scope="col">Rubriques</th>
+                        {% for membre, libelle_membre, enseignant in jury %}
+                        <th scope="col" class="cellule-note">{{ libelle_membre }}<div class="bareme">{{ enseignant|default:"—" }}</div></th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ligne in lignes_cotation %}
+                    {% if ligne.nouveau_groupe %}
+                    <tr class="groupe">
+                        <td>{{ ligne.numero }}</td>
+                        <td colspan="4">{{ ligne.groupe }}</td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <td class="text-center small text-muted">{{ ligne.numero }}.{{ forloop.counter0 }}</td>
+                        <td>{{ ligne.libelle }}</td>
+                        {% for membre, libelle_membre, max_membre, valeur in ligne.cases %}
+                        <td class="cellule-note">
+                            {% if valeur is not None %}
+                            <span class="valeur">{{ valeur|floatformat:2 }}</span>
+                            {% else %}
+                            <span class="vide">—</span>
+                            {% endif %}
+                            <div class="bareme">/ {{ max_membre }}</div>
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td></td>
+                        <td>Total</td>
+                        {% for membre, libelle_membre, total, max_membre in totaux %}
+                        <td class="cellule-note">
+                            {% if total is not None %}{{ total|floatformat:2 }}{% else %}—{% endif %}
+                            <div class="bareme">/ {{ max_membre }}</div>
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>Total général</td>
+                        <td colspan="3" class="cellule-note">
+                            {% if fiche.total_general is not None %}{{ fiche.total_general|floatformat:2 }}{% else %}—{% endif %} / 200
+                        </td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>Pourcentage</td>
+                        <td colspan="3" class="cellule-note">
+                            {% if fiche.pourcentage is not None %}{{ fiche.pourcentage|floatformat:2 }} %{% else %}—{% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>Mention</td>
+                        <td colspan="3" class="cellule-note">
+                            {% if fiche.mention %}{{ fiche.mention }}{% else %}—{% endif %}
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        {% if not fiche.est_complete %}
+        <p class="text-warning small mt-2 mb-0">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            Fiche incomplète : {{ fiche.cases_renseignees }}/18 cases cotées —
+            les totaux ne portent que sur les notes saisies.
+        </p>
+        {% endif %}
+
+        <!-- Signatures (reproduction du modèle Word) -->
+        <div class="row mt-5 fiche-signatures">
+            <div class="col-6 text-center">
+                <div class="border-top d-inline-block px-4 pt-1">Signature du Directeur</div>
+            </div>
+            <div class="col-6 text-center">
+                <div class="border-top d-inline-block px-4 pt-1">Signature des Lecteurs</div>
+            </div>
+        </div>
+        <p class="text-end small text-muted mt-3 mb-0">
+            Fait à Kinshasa, le {{ fiche.date_cotation|date:"d/m/Y"|default:"……/……/……" }}
+        </p>
+
+        <div class="mt-4 no-print">
+            <button type="button" class="btn btn-primary" onclick="window.print()">
+                <i class="bi bi-printer me-1"></i>Imprimer la fiche
+            </button>
+            <a href="{% url 'cotation_tutore_saisie' etudiant.pk %}" class="btn btn-outline-secondary">
+                <i class="bi bi-pencil me-1"></i>Modifier la cotation
+            </a>
+            <small class="d-block text-muted mt-2">
+                <i class="bi bi-info-circle me-1"></i>Astuce impression : format A4,
+                marges « Par défaut », décochez « En-têtes et pieds de page ».
+            </small>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

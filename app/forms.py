@@ -1,7 +1,8 @@
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 
-from .models import Promotion, Enseignant, Etudiant, Cours, Session, Examen
+from .models import (Promotion, Enseignant, Etudiant, Cours, Session, Examen,
+                     CotationProjetTutore)
 
 
 class LoginForm(AuthenticationForm):
@@ -93,6 +94,77 @@ class ExamenForm(BootstrapModelForm):
             active = Session.objects.filter(est_active=True).first()
             if active:
                 self.fields['session'].initial = active.pk
+
+
+class CotationProjetTutoreForm(BootstrapModelForm):
+    """Fiche de cotation du projet tutoré (défense L3), barème /200.
+
+    Les 18 champs de notes sont en `localize=True` : la saisie accepte la
+    virgule décimale française (« 14,5 ») autant que le point, et la valeur
+    réaffichée dans le champ reprend le séparateur local. Les `help_text`
+    du modèle (« sur 10 », « sur 5 »…) portent le barème de chaque case.
+    """
+
+    class Meta:
+        model = CotationProjetTutore
+        fields = ['section', 'sujet', 'domaine_sujet', 'nom_lecteur',
+                  'qualite_lecteur', 'date_cotation',
+                  'directeur', 'lecteur1', 'lecteur2'] + [
+            CotationProjetTutore.champ_de(rubrique, membre)
+            for rubrique, *_ in CotationProjetTutore.RUBRIQUES
+            for membre, _ in CotationProjetTutore.MEMBRES
+        ]
+        widgets = {
+            'date_cotation': forms.DateInput(
+                attrs={'type': 'date'}, format='%Y-%m-%d'),
+        }
+        labels = {
+            'directeur': 'Directeur (jury)',
+            'lecteur1': '1er Lecteur (jury)',
+            'lecteur2': '2ème Lecteur (jury)',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Jury : listes déroulantes triées, avec une option vide explicite.
+        for champ in ('directeur', 'lecteur1', 'lecteur2'):
+            self.fields[champ].queryset = (
+                Enseignant.objects.order_by('noms'))
+            self.fields[champ].empty_label = '— Non affecté —'
+        # Notes saisies en français : « 14,5 » (virgule) comme « 14.5 ».
+        # Chaque champ porte aussi `data-membre` (colonne du jury) pour le
+        # calcul live des totaux en bas de tableau, et le barème en `max`.
+        for rubrique, _numero, _groupe, _libelle, bareme in (
+                CotationProjetTutore.RUBRIQUES):
+            for membre, _libelle_membre in CotationProjetTutore.MEMBRES:
+                champ = self.fields[CotationProjetTutore.champ_de(
+                    rubrique, membre)]
+                champ.localize = True
+                champ.widget.attrs.update({
+                    'class': 'form-control text-center',
+                    'data-membre': membre,
+                    'max': bareme[membre],
+                    'inputmode': 'decimal',
+                })
+
+    def clean(self):
+        """Refuse qu'un même enseignant cumule deux rôles dans le jury."""
+        nettoyees = super().clean()
+        roles = [('directeur', nettoyees.get('directeur')),
+                 ('1er lecteur', nettoyees.get('lecteur1')),
+                 ('2ème lecteur', nettoyees.get('lecteur2'))]
+        vus = {}
+        for libelle, enseignant in roles:
+            if enseignant is None:
+                continue
+            if enseignant.pk in vus:
+                self.add_error(
+                    None,
+                    f'{enseignant} ne peut pas cumuler deux rôles dans le '
+                    f'jury ({vus[enseignant.pk]} et {libelle}).')
+                break
+            vus[enseignant.pk] = libelle
+        return nettoyees
 
 
 class ExcelImportForm(forms.Form):

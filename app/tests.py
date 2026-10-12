@@ -7,6 +7,7 @@ l'authentification (accès en écriture protégé).
 from datetime import date, datetime
 from io import BytesIO
 
+from django.core.exceptions import ValidationError
 from django.core.cache import cache
 from django.core.management import call_command
 from django.contrib.auth.models import User
@@ -22,8 +23,9 @@ from .views import _note_ue_proche
 
 from .models import (Promotion, Enseignant, Etudiant, Cours, Session,
                      Examen, Inscription, Grille, GrilleUE, GrilleEtudiant,
-                     GrilleNote, HistoriquePromotion, normaliser_annee)
-from .forms import ExamenForm
+                     GrilleNote, HistoriquePromotion, normaliser_annee,
+                     CotationProjetTutore)
+from .forms import ExamenForm, CotationProjetTutoreForm
 
 
 class BaseDataMixin:
@@ -3686,7 +3688,406 @@ class PalmaresLigneDetailTests(TestCase):
         self.assertIn('BUDWAGA AGANZE MICHEL', contenu)
 
 
-class GabaritsCommentairesTests(TestCase):
+class CotationProjetTutoreTests(TestCase):
+    """Modèle CotationProjetTutore : totaux /200, pourcentage, mention.
+
+    Barème de la fiche officielle : 80 (Directeur) + 60 + 60 = 200 points.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.promotion = Promotion.objects.create(nom='L3 SCF LMD')
+        cls.etudiant = Etudiant.objects.create(
+            noms='KALALA Jean', email='jean.kalala@example.com',
+            numero_etudiant='L3SCF-001', promotion=cls.promotion)
+
+    def _fiche(self, **notes):
+        return CotationProjetTutore.objects.create(
+            etudiant=self.etudiant, **notes)
+
+    def test_fiche_vide_tout_a_none(self):
+        fiche = self._fiche()
+        self.assertIsNone(fiche.total_membre('directeur'))
+        self.assertIsNone(fiche.total_general)
+        self.assertIsNone(fiche.pourcentage)
+        self.assertEqual(fiche.mention, '')
+        self.assertEqual(fiche.cases_renseignees, 0)
+        self.assertFalse(fiche.est_complete)
+
+    def test_totaux_barème_max(self):
+        fiche = self._fiche(
+            exactitude_directeur=10, valeur_scientifique_directeur=20,
+            presentation_directeur=10, style_directeur=10,
+            initiative_directeur=10, defense_directeur=20,
+            exactitude_lecteur1=10, valeur_scientifique_lecteur1=10,
+            presentation_lecteur1=5, style_lecteur1=10,
+            initiative_lecteur1=10, defense_lecteur1=15,
+            exactitude_lecteur2=10, valeur_scientifique_lecteur2=10,
+            presentation_lecteur2=5, style_lecteur2=10,
+            initiative_lecteur2=10, defense_lecteur2=15)
+        self.assertEqual(fiche.total_membre('directeur'), 80)
+        self.assertEqual(fiche.total_membre('lecteur1'), 60)
+        self.assertEqual(fiche.total_membre('lecteur2'), 60)
+        self.assertEqual(fiche.total_general, 200)
+        self.assertEqual(fiche.pourcentage, 100)
+        self.assertEqual(fiche.mention, 'Excellent')
+        self.assertEqual(fiche.cases_renseignees, 18)
+        self.assertTrue(fiche.est_complete)
+
+    def test_total_partiel_ignore_les_cases_vides(self):
+        # Une case à NULL n'est pas un zéro : le total ne porte que sur
+        # les notes saisies (comme Inscription.moyenne).
+        fiche = self._fiche(exactitude_directeur=8,
+                            defense_directeur=Decimal('13.5'))
+        self.assertEqual(fiche.total_membre('directeur'), Decimal('21.5'))
+        self.assertIsNone(fiche.total_membre('lecteur1'))
+        self.assertEqual(fiche.total_general, Decimal('21.5'))
+        self.assertEqual(fiche.pourcentage, Decimal('10.75'))
+        self.assertEqual(fiche.cases_renseignees, 2)
+        self.assertFalse(fiche.est_complete)
+
+    def test_note_zero_comptee(self):
+        # Zéro saisi ≠ case vide : le total est 0 (et non None).
+        fiche = self._fiche(exactitude_directeur=0)
+        self.assertEqual(fiche.total_membre('directeur'), 0)
+        self.assertIsNotNone(fiche.total_general)
+
+    def test_mention_seuils(self):
+        # 50 % = 100/200 : le directeur coté au maximum (80) plus 20 pts.
+        cas = [
+            (Decimal('180'), 'Excellent'),    # 90 %
+            (Decimal('170'), 'Très Bien'),    # 85 %
+            (Decimal('160'), 'Très Bien'),    # 80 %
+            (Decimal('150'), 'Bien'),         # 75 %
+            (Decimal('140'), 'Bien'),         # 70 %
+            (Decimal('120'), 'Assez Bien'),   # 60 %
+            (Decimal('100'), 'Passable'),     # 50 %
+            (Decimal('99'), 'Passable'),      # 49,5 % → arrondi 50 → Passable
+            (Decimal('98'), ''),              # 49 % : aucune mention
+            (Decimal('10'), ''),              # 5 %
+        ]
+        for total, attendue in cas:
+            with self.subTest(total=total):
+                fiche = CotationProjetTutore(defense_directeur=total)
+                self.assertEqual(fiche.mention, attendue)
+
+    def test_mention_arrondit_au_point_entier(self):
+        # 179,99/200 = 89,995 % → arrondi 90 → Excellent.
+        fiche = CotationProjetTutore(defense_directeur=Decimal('179.99'))
+        self.assertEqual(fiche.pourcentage, Decimal('90.00'))
+        self.assertEqual(fiche.mention, 'Excellent')
+
+    def test_une_fiche_par_etudiant(self):
+        self._fiche()
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self._fiche()
+
+    def test_jury_vacant_par_defaut(self):
+        fiche = self._fiche()
+        self.assertEqual(fiche.membres_jury(), [None, None, None])
+        self.assertFalse(fiche.jury_complet)
+
+    def test_jury_complet(self):
+        directeur = Enseignant.objects.create(
+            noms='DIRECTEUR Test', email='directeur@example.com')
+        lecteur1 = Enseignant.objects.create(
+            noms='LECTEUR Un', email='lecteur1@example.com')
+        lecteur2 = Enseignant.objects.create(
+            noms='LECTEUR Deux', email='lecteur2@example.com')
+        fiche = self._fiche(directeur=directeur, lecteur1=lecteur1,
+                            lecteur2=lecteur2)
+        self.assertEqual(fiche.membres_jury(),
+                         [directeur, lecteur1, lecteur2])
+        self.assertTrue(fiche.jury_complet)
+
+    def test_meme_enseignant_deux_roles_refuse(self):
+        enseignant = Enseignant.objects.create(
+            noms='CUMUL Test', email='cumul@example.com')
+        fiche = CotationProjetTutore(
+            etudiant=self.etudiant, directeur=enseignant,
+            lecteur1=enseignant)
+        with self.assertRaises(ValidationError):
+            fiche.full_clean()
+
+
+class CotationProjetTutoreFormTests(TestCase):
+    """Formulaire de cotation : barème, virgule française."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.promotion = Promotion.objects.create(nom='L3 INFO LMD')
+        cls.etudiant = Etudiant.objects.create(
+            noms='MBALA Alice', email='alice.mbala@example.com',
+            numero_etudiant='L3INFO-042', promotion=cls.promotion)
+
+    def test_virgule_francaise_acceptee(self):
+        form = CotationProjetTutoreForm(data={
+            'exactitude_directeur': '8,5',
+            'defense_lecteur1': '12,25',
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['exactitude_directeur'],
+                         Decimal('8.5'))
+        self.assertEqual(form.cleaned_data['defense_lecteur1'],
+                         Decimal('12.25'))
+
+    def test_note_hors_bareme_refusee(self):
+        # Le barème du document : présentation des lecteurs sur 5.
+        form = CotationProjetTutoreForm(data={'presentation_lecteur1': '7'})
+        self.assertFalse(form.is_valid())
+        self.assertIn('presentation_lecteur1', form.errors)
+
+    def test_note_negative_refusee(self):
+        form = CotationProjetTutoreForm(data={'exactitude_directeur': '-1'})
+        self.assertFalse(form.is_valid())
+        self.assertIn('exactitude_directeur', form.errors)
+
+    def test_jury_propose_les_enseignants_tries(self):
+        Enseignant.objects.create(
+            noms='ZULU Zacharie', email='zulu@example.com')
+        Enseignant.objects.create(
+            noms='ABEDI Aline', email='abedi@example.com')
+        form = CotationProjetTutoreForm()
+        for champ in ('directeur', 'lecteur1', 'lecteur2'):
+            with self.subTest(champ=champ):
+                noms = list(form.fields[champ].queryset
+                            .values_list('noms', flat=True))
+                self.assertEqual(noms, sorted(noms))
+                self.assertEqual(form.fields[champ].empty_label,
+                                 '— Non affecté —')
+
+    def test_jury_meme_enseignant_deux_roles_refuse(self):
+        enseignant = Enseignant.objects.create(
+            noms='CUMUL Form', email='cumul.form@example.com')
+        form = CotationProjetTutoreForm(data={
+            'directeur': str(enseignant.pk),
+            'lecteur1': str(enseignant.pk),
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn('__all__', form.errors)
+
+    def test_champs_notes_sont_localises(self):
+        form = CotationProjetTutoreForm()
+        for rubrique, *_ in CotationProjetTutore.RUBRIQUES:
+            for membre, _ in CotationProjetTutore.MEMBRES:
+                champ = form.fields[CotationProjetTutore.champ_de(
+                    rubrique, membre)]
+                self.assertTrue(champ.localize,
+                                f'{champ} devrait accepter la virgule fr')
+
+
+class CotationProjetTutoreVueTests(BaseDataMixin, TestCase):
+    """Vues de saisie / impression / suppression de la cotation L3."""
+
+    def setUp(self):
+        self._connexion()
+        self._creer_etudiants(1)
+        self.etudiant = Etudiant.objects.first()
+        self.url_saisie = reverse('cotation_tutore_saisie',
+                                  args=[self.etudiant.pk])
+        self.url_impression = reverse('cotation_tutore_impression',
+                                      args=[self.etudiant.pk])
+
+    def _donnees(self, **extra):
+        donnees = {
+            'section': 'Sciences Économiques',
+            'sujet': 'Gestion des stocks',
+            'domaine_sujet': 'Comptabilité',
+            'nom_lecteur': 'KABILA Paul',
+            'qualite_lecteur': 'Directeur',
+            'date_cotation': '2026-06-15',
+            'exactitude_directeur': '10',
+            'valeur_scientifique_directeur': '18',
+            'presentation_directeur': '8',
+            'style_directeur': '9',
+            'initiative_directeur': '8',
+            'defense_directeur': '17',
+            'exactitude_lecteur1': '9',
+            'valeur_scientifique_lecteur1': '9',
+            'presentation_lecteur1': '4',
+            'style_lecteur1': '9',
+            'initiative_lecteur1': '9',
+            'defense_lecteur1': '13',
+            'exactitude_lecteur2': '9',
+            'valeur_scientifique_lecteur2': '9',
+            'presentation_lecteur2': '4',
+            'style_lecteur2': '9',
+            'initiative_lecteur2': '9',
+            'defense_lecteur2': '12',
+        }
+        donnees.update(extra)
+        return donnees
+
+    def test_acces_anonyme_redirige(self):
+        self.client.logout()
+        for url in (self.url_saisie, self.url_impression):
+            with self.subTest(url=url):
+                reponse = self.client.get(url)
+                self.assertEqual(reponse.status_code, 302)
+                self.assertIn('/login/', reponse.url)
+
+    def test_saisie_affiche_le_barème(self):
+        reponse = self.client.get(self.url_saisie)
+        self.assertEqual(reponse.status_code, 200)
+        contenu = reponse.content.decode()
+        self.assertIn('Cotation du projet tutoré', contenu)
+        self.assertIn('Exactitude (justesse, cohérence', contenu)
+        self.assertIn('Total général', contenu)
+        self.assertIn(self.etudiant.noms, contenu)
+
+    def test_saisie_cree_la_fiche(self):
+        reponse = self.client.post(self.url_saisie, self._donnees())
+        self.assertRedirects(reponse, self.url_impression)
+        fiche = CotationProjetTutore.objects.get(etudiant=self.etudiant)
+        # 70 (Directeur) + 53 + 52 = 175/200 → 87,5 % → Très Bien
+        self.assertEqual(fiche.total_general, Decimal('175'))
+        self.assertEqual(fiche.pourcentage, Decimal('87.50'))
+        self.assertEqual(fiche.mention, 'Très Bien')
+        self.assertEqual(fiche.sujet, 'Gestion des stocks')
+
+    def test_saisie_modifie_sans_doublon(self):
+        self.client.post(self.url_saisie, self._donnees())
+        reponse = self.client.post(
+            self.url_saisie, self._donnees(defense_directeur='20'))
+        self.assertRedirects(reponse, self.url_impression)
+        self.assertEqual(
+            CotationProjetTutore.objects.filter(
+                etudiant=self.etudiant).count(), 1)
+        fiche = CotationProjetTutore.objects.get(etudiant=self.etudiant)
+        self.assertEqual(fiche.defense_directeur, Decimal('20'))
+
+    def test_saisie_renvoie_le_formulaire_si_invalide(self):
+        reponse = self.client.post(self.url_saisie, self._donnees(
+            presentation_lecteur1='7'))  # hors barème (max 5)
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'presentation_lecteur1')
+        self.assertEqual(CotationProjetTutore.objects.count(), 0)
+
+    def test_impression_affiche_les_totaux_et_la_mention(self):
+        self.client.post(self.url_saisie, self._donnees())
+        reponse = self.client.get(self.url_impression)
+        self.assertEqual(reponse.status_code, 200)
+        contenu = strip_tags(reponse.content.decode())
+        self.assertIn('Fiche de cotation de projet tutoré', contenu)
+        self.assertIn('Gestion des stocks', contenu)
+        self.assertIn('175,00', contenu)      # total général /200
+        self.assertIn('87,50', contenu)       # pourcentage
+        self.assertIn('Très Bien', contenu)
+        self.assertIn('Fait à Kinshasa', contenu)
+
+    def test_impression_sans_fiche_redirige_vers_saisie(self):
+        reponse = self.client.get(self.url_impression)
+        self.assertRedirects(reponse, self.url_saisie)
+
+    def test_impression_signale_une_fiche_incomplete(self):
+        donnees = self._donnees()
+        for champ in (
+                CotationProjetTutore.champ_de(rubrique, membre)
+                for rubrique, *_ in CotationProjetTutore.RUBRIQUES
+                for membre, _ in CotationProjetTutore.MEMBRES):
+            donnees[champ] = ''
+        donnees['exactitude_directeur'] = '10'
+        self.client.post(self.url_saisie, donnees)
+        reponse = self.client.get(self.url_impression)
+        self.assertContains(reponse, 'Fiche incomplète')
+        self.assertContains(reponse, '1/18 cases cotées')
+
+    def test_saisie_enregistre_le_jury(self):
+        directeur = Enseignant.objects.create(
+            noms='DIRECTEUR Vue', email='directeur.vue@example.com')
+        lecteur1 = Enseignant.objects.create(
+            noms='LECTEUR1 Vue', email='lecteur1.vue@example.com')
+        donnees = self._donnees()
+        for champ in (
+                CotationProjetTutore.champ_de(rubrique, membre)
+                for rubrique, *_ in CotationProjetTutore.RUBRIQUES
+                for membre, _ in CotationProjetTutore.MEMBRES):
+            donnees[champ] = ''
+        donnees.update({'directeur': str(directeur.pk),
+                        'lecteur1': str(lecteur1.pk)})
+        reponse = self.client.post(self.url_saisie, donnees)
+        self.assertEqual(reponse.status_code, 302)
+        fiche = CotationProjetTutore.objects.get(etudiant=self.etudiant)
+        self.assertEqual(fiche.directeur, directeur)
+        self.assertEqual(fiche.lecteur1, lecteur1)
+        self.assertIsNone(fiche.lecteur2)
+        self.assertContains(self.client.get(self.url_impression),
+                            'DIRECTEUR Vue')
+
+    def test_saisie_refuse_un_jury_cumule(self):
+        enseignant = Enseignant.objects.create(
+            noms='CUMUL Vue', email='cumul.vue@example.com')
+        donnees = self._donnees()
+        donnees.update({'directeur': str(enseignant.pk),
+                        'lecteur2': str(enseignant.pk)})
+        reponse = self.client.post(self.url_saisie, donnees)
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'cumuler deux r')
+        self.assertFalse(CotationProjetTutore.objects
+                         .filter(etudiant=self.etudiant).exists())
+
+    def test_fiche_etudiant_affiche_le_jury(self):
+        directeur = Enseignant.objects.create(
+            noms='DIRECTEUR Fiche', email='directeur.fiche@example.com')
+        CotationProjetTutore.objects.create(
+            etudiant=self.etudiant, directeur=directeur,
+            exactitude_directeur=Decimal(8))
+        reponse = self.client.get(reverse('etudiant_detail',
+                                          args=[self.etudiant.pk]))
+        self.assertContains(reponse, 'DIRECTEUR Fiche')
+
+    def test_fiche_enseignant_liste_ses_jurys(self):
+        directeur = Enseignant.objects.create(
+            noms='DIRECTEUR Jury', email='directeur.jury@example.com')
+        CotationProjetTutore.objects.create(
+            etudiant=self.etudiant, directeur=directeur,
+            exactitude_directeur=Decimal(8))
+        reponse = self.client.get(reverse('enseignant_detail',
+                                          args=[directeur.pk]))
+        self.assertContains(reponse, 'Jurys de d')
+        self.assertContains(reponse, self.etudiant.noms)
+        self.assertContains(reponse, 'Directeur')
+
+    def test_suppression_post_seule(self):
+        self.client.post(self.url_saisie, self._donnees())
+        url = reverse('cotation_tutore_supprimer', args=[self.etudiant.pk])
+        # GET refusé (405) : pas de suppression par simple navigation.
+        reponse = self.client.get(url)
+        self.assertEqual(reponse.status_code, 405)
+        self.assertEqual(CotationProjetTutore.objects.count(), 1)
+        reponse = self.client.post(url)
+        self.assertRedirects(
+            reponse, reverse('etudiant_detail', args=[self.etudiant.pk]))
+        self.assertEqual(CotationProjetTutore.objects.count(), 0)
+
+    def test_fiche_etudiant_affiche_le_raccourci_l3(self):
+        # BaseDataMixin crée la promotion « L3 INFO A » → section visible.
+        reponse = self.client.get(
+            reverse('etudiant_detail', args=[self.etudiant.pk]))
+        self.assertContains(reponse, 'Cotation du projet tutoré')
+        self.assertContains(reponse, 'Saisir la cotation')
+
+    def test_fiche_etudiant_masque_le_raccourci_hors_l3(self):
+        self.etudiant.promotion = Promotion.objects.create(nom='L1 SCF LMD')
+        self.etudiant.save()
+        reponse = self.client.get(
+            reverse('etudiant_detail', args=[self.etudiant.pk]))
+        self.assertNotContains(reponse, 'Saisir la cotation')
+
+    def test_fiche_etudiant_affiche_la_synthese_avec_fiche(self):
+        self.client.post(self.url_saisie, self._donnees())
+        reponse = self.client.get(
+            reverse('etudiant_detail', args=[self.etudiant.pk]))
+        self.assertContains(reponse, '175,00')
+        self.assertContains(reponse, 'Très Bien')
+
+    def test_promotion_est_l3(self):
+        self.assertTrue(Promotion(nom='L3 INFO A').est_l3)
+        self.assertTrue(Promotion(nom='l3 scf lmd').est_l3)
+        self.assertFalse(Promotion(nom='L1 SCF LMD').est_l3)
+        self.assertFalse(Promotion(nom='L2 TS LMD').est_l3)
+
     """Garde-fou : aucun commentaire Django mal formé dans les gabarits.
 
     `{# ... #}` ne fonctionne que sur une seule ligne. Un `{#` non fermé sur

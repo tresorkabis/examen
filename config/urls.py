@@ -16,7 +16,9 @@ from app.views import (
     ExamenListView, ExamenCreateView, ExamenUpdateView, ExamenDeleteView,
     fiche_cote, examen_inscrire, examen_desinscrire, examen_inscrire_tous,
     examen_marquer_notee, examen_non_notes_impression,
-    PalmaresView, palmares_ligne
+    cotation_tutore_saisie, cotation_tutore_impression, cotation_tutore_supprimer,
+    PalmaresView, palmares_ligne,
+    DefenseListView,
 )
 
 urlpatterns = [
@@ -35,6 +37,14 @@ urlpatterns = [
     path('etudiants/<int:pk>/ues-a-reprendre.pdf', etudiant_ues_reprendre_pdf, name='etudiant_ues_reprendre_pdf'),
     path('etudiants/<int:pk>/edit/', EtudiantUpdateView.as_view(), name='etudiant_update'),
     path('etudiants/<int:pk>/delete/', EtudiantDeleteView.as_view(), name='etudiant_delete'),
+
+    # URLs Cotation projet tutoré (défense L3)
+    path('etudiants/<int:pk>/projet-tutore/', cotation_tutore_saisie, name='cotation_tutore_saisie'),
+    path('etudiants/<int:pk>/projet-tutore/impression/', cotation_tutore_impression, name='cotation_tutore_impression'),
+    path('etudiants/<int:pk>/projet-tutore/supprimer/', cotation_tutore_supprimer, name='cotation_tutore_supprimer'),
+
+    # URLs Défenses L3
+    path('defenses/', DefenseListView.as_view(), name='defense_list'),
     
     # URLs Promotion
     path('promotions/', PromotionListView.as_view(), name='promotion_list'),

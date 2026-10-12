@@ -847,6 +847,76 @@
         </div>
         {% endif %}
     </div>
+
+    {# =================================================================== #}
+    {# SECTION 3 : COTATION DU PROJET TUTORÉ (DÉFENSE L3)                   #}
+    {# Raccourci vers la fiche de cotation du mémoire : affiché pour les   #}
+    {# promotions L3 (« L3 … ») même sans fiche — c'est le point d'entrée  #}
+    {# de la saisie — et pour tout étudiant qui a déjà une fiche, quelle   #}
+    {# que soit sa promotion actuelle.                                      #}
+    {# =================================================================== #}
+    {% if est_l3 or cotation_tutore %}
+    <div class="card shadow-sm mb-4 no-print">
+        <div class="card-header bg-white py-2 d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <h5 class="mb-0 fw-semibold">
+                <i class="bi bi-mortarboard me-2 text-secondary"></i>Cotation du projet tutoré (défense)
+            </h5>
+            {% if cotation_tutore %}
+            <span class="badge text-bg-light border">
+                {% if cotation_tutore.est_complete %}Fiche complète{% else %}Brouillon ({{ cotation_tutore.cases_renseignees }}/18){% endif %}
+            </span>
+            {% else %}
+            <span class="badge text-bg-light border">Aucune fiche</span>
+            {% endif %}
+        </div>
+        <div class="card-body py-2">
+            {% if cotation_tutore %}
+            <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+                <div>
+                    <span class="text-muted small d-block">Jury</span>
+                    <span class="fs-6">
+                        {% if cotation_tutore.directeur %}<a href="{% url 'enseignant_detail' cotation_tutore.directeur.pk %}">{{ cotation_tutore.directeur }}</a> (Dir.){% else %}<span class="text-muted">Dir. —</span>{% endif %} ·
+                        {% if cotation_tutore.lecteur1 %}<a href="{% url 'enseignant_detail' cotation_tutore.lecteur1.pk %}">{{ cotation_tutore.lecteur1 }}</a> (L1){% else %}<span class="text-muted">L1 —</span>{% endif %} ·
+                        {% if cotation_tutore.lecteur2 %}<a href="{% url 'enseignant_detail' cotation_tutore.lecteur2.pk %}">{{ cotation_tutore.lecteur2 }}</a> (L2){% else %}<span class="text-muted">L2 —</span>{% endif %}
+                    </span>
+                </div>
+                <div>
+                    <span class="text-muted small d-block">Total général</span>
+                    <strong class="fs-6">
+                        {% if cotation_tutore.total_general is not None %}{{ cotation_tutore.total_general|floatformat:2 }} / 200{% else %}—{% endif %}
+                    </strong>
+                </div>
+                <div>
+                    <span class="text-muted small d-block">Pourcentage</span>
+                    <strong class="fs-6">
+                        {% if cotation_tutore.pourcentage is not None %}{{ cotation_tutore.pourcentage|floatformat:2 }} %{% else %}—{% endif %}
+                    </strong>
+                </div>
+                <div>
+                    <span class="text-muted small d-block">Mention</span>
+                    <strong class="fs-6">
+                        {% if cotation_tutore.mention %}{{ cotation_tutore.mention }}{% else %}—{% endif %}
+                    </strong>
+                </div>
+            </div>
+            {% else %}
+            <p class="text-muted small mb-2">
+                Aucune cotation n'a encore été saisie pour la défense du projet tutoré.
+            </p>
+            {% endif %}
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{% url 'cotation_tutore_saisie' etudiant.pk %}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-pencil me-1"></i>{% if cotation_tutore %}Modifier{% else %}Saisir la cotation{% endif %}
+                </a>
+                {% if cotation_tutore %}
+                <a href="{% url 'cotation_tutore_impression' etudiant.pk %}" class="btn btn-sm btn-outline-info">
+                    <i class="bi bi-printer me-1"></i>Imprimer la fiche
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
 {% endblock %}
 
 {% block extra_script %}

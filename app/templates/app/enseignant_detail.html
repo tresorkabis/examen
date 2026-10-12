@@ -102,6 +102,50 @@
     </div>
 
     <div class="card shadow-sm mt-3">
+        <div class="card-header fw-semibold"><i class="bi bi-mortarboard me-1"></i>Jurys de défense — projets tutorés ({{ jurys|length }})</div>
+        <div class="card-body p-0" style="max-height: 320px; overflow-y: auto;">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Étudiant</th>
+                            <th>Promotion</th>
+                            <th class="text-center">Rôle</th>
+                            <th class="text-center">Cotation</th>
+                            <th class="text-end">Fiche</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for fiche in jurys %}
+                        <tr>
+                            <td><a href="{% url 'etudiant_detail' fiche.etudiant.pk %}" class="fw-semibold text-decoration-none">{{ fiche.etudiant.noms }}</a></td>
+                            <td>{{ fiche.etudiant.promotion.nom }}</td>
+                            <td class="text-center">
+                                {% if fiche.directeur_id == enseignant.pk %}<span class="badge text-bg-primary">Directeur</span>{% endif %}
+                                {% if fiche.lecteur1_id == enseignant.pk %}<span class="badge text-bg-secondary">1er Lecteur</span>{% endif %}
+                                {% if fiche.lecteur2_id == enseignant.pk %}<span class="badge text-bg-secondary">2ème Lecteur</span>{% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if fiche.total_general is not None %}{{ fiche.total_general|floatformat:2 }} / 200{% else %}<span class="text-muted">—</span>{% endif %}
+                            </td>
+                            <td class="text-end">
+                                <a href="{% url 'cotation_tutore_impression' fiche.etudiant.pk %}" class="btn btn-sm btn-outline-primary">Fiche</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">
+                                Aucun jury de défense affecté à cet enseignant.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mt-3">
         <div class="card-header fw-semibold"><i class="bi bi-file-earmark-text me-1"></i>Examens programmés ({{ examens|length }})</div>
         <div class="card-body p-0" style="max-height: 320px; overflow-y: auto;">
             <div class="table-responsive">

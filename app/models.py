@@ -2,6 +2,7 @@ import random
 import string
 from decimal import Decimal, ROUND_HALF_UP
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 
@@ -28,6 +29,17 @@ class Promotion(models.Model):
     # pas être créée deux fois). L'index unique généré remplace l'ancien
     # `Index(fields=['nom'])`, devenu redondant.
     nom = models.CharField(max_length=100, unique=True)
+
+    @property
+    def est_l3(self):
+        """La promotion est-elle de troisième licence (L3) ?
+
+        Le préfixe du nom fait foi : « L3 INFO A », « L3 SCF LMD »… La
+        cotation de la défense (projet tutoré) ne concerne que les L3 :
+        la fiche étudiant n'affiche le raccourci de saisie que pour eux
+        (une fiche déjà créée reste visible quelle que soit la promotion).
+        """
+        return self.nom.strip().upper().startswith('L3')
 
     def __str__(self):
         return self.nom
@@ -649,4 +661,313 @@ class GrilleNote(models.Model):
             ),
         ]
         indexes = [models.Index(fields=['ue', 'ligne'])]
+
+
+class CotationProjetTutore(models.Model):
+    """Cotation de la défense (projet tutoré / mémoire) d'un étudiant L3.
+
+    Reproduit la fiche officielle « FICHE DE COTATION DE PROJET TUTORE »
+    (``data/FicheMEMOIRE.docx``) : quatre rubriques notées par chacun des
+    trois membres du jury — Directeur, 1er Lecteur, 2ème Lecteur — puis le
+    total général /200, le pourcentage et la mention.
+
+    Barème du document (notes max par rubrique et par membre) :
+
+    =========================  ==========  ========  ==========
+    Rubrique                    Directeur   Lecteur 1  Lecteur 2
+    =========================  ==========  ========  ==========
+    1.1 Exactitude              10          10         10
+    1.2 Valeur scientifique     20          10         10
+    2.1 Présentation            10          5          5
+    2.2 Style et syntaxe        10          10         10
+    3. Initiative               10          10         10
+    4. Défense publique         20          15         15
+    **Total du membre**         **80**      **60**     **60**
+    =========================  ==========  ========  ==========
+
+    Total général : 200. Une note à NULL signifie « case vide » (pas encore
+    cotée), pas zéro — comme ``Inscription`` et ``GrilleNote`` ; les totaux
+    ne portent que sur les notes saisies, et le pourcentage n'a tout son
+    sens que sur une fiche entièrement remplie (signalée à l'affichage par
+    ``cases_renseignees``).
+
+    La mention suit le barème usuel de l'enseignement supérieur, calculé
+    sur le pourcentage (arrondi au point entier) : 50 % Passable, 60 %
+    Assez Bien, 70 % Bien, 80 % Très Bien, 90 % Excellent ; en dessous de
+    50 %, aucune mention n'est décernée.
+    """
+
+    SEUIL_VALIDATION = 50
+
+    MEMBRES = (
+        ('directeur', 'Directeur'),
+        ('lecteur1', '1er Lecteur'),
+        ('lecteur2', '2ème Lecteur'),
+    )
+    TOTAL_MEMBRE = {'directeur': 80, 'lecteur1': 60, 'lecteur2': 60}
+    TOTAL_GENERAL = 200
+
+    # (clé, numéro de rubrique, libellé de groupe, libellé complet,
+    #  barème par membre) — repris tels quels dans la fiche imprimable.
+    RUBRIQUES = (
+        ('exactitude', '1', 'CONTENU',
+         '1.1. Exactitude (justesse, cohérence, division et unicité du travail)',
+         {'directeur': 10, 'lecteur1': 10, 'lecteur2': 10}),
+        ('valeur_scientifique', '1', 'CONTENU',
+         '1.2. Valeur scientifique (honnêteté, profondeur, complétude des '
+         'données)',
+         {'directeur': 20, 'lecteur1': 10, 'lecteur2': 10}),
+        ('presentation', '2', 'FORME',
+         '2.1. Présentation et organisation matérielle (couverture, reliure, '
+         'saisie, tables, croquis, annexes)',
+         {'directeur': 10, 'lecteur1': 5, 'lecteur2': 5}),
+        ('style', '2', 'FORME',
+         '2.2. Style et syntaxe (clarté, connexion, dynamisme)',
+         {'directeur': 10, 'lecteur1': 10, 'lecteur2': 10}),
+        ('initiative', '3', 'INITIATIVE',
+         'Stratégies et techniques de recherche appropriée',
+         {'directeur': 10, 'lecteur1': 10, 'lecteur2': 10}),
+        ('defense', '4', 'DÉFENSE PUBLIQUE',
+         'Tenue, capacité de compréhension des questions, maîtrise du '
+         'travail, courtoisie',
+         {'directeur': 20, 'lecteur1': 15, 'lecteur2': 15}),
+    )
+
+    SEUILS_MENTION = (
+        (90, 'Excellent'),
+        (80, 'Très Bien'),
+        (70, 'Bien'),
+        (60, 'Assez Bien'),
+        (50, 'Passable'),
+    )
+
+    etudiant = models.ForeignKey(
+        Etudiant, on_delete=models.CASCADE, related_name='cotations_tutore')
+    # Jury de la défense : trois enseignants affectés à l'étudiant. `SET_NULL`
+    # (et non CASCADE) : supprimer un enseignant ne doit jamais effacer la
+    # fiche de cotation — le rôle redevient simplement vacant.
+    directeur = models.ForeignKey(
+        Enseignant, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='jurys_diriges',
+        help_text='Directeur du projet tutoré (membre du jury).')
+    lecteur1 = models.ForeignKey(
+        Enseignant, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='jurys_lecteur1',
+        help_text='1er Lecteur (membre du jury).')
+    lecteur2 = models.ForeignKey(
+        Enseignant, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='jurys_lecteur2',
+        help_text='2ème Lecteur (membre du jury).')
+    section = models.CharField(
+        max_length=100, blank=True, default='',
+        help_text='Section du jury (en-tête de la fiche).')
+    sujet = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text='Intitulé du sujet du projet tutoré.')
+    domaine_sujet = models.CharField(
+        max_length=150, blank=True, default='',
+        help_text='Domaine du sujet.')
+    nom_lecteur = models.CharField(
+        max_length=150, blank=True, default='',
+        help_text='Nom du lecteur désigné (en-tête de la fiche).')
+    qualite_lecteur = models.CharField(
+        max_length=100, blank=True, default='',
+        help_text='Qualité du lecteur (en-tête de la fiche).')
+    date_cotation = models.DateField(
+        null=True, blank=True,
+        help_text='Date de la défense / de la cotation.')
+
+    exactitude_directeur = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text='Exactitude — Directeur (sur 10)')
+    exactitude_lecteur1 = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text='Exactitude — 1er Lecteur (sur 10)')
+    exactitude_lecteur2 = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text='Exactitude — 2ème Lecteur (sur 10)')
+
+    valeur_scientifique_directeur = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(20)],
+        help_text='Valeur scientifique — Directeur (sur 20)')
+    valeur_scientifique_lecteur1 = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text='Valeur scientifique — 1er Lecteur (sur 10)')
+    valeur_scientifique_lecteur2 = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text='Valeur scientifique — 2ème Lecteur (sur 10)')
+
+    presentation_directeur = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text='Présentation — Directeur (sur 10)')
+    presentation_lecteur1 = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(5)],
+        help_text='Présentation — 1er Lecteur (sur 5)')
+    presentation_lecteur2 = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(5)],
+        help_text='Présentation — 2ème Lecteur (sur 5)')
+
+    style_directeur = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text='Style et syntaxe — Directeur (sur 10)')
+    style_lecteur1 = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text='Style et syntaxe — 1er Lecteur (sur 10)')
+    style_lecteur2 = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text='Style et syntaxe — 2ème Lecteur (sur 10)')
+
+    initiative_directeur = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text='Initiative — Directeur (sur 10)')
+    initiative_lecteur1 = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text='Initiative — 1er Lecteur (sur 10)')
+    initiative_lecteur2 = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text='Initiative — 2ème Lecteur (sur 10)')
+
+    defense_directeur = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(20)],
+        help_text='Défense publique — Directeur (sur 20)')
+    defense_lecteur1 = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(15)],
+        help_text='Défense publique — 1er Lecteur (sur 15)')
+    defense_lecteur2 = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(15)],
+        help_text='Défense publique — 2ème Lecteur (sur 15)')
+
+    @classmethod
+    def champ_de(cls, rubrique, membre):
+        """Nom du champ de note (ex. « exactitude_lecteur1 »)."""
+        return f'{rubrique}_{membre}'
+
+    def valeur(self, rubrique, membre):
+        """Note d'une rubrique pour un membre du jury (None si vide)."""
+        return getattr(self, self.champ_de(rubrique, membre))
+
+    def notes_renseignees(self, membre):
+        """Notes saisies pour un membre, dans l'ordre des rubriques."""
+        return [note for note in
+                (self.valeur(rubrique, membre)
+                 for rubrique, *_ in self.RUBRIQUES)
+                if note is not None]
+
+    def total_membre(self, membre):
+        """Total obtenu par un membre du jury (None si aucune note).
+
+        Comme ``Inscription.moyenne`` : les cases vides n'entrent pas dans
+        la somme — une fiche partiellement cotée affiche le total des notes
+        saisies, pas un total faux. Le départ est un ``Decimal`` (et non
+        l'``int`` 0 par défaut de ``sum``) : un total de notes saisies en
+        entiers resterait un `int`, et `int / int` produirait un `float` —
+        incompatible avec ``quantize`` dans ``pourcentage``.
+        """
+        notes = self.notes_renseignees(membre)
+        if not notes:
+            return None
+        return sum(notes, Decimal(0))
+
+    @property
+    def total_general(self):
+        """Total général /200 (None si aucune note n'est saisie)."""
+        totaux = [self.total_membre(membre) for membre, _ in self.MEMBRES]
+        if all(t is None for t in totaux):
+            return None
+        return sum(t for t in totaux if t is not None)
+
+    @property
+    def pourcentage(self):
+        """Pourcentage de réussite sur 200 (None si fiche vide)."""
+        total = self.total_general
+        if total is None:
+            return None
+        return (total * 100 / self.TOTAL_GENERAL).quantize(
+            Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+    @property
+    def mention(self):
+        """Mention calculée sur le pourcentage (vide si vide ou < 50 %).
+
+        Seuils arrondis au point entier (le pourcentage porte deux
+        décimales) : ``90`` → Excellent, ``89,99`` → Très Bien, etc.
+        """
+        pct = self.pourcentage
+        if pct is None:
+            return ''
+        entier = int(pct.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+        for seuil, libelle in self.SEUILS_MENTION:
+            if entier >= seuil:
+                return libelle
+        return ''
+
+    @property
+    def cases_renseignees(self):
+        """Nombre de notes saisies (sur 18) — signale une fiche incomplète."""
+        return sum(len(self.notes_renseignees(membre))
+                   for membre, _ in self.MEMBRES)
+
+    @property
+    def est_complete(self):
+        """Les 18 cases de la fiche sont-elles cotées ?"""
+        return self.cases_renseignees == len(self.RUBRIQUES) * len(self.MEMBRES)
+
+    def __str__(self):
+        return f'Cotation projet tutoré — {self.etudiant}'
+
+    def clean(self):
+        """Un même enseignant ne peut pas cumuler deux rôles dans le jury."""
+        super().clean()
+        roles = [('directeur', self.directeur_id),
+                 ('1er lecteur', self.lecteur1_id),
+                 ('2ème lecteur', self.lecteur2_id)]
+        renseignes = [(libelle, eid) for libelle, eid in roles if eid]
+        vus = {}
+        for libelle, eid in renseignes:
+            if eid in vus:
+                raise ValidationError(
+                    f'Un enseignant ne peut pas cumuler deux rôles dans le '
+                    f'jury ({vus[eid]} et {libelle}).')
+            vus[eid] = libelle
+
+    def membres_jury(self):
+        """Enseignants affectés au jury, dans l'ordre (None = rôle vacant)."""
+        return [self.directeur, self.lecteur1, self.lecteur2]
+
+    @property
+    def jury_complet(self):
+        """Les trois rôles du jury sont-ils affectés ?"""
+        return all(self.membres_jury())
+
+    class Meta:
+        # Volontairement aucun `ordering` : trier par une FK jointe ajouterait
+        # une jointure à *toutes* les requêtes (cf. Inscription).
+        constraints = [
+            models.UniqueConstraint(
+                fields=['etudiant'],
+                name='unique_cotation_tutore_etudiant',
+                violation_error_message=(
+                    'Cet étudiant possède déjà une fiche de cotation du '
+                    'projet tutoré.'
+                ),
+            ),
+        ]
 

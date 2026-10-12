@@ -1,0 +1,288 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Cotation Projet Tutoré — {{ etudiant.noms }}{% endblock %}
+
+{% block extra_style %}
+<style>
+    /* ===== Fiche de cotation du projet tutoré (saisie) ===== */
+    .cotation-rubrique td { vertical-align: middle; }
+    .cotation-rubrique .note-input { max-width: 90px; }
+    .cotation-groupe td {
+        background-color: #f1f3f5;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        font-size: .85rem;
+    }
+    .cotation-total td { background-color: #e9ecef; font-weight: 700; }
+    .cotation-barreme { color: #6c757d; font-size: .8rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div>
+        <h2 class="mb-0 fw-bold">Cotation du projet tutoré</h2>
+        <div class="text-muted small">
+            {{ etudiant.noms }} — {{ etudiant.numero_etudiant }} · {{ etudiant.promotion.nom }}
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'etudiant_detail' etudiant.pk %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Retour à la fiche
+        </a>
+        {% if fiche %}
+        <a href="{% url 'cotation_tutore_impression' etudiant.pk %}" class="btn btn-outline-info">
+            <i class="bi bi-printer me-1"></i>Imprimer la fiche
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="alert alert-danger py-2">
+        {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- En-tête de la fiche (reprise des champs d'identification du .docx) -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white py-2">
+            <h5 class="mb-0 fw-semibold">
+                <i class="bi bi-person-vcard me-2 text-secondary"></i>Identification
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Section</label>
+                    {{ form.section }}
+                    {% for error in form.section.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label fw-semibold">Sujet</label>
+                    {{ form.sujet }}
+                    {% for error in form.sujet.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Domaine du sujet</label>
+                    {{ form.domaine_sujet }}
+                    {% for error in form.domaine_sujet.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Nom du lecteur</label>
+                    {{ form.nom_lecteur }}
+                    {% for error in form.nom_lecteur.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Qualité</label>
+                    {{ form.qualite_lecteur }}
+                    {% for error in form.qualite_lecteur.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Date de la défense</label>
+                    {{ form.date_cotation }}
+                    {% for error in form.date_cotation.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+            </div>
+
+    <!-- Affectation du jury : Directeur, 1er et 2ème Lecteurs (enseignants) -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white py-2">
+            <h5 class="mb-0 fw-semibold">
+                <i class="bi bi-people me-2 text-secondary"></i>Jury de la défense
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">{{ form.directeur.label }}</label>
+                    {{ form.directeur }}
+                    {% for error in form.directeur.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">{{ form.lecteur1.label }}</label>
+                    {{ form.lecteur1 }}
+                    {% for error in form.lecteur1.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">{{ form.lecteur2.label }}</label>
+                    {{ form.lecteur2 }}
+                    {% for error in form.lecteur2.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+            </div>
+            <p class="text-muted small mb-0 mt-2">
+                <i class="bi bi-info-circle me-1"></i>Un même enseignant ne peut
+                pas cumuler deux rôles — choisissez trois personnes distinctes.
+            </p>
+        </div>
+    </div>
+
+        </div>
+    </div>
+
+    <!-- Tableau des rubriques : une colonne par membre du jury -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white py-2 d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <h5 class="mb-0 fw-semibold">
+                <i class="bi bi-clipboard-check me-2 text-secondary"></i>Rubriques de cotation
+            </h5>
+            <span class="badge text-bg-light border">
+                Barème : 80 (Directeur) + 60 + 60 = 200 points
+            </span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0 cotation-rubrique">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col" style="width: 4%;">N°</th>
+                        <th scope="col">Rubriques</th>
+                        {% for membre, libelle_membre in membres %}
+                        <th scope="col" class="text-center" style="width: 14%;">{{ libelle_membre }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ligne in lignes_cotation %}
+                    {% if ligne.nouveau_groupe %}
+                    <tr class="cotation-groupe">
+                        <td>{{ ligne.numero }}</td>
+                        <td colspan="4">{{ ligne.groupe }}</td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <td class="text-muted small text-center">{{ ligne.numero }}.{{ forloop.counter0 }}</td>
+                        <td>{{ ligne.libelle }}</td>
+                        {% for membre, libelle_membre, max_membre, champ in ligne.champs %}
+                        <td class="text-center">
+                            {{ champ }}
+                            <div class="cotation-barreme">/ {{ max_membre }}</div>
+                            {% for error in champ.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                    <tr class="cotation-total">
+                        <td></td>
+                        <td>Total du membre</td>
+                        {% for membre, libelle_membre in membres %}
+                        <td class="text-center"><span id="total-{{ membre }}">—</span><span id="max-{{ membre }}"> / 80</span></td>
+                        {% endfor %}
+                    </tr>
+                    <tr class="cotation-total">
+                        <td></td>
+                        <td>Total général</td>
+                        <td colspan="3" class="text-center">
+                            <span id="total-general">—</span> / 200 &nbsp;·&nbsp;
+                            <span id="pourcentage">—</span> &nbsp;·&nbsp;
+                            Mention : <span id="mention">—</span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer bg-white text-muted small">
+            <i class="bi bi-info-circle me-1"></i>
+            Totaux, pourcentage et mention sont recalculés automatiquement (mention dès
+            50 % : Passable, 60 % Assez Bien, 70 % Bien, 80 % Très Bien, 90 % Excellent) ;
+            les cases vides ne comptent pas pour zéro.
+            {% if fiche and not fiche.est_complete %}
+            <span class="text-warning ms-1">
+                <i class="bi bi-exclamation-triangle me-1"></i>Fiche incomplète
+                ({{ fiche.cases_renseignees }}/18 cases cotées).
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap">
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg me-1"></i>Enregistrer la cotation
+        </button>
+        <a href="{% url 'etudiant_detail' etudiant.pk %}" class="btn btn-outline-secondary">Annuler</a>
+    </div>
+</form>
+
+{% if fiche %}
+<div class="mt-3">
+    <form method="post" action="{% url 'cotation_tutore_supprimer' etudiant.pk %}"
+          onsubmit="return confirm('Supprimer la cotation du projet tutoré de {{ etudiant.noms|escapejs }} ?')">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-trash me-1"></i>Supprimer la cotation
+        </button>
+    </form>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    /* Recalcul live des totaux / pourcentage / mention (miroir JS des
+       propriétés du modèle : cases vides ignorées, mention dès 50 %).
+       Les valeurs saisies acceptent la virgule française. */
+    (function () {
+        var SEUILS = [[90, 'Excellent'], [80, 'Très Bien'], [70, 'Bien'],
+                      [60, 'Assez Bien'], [50, 'Passable']];
+        var MEMBRES = ['directeur', 'lecteur1', 'lecteur2'];
+        var TOTAUX_MAX = {directeur: 80, lecteur1: 60, lecteur2: 60};
+
+        function valeur(champ) {
+            var brut = champ.value.trim().replace(',', '.');
+            if (brut === '') return null;
+            var n = parseFloat(brut);
+            return isNaN(n) ? null : n;
+        }
+
+        function fmt(n) {
+            return n.toLocaleString('fr-FR', {maximumFractionDigits: 2});
+        }
+
+        function recalculer() {
+            var general = 0, renseignees = 0;
+            MEMBRES.forEach(function (m) {
+                var total = 0, nb = 0;
+                document.querySelectorAll('input[data-membre="' + m + '"]')
+                    .forEach(function (champ) {
+                        var v = valeur(champ);
+                        if (v !== null) { total += v; nb += 1; }
+                    });
+                renseignees += nb;
+                general += total;
+                var cellule = document.getElementById('total-' + m);
+                if (cellule) {
+                    cellule.textContent = nb > 0 ? fmt(total) : '—';
+                    document.getElementById('max-' + m).textContent =
+                        ' / ' + TOTAUX_MAX[m];
+                }
+            });
+            var totalGeneral = document.getElementById('total-general');
+            var pourcentage = document.getElementById('pourcentage');
+            var mention = document.getElementById('mention');
+            if (renseignees > 0) {
+                var pct = general * 100 / 200;
+                var arrondi = Math.round(pct);
+                var libelle = '';
+                SEUILS.forEach(function (s) {
+                    if (arrondi >= s[0] && libelle === '') libelle = s[1];
+                });
+                totalGeneral.textContent = fmt(general);
+                pourcentage.textContent = fmt(pct) + ' %';
+                mention.textContent = libelle || '—';
+            } else {
+                totalGeneral.textContent = '—';
+                pourcentage.textContent = '—';
+                mention.textContent = '—';
+            }
+        }
+
+        document.querySelectorAll('input[data-membre]').forEach(function (champ) {
+            champ.addEventListener('input', recalculer);
+        });
+        recalculer();
+    })();
+</script>
+{% endblock %}
