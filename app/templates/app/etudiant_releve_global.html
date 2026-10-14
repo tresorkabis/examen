@@ -27,7 +27,7 @@
     @media print {
         @page {
             size: A4 landscape;
-            margin: 8mm 10mm 10mm 10mm;
+            margin: 6mm 8mm 6mm 8mm;
         }
 
         #sidebar, nav.navbar, .breadcrumb, .alert, .no-print, .btn, footer {
@@ -37,8 +37,8 @@
         body {
             background: #fff !important;
             color: #000 !important;
-            font-size: 9.5pt !important;
-            line-height: 1.28 !important;
+            font-size: 8.2pt !important;
+            line-height: 1.16 !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
         }
@@ -59,12 +59,12 @@
             border: none !important;
             box-shadow: none !important;
             background: transparent !important;
-            margin-bottom: 8px !important;
+            margin-bottom: 4px !important;
         }
 
         .card-header {
-            padding: 3px 6px !important;
-            font-size: 9pt !important;
+            padding: 2px 6px !important;
+            font-size: 8pt !important;
             background-color: #f1f3f5 !important;
             border: 1px solid #444 !important;
             border-bottom: none !important;
@@ -75,14 +75,22 @@
             border: 1px solid #444 !important;
         }
 
+        /* Page 1 : en-tête, métadonnées et synthèse respirent (ces éléments
+           n'existent qu'une fois, en tête de document — aucun effet sur la
+           page 2). */
+        .entete-officiel { margin-bottom: 6px !important; }
         .print-header-meta {
-            font-size: 9.5pt;
-            margin-top: 4px;
+            font-size: 8.2pt;
+            margin-top: 6px !important;
+            margin-bottom: 12px !important;
             color: #111;
         }
 
-        /* Flux continu : les années s'enchaînent sans saut de page forcé.
-           Un parcours court (1 à 2 années) tient alors sur une seule page. */
+        /* Pagination contrôlée sur 2 pages : la 1ʳᵉ année du parcours (L3,
+           les années étant ordonnées de la plus récente à la plus ancienne)
+           reste sur la page 1 avec la synthèse globale ; un saut de page
+           (.saut-page) place L2 puis L1 sur la page 2. Un parcours d'une
+           seule année n'a pas de 2ᵉ bloc : aucun saut, tout tient page 1. */
         /* Une promotion (bloc année) ne doit JAMAIS être coupée entre deux
            pages : on propage `break-inside: avoid` à TOUTE la chaîne du bloc
            (rangée des semestres, colonnes, cartes semestre, tableaux et
@@ -99,6 +107,16 @@
         .table-ue tr {
             page-break-inside: avoid !important;
             break-inside: avoid !important;
+        }
+
+        /* Saut de page demandé entre L3 et L2 : posé sur le 2ᵉ bloc année
+           par le gabarit (classe ajoutée quand forloop.counter vaut 2).
+           Les deux propriétés sont fournies pour la compatibilité (moteurs
+           anciens n'en lisent qu'une). `avoid` sur .releve-annee reste
+           actif : jamais une année coupée en deux. */
+        .saut-page {
+            page-break-before: always !important;
+            break-before: page !important;
         }
 
         /* Semestres côte à côte (2 colonnes parallèles).
@@ -125,8 +143,8 @@
             border-radius: 0 !important;
         }
         .semester-card .card-header {
-            padding: 3px 6px !important;
-            font-size: 8.5pt !important;
+            padding: 1px 5px !important;
+            font-size: 7.6pt !important;
             background-color: #e9ecef !important;
             border-bottom: 1px solid #444 !important;
             font-weight: 700;
@@ -139,13 +157,13 @@
         .table-ue {
             width: 100% !important;
             border-collapse: collapse !important;
-            font-size: 8.6pt !important;
+            font-size: 7.3pt !important;
             margin-bottom: 0 !important;
         }
         .table-ue th, .table-ue td {
-            padding: 3px 5px !important;
+            padding: 0 3px !important;
             border: 1px solid #bbb !important;
-            line-height: 1.2 !important;
+            line-height: 1.05 !important;
         }
         /* Colonne « Statut » élargie pour que « À reprendre » ne se replie
            pas sur deux lignes ; la colonne UE garde tout le reste. */
@@ -175,11 +193,11 @@
         .synthese-table {
             width: 100% !important;
             border-collapse: collapse !important;
-            font-size: 8.6pt !important;
+            font-size: 7.3pt !important;
         }
         .synthese-table th, .synthese-table td {
             border: 1px solid #777 !important;
-            padding: 4px 10px !important;
+            padding: 5px 12px !important;
             background-color: transparent !important;
         }
 
@@ -191,18 +209,61 @@
             break-inside: avoid !important;
         }
 
-        /* Compactage « tout sur une page » : marges et rembourages serrés
-           pour maximiser la hauteur utile sans nuire à la lisibilité. */
-        .card-synthese-globale,
+        /* --- Aération de la PAGE 2 ---------------------------------------
+           L2 et L1 partagent la seconde feuille avec la signature : on leur
+           rend de l'espace (écarts entre blocs, rembourages des cartes,
+           interlignage des lignes de notes) tout en gardant une marge pour
+           qu'elles y tiennent toutes les deux sans déborder sur une
+           troisième page.
+           Les blocs de la page 1 sont épargnés : leurs règles propres
+           (.premier-bloc, plus bas) les écrasent à spécificité égale. */
         .releve-annee { margin-bottom: 8px !important; }
-        .releve-annee .card-body { padding: 6px 8px !important; }
-        .releve-annee .card-header { padding: 4px 8px !important; }
-        .print-semester-row { border-spacing: 6px 0 !important; }
+        .releve-annee .card-body { padding: 6px 9px !important; }
+        .releve-annee .card-header { padding: 4px 10px !important; }
+        .print-semester-row { border-spacing: 8px 0 !important; }
+        /* Interlignage aéré (1,05 → 1,12) : c'est le meilleur rapport
+           respiration/hauteur. En revanche le rembourage vertical des
+           cellules reste nul — 1 px × ~14 lignes × 2 promotions = ~56 px,
+           ce qui ferait déporter la signature sur une page à elle seule. */
+        .table-ue th, .table-ue td {
+            padding: 0 4px !important;
+            line-height: 1.12 !important;
+        }
+        /* Signature : elle doit rester sur la page 2 avec L2 et L1 — on
+           limite soigneusement sa marge haute et l'espace interne du bloc
+           plutôt que de retirer de l'aération aux promotions. */
+        .print-only-footer { margin-top: 6px !important; }
+
+        /* --- Aération de la PAGE 1 ---------------------------------------
+           La synthèse globale et le dernier bloc de la page 1 (L3, marqué
+           `premier-bloc` par le gabarit) sont seuls sur leur feuille : on
+           leur rend l'espace que le compactage précédent leur retirait.
+           Placées APRÈS les règles de densité ci-dessus (même spécificité,
+           donc l'ordre de la cascade tranche), elles l'emportent sans
+           toucher à L2/L1. */
+        .card-synthese-globale { margin-bottom: 14px !important; }
+        .card-synthese-globale .card-header { padding: 5px 12px !important; }
+        .card-synthese-globale .card-body { padding: 10px 12px !important; }
+        .synthese-table th, .synthese-table td { padding: 5px 12px !important; }
+        .premier-bloc { margin-bottom: 0 !important; }
+        .premier-bloc .card-header { padding: 5px 12px !important; }
+        .premier-bloc .card-body { padding: 9px 12px !important; }
+        /* Lignes de notes de L3 : aération IDENTIQUE à celle de la page 2.
+           On ne gagne de la hauteur sur la page 1 qu'au niveau des CARTES
+           et de la synthèse ; gonfler aussi les lignes du tableau (+80 px)
+           ferait déborder L3 hors de la première feuille, puisque Synthèse
+           + L3 occupent déjà ~95 % de la page. */
+        .premier-bloc .print-semester-row { border-spacing: 8px 0 !important; }
+        .premier-bloc .table-ue th, .premier-bloc .table-ue td {
+            padding: 0 4px !important;
+            line-height: 1.12 !important;
+        }
     }
 </style>
 {% endblock %}
 
 {% block content %}
+<div class="releve-global-doc">
     <!-- En-tête officiel RDC/ESFORCA imprimable (masqué à l'écran) -->
     {% include "app/partials/_entete_officiel.html" with titre_document="RELEVÉ DE NOTES GLOBAL" %}
     <div class="print-header-meta">
@@ -211,7 +272,6 @@
             Promotion actuelle : <strong>{{ etudiant.promotion.nom }}</strong>
             {% if periode %} &nbsp;|&nbsp; Période couverte : <strong>{{ periode }}</strong>{% endif %}
         </div>
-    </div>
 
     <!-- Barre d'action supérieure (écran uniquement) -->
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3 no-print">
@@ -223,7 +283,7 @@
             </div>
         </div>
         <div class="d-flex gap-2">
-            <button type="button" class="btn btn-primary" onclick="window.print()">
+            <button type="button" class="btn btn-primary" onclick="imprimerReleveGlobal()">
                 <i class="bi bi-printer me-1"></i>Imprimer le relevé global
             </button>
             <a href="{% url 'etudiant_detail' etudiant.pk %}" class="btn btn-outline-secondary">
@@ -314,7 +374,7 @@
     {# (L1), chacune avec sa synthèse délibérée et ses notes par semestre. #}
     {# =================================================================== #}
     {% for annee in annees %}
-    <div class="card shadow-sm deliberation-card mb-4 releve-annee">
+    <div class="card shadow-sm deliberation-card mb-4 releve-annee{% if forloop.counter == 1 %} premier-bloc{% elif forloop.counter == 2 %} saut-page{% endif %}">
         <!-- En-tête de l'année -->
         <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h5 class="mb-0 fw-semibold">
@@ -440,10 +500,28 @@
         <div class="d-flex justify-content-end text-center">
             <div style="width: 250px;">
                 <p class="mb-1 text-muted" style="font-size: 8pt;">Fait à ........................................, le ..............................</p>
-                <p class="fw-bold mb-4" style="font-size: 9pt;">Le Secrétaire Général Académique</p>
+                <p class="fw-bold mb-2" style="font-size: 9pt;">Le Secrétaire Général Académique</p>
                 <p class="text-muted border-top border-dark pt-1 mx-2" style="font-size: 7.5pt;">Sceau &amp; Signature</p>
             </div>
         </div>
     </div>
+    </div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    /* Impression du relevé global.
+       ------------------------------------------------------------------
+       La pagination est désormais gérée PAR LE CSS : A4 paysage, chaque
+       promotion intacte (`break-inside: avoid`) et un saut de page contrôlé
+       (.saut-page posé sur le 2ᵉ bloc année) qui sépare L3 — resté avec la
+       synthèse sur la page 1 — de L2 et L1 sur la page 2.
+       Il n'y a donc PLUS de mise à l'échelle automatique : le document
+       s'imprime à sa taille naturelle. Le bouton appelle simplement
+       window.print(). */
+    window.imprimerReleveGlobal = function () {
+        window.print();
+    };
+</script>
 {% endblock %}
 
