@@ -1527,9 +1527,11 @@ class ReleveGlobalTests(TestCase):
         self.assertIn('print-only-footer', contenu)
         self.assertIn('Le Secrétaire Général Académique', contenu)
         self.assertIn('@media print', contenu)
-        # Chaque année ouvre une nouvelle page à l'impression.
+        # Flux continu : les années s'enchaînent sans saut de page forcé,
+        # une année n'est jamais coupée entre deux pages.
         self.assertIn('.releve-annee', contenu)
-        self.assertIn('break-before: page', contenu)
+        self.assertIn('break-inside: avoid', contenu)
+        self.assertNotIn('break-before: page', contenu)
         self.assertIn('window.print()', contenu)
 
     def test_notes_et_statuts_par_semestre(self):

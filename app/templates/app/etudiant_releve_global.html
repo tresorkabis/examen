@@ -81,24 +81,43 @@
             color: #111;
         }
 
-        /* Chaque année suivante démarre une nouvelle page. */
-        .releve-annee {
-            page-break-before: always !important;
-            break-before: page !important;
+        /* Flux continu : les années s'enchaînent sans saut de page forcé.
+           Un parcours court (1 à 2 années) tient alors sur une seule page. */
+        /* Une promotion (bloc année) ne doit JAMAIS être coupée entre deux
+           pages : on propage `break-inside: avoid` à TOUTE la chaîne du bloc
+           (rangée des semestres, colonnes, cartes semestre, tableaux et
+           lignes). Poser la règle sur le seul .releve-annee est ignoré par
+           certains navigateurs dès que la rangée flex S1/S2 devient trop
+           haute : chaque niveau doit lui aussi refuser la coupure. La
+           synthèse globale est protégée de la même façon. */
+        .releve-annee,
+        .card-synthese-globale,
+        .print-semester-row,
+        .print-semester-col,
+        .semester-card,
+        .table-ue,
+        .table-ue tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
         }
 
-        /* Semestres côte à côte (2 colonnes parallèles) */
+        /* Semestres côte à côte (2 colonnes parallèles).
+           À l'impression on bascule la rangée flex en TABLE : le moteur de
+           rendu respecte alors `page-break-inside: avoid` sur tout le bloc
+           promotion (un flex, lui, est souvent coupé en deux malgré la
+           règle). Le rendu reste deux colonnes côte à côte. */
         .print-semester-row {
-            display: flex !important;
-            flex-direction: row !important;
-            gap: 8px !important;
+            display: table !important;
             width: 100% !important;
+            table-layout: fixed !important;
+            border-collapse: separate !important;
+            border-spacing: 8px 0 !important;
             margin: 0 !important;
         }
         .print-semester-col {
-            width: calc(50% - 4px) !important;
-            flex: 0 0 calc(50% - 4px) !important;
-            max-width: calc(50% - 4px) !important;
+            display: table-cell !important;
+            width: 50% !important;
+            vertical-align: top !important;
             padding: 0 !important;
         }
         .semester-card {
@@ -167,10 +186,18 @@
         /* Emplacement officiel de signature */
         .print-only-footer {
             display: block !important;
-            margin-top: 12px !important;
+            margin-top: 8px !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
         }
+
+        /* Compactage « tout sur une page » : marges et rembourages serrés
+           pour maximiser la hauteur utile sans nuire à la lisibilité. */
+        .card-synthese-globale,
+        .releve-annee { margin-bottom: 8px !important; }
+        .releve-annee .card-body { padding: 6px 8px !important; }
+        .releve-annee .card-header { padding: 4px 8px !important; }
+        .print-semester-row { border-spacing: 6px 0 !important; }
     }
 </style>
 {% endblock %}
