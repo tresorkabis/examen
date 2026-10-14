@@ -1523,7 +1523,7 @@ class ReleveGlobalTests(TestCase):
         contenu = reponse.content.decode()
         self.assertIn('entete-officiel', contenu)
         self.assertIn('RELEVÉ DE NOTES GLOBAL', contenu)
-        self.assertIn('Ecole Supérieure de Formation des Cadres', contenu)
+        self.assertIn('École Supérieure de Formation des Cadres', contenu)
         self.assertIn('print-only-footer', contenu)
         self.assertIn('Le Secrétaire Général Académique', contenu)
         self.assertIn('@media print', contenu)
@@ -3854,7 +3854,7 @@ class PalmaresLigneDetailTests(TestCase):
         self.assertIn('window.print()', contenu)
         # En-tête officiel imprimable, masqué à l'écran.
         self.assertIn('entete-officiel', contenu)
-        self.assertIn('Ecole Supérieure de Formation des Cadres', contenu)
+        self.assertIn('École Supérieure de Formation des Cadres', contenu)
         self.assertIn('RELEVÉ DE NOTES', contenu)
         self.assertIn('relevé établi d\'après la grille archivée', contenu)
         # Règles d'impression A4 + emplacement de signature officiel.
