@@ -88,11 +88,29 @@
         body.impression-cours .cours-screen-block { display: none !important; }
         /* En mode « Cours », la carte des enseignants reste masquée
            (classe `no-print`) : le tableau des cours affiche déjà
-           l'enseignant de chaque cours, la liste du bas ferait doublon. */
+           l'enseignant de chaque cours, la liste du bas ferait doublon.
+           Le tableau passe en `table-layout: fixed` avec des largeurs
+           explicites : sans ça, une colonne trop large pousse le tableau
+           hors page et les dernières lignes (ex. cours n°22) sont coupées.
+           La rangée Bootstrap passe en bloc pour que le tableau occupe
+           toute la largeur et se pagne proprement, sans ligne à cheval
+           sur deux pages. */
+        body.impression-cours .row { display: block !important; }
+        body.impression-cours .col-cours-impression {
+            width: 100% !important;
+            max-width: 100% !important;
+            flex: none !important;
+        }
+        body.impression-cours .col-cours-impression .card,
+        body.impression-cours .col-cours-impression .card-body {
+            overflow: visible !important;
+            max-height: none !important;
+        }
         body.impression-cours .cours-print-table {
             display: table !important;
             width: 100% !important;
             border-collapse: collapse !important;
+            table-layout: fixed !important;
         }
         body.impression-cours .cours-print-table th,
         body.impression-cours .cours-print-table td {
@@ -100,15 +118,34 @@
             border-bottom: 1px solid #dee2e6 !important;
             text-align: left !important;
             vertical-align: top !important;
+            /* Noms de cours longs : retour à la ligne au lieu d'être coupés. */
+            overflow-wrap: break-word !important;
+            word-break: break-word !important;
         }
+        body.impression-cours .cours-print-table thead { display: table-header-group !important; }
         body.impression-cours .cours-print-table thead th {
             border-bottom: 2px solid #212529 !important;
             font-size: 10pt;
             text-transform: uppercase;
         }
+        /* Aucune ligne de cours coupée entre deux pages (cas du cours 22). */
+        body.impression-cours .cours-print-table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
         body.impression-cours .cours-print-table th.num,
         body.impression-cours .cours-print-table td.num {
             width: 8% !important;
+            text-align: center !important;
+        }
+        body.impression-cours .cours-print-table th:nth-child(2),
+        body.impression-cours .cours-print-table td:nth-child(2) {
+            width: 44% !important;
+        }
+        body.impression-cours .cours-print-table th:nth-child(3),
+        body.impression-cours .cours-print-table td:nth-child(3) {
+            width: 38% !important;
+        }
+        body.impression-cours .cours-print-table th:nth-child(4),
+        body.impression-cours .cours-print-table td:nth-child(4) {
+            width: 10% !important;
             text-align: center !important;
         }
 
