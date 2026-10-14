@@ -52,14 +52,11 @@
 <div class="card shadow-sm fiche-memoire mx-auto">
     <div class="card-body">
 
-        <!-- En-tête officiel (reproduction du modèle Word) -->
-        <div class="fiche-header text-center">
-            <h1>Ministère de l'Enseignement Supérieur et Universitaire</h1>
-            <h1>École Supérieure de Formation des Cadres</h1>
-            <div class="small">Décret d'agrément N° 06/0106 · Secrétariat Général Académique</div>
-            <div class="small mt-1">
-                Section : <strong>{{ fiche.section|default:"………………" }}</strong>
-            </div>
+        <!-- En-tête officiel RDC/ESFORCA (reproduction du modèle Word, masqué à l'écran) -->
+        {% include "app/partials/_entete_officiel.html" with titre_document="FICHE DE COTATION DE PROJET TUTORÉ" %}
+
+        <div class="text-center small mb-3" style="margin-top:4px">
+            Section : <strong>{{ fiche.section|default:"………………" }}</strong>
         </div>
 
         <div class="fiche-titre">Fiche de cotation de projet tutoré</div>

@@ -108,12 +108,8 @@
 <div class="card shadow-sm fiche-sheet">
     <div class="card-body p-4">
 
-        <!-- En-tête, calqué sur le PDF -->
-        <div class="fiche-header text-center mb-3">
-            <div class="small text-muted">ESFORCA</div>
-            <div class="fiche-title fs-4">Fiche de cote</div>
-            <div class="fiche-title fs-5">{{ examen.session.nom }}</div>
-        </div>
+        <!-- En-tête officiel RDC/ESFORCA (calqué sur le PDF, masqué à l'écran) -->
+        {% include "app/partials/_entete_officiel.html" with titre_document="FICHE DE COTE" titre_soustitre=examen.session.nom %}
 
         <div class="row mb-1 ml-1">
             <div class="col-12 d-flex justify-content-between">

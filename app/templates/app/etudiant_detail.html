@@ -16,10 +16,11 @@
     .ue-row-echec { background-color: rgba(220, 53, 69, 0.04); }
 
     /* ===== Éléments réservés à l'impression ===== */
-    .print-only-header,
     .print-only-summary,
     .print-only-footer,
     .print-only-footer-ue,
+    .print-header-meta,
+    .print-titre-toggle,
     .titre-ue {
         display: none;
     }
@@ -66,31 +67,27 @@
             padding: 0 !important;
         }
 
-        /* En-tête académique officiel */
-        .print-only-header {
-            display: block !important;
-            text-align: center;
-            border-bottom: 2px solid #000;
-            padding-bottom: 5px;
-            margin-bottom: 8px;
-        }
-        .print-only-header h1 {
-            font-size: 11pt;
-            font-weight: 700;
-            margin: 0;
-            text-transform: uppercase;
-            letter-spacing: .03em;
-        }
-        .print-only-header h2 {
-            font-size: 11pt;
-            font-weight: 700;
-            margin: 2px 0 0;
-            letter-spacing: .05em;
-        }
         .print-header-meta {
+            display: block !important;
             font-size: 8.5pt;
             margin-top: 3px;
             color: #111;
+        }
+        /* Titre du document sous l'en-tête officiel. Bascule entre
+           « RELEVÉ DE NOTES » et « LISTE DES UE À REPRENDRE » via la classe
+           body.impression-ue (règles dédiées plus bas). */
+        .print-titre-toggle {
+            display: block !important;
+            text-align: center;
+        }
+        .print-titre-toggle .titre-releve,
+        .print-titre-toggle .titre-ue {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 13pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-top: 9px;
+            text-decoration: underline;
         }
 
         /* Synthèse tabulaire compacte à l'impression */
@@ -202,17 +199,20 @@
 {% endblock %}
 
 {% block content %}
-    <!-- En-tête officiel imprimable (visible uniquement à l'impression) -->
-    <div class="print-only-header">
-        <h1>ÉCOLE SUPÉRIEURE DE FORMATION DES CADRES</h1>
-        <h2 class="titre-releve">RELEVÉ DE NOTES</h2>
-        <h2 class="titre-ue">LISTE DES UE À REPRENDRE</h2>
-        <div class="print-header-meta">
-            Étudiant(e) : <strong>{{ etudiant.noms }}</strong> &nbsp;|&nbsp;
-            Matricule : <strong>{{ etudiant.numero_etudiant }}</strong> &nbsp;|&nbsp;
-            Promotion : <strong>{{ etudiant.promotion.nom }}</strong>
-            {% if grille_ligne %} &nbsp;|&nbsp; Année académique : <strong>{{ grille_ligne.grille.annee_academique }}</strong>{% endif %}
-        </div>
+    <!-- En-tête officiel RDC/ESFORCA imprimable (masqué à l'écran).
+         Le titre bascule entre « RELEVÉ DE NOTES » et « LISTE DES UE À
+         REPRENDRE » via la classe body.impression-ue posée par
+         imprimerUesAReprendre() (règles @media print plus haut). -->
+    {% include "app/partials/_entete_officiel.html" %}
+    <div class="print-titre-toggle">
+        <div class="titre-releve">RELEVÉ DE NOTES</div>
+        <div class="titre-ue">LISTE DES UE À REPRENDRE</div>
+    </div>
+    <div class="print-header-meta">
+        Étudiant(e) : <strong>{{ etudiant.noms }}</strong> &nbsp;|&nbsp;
+        Matricule : <strong>{{ etudiant.numero_etudiant }}</strong> &nbsp;|&nbsp;
+        Promotion : <strong>{{ etudiant.promotion.nom }}</strong>
+        {% if grille_ligne %} &nbsp;|&nbsp; Année académique : <strong>{{ grille_ligne.grille.annee_academique }}</strong>{% endif %}
     </div>
 
     <!-- Barre d'action supérieure (écran uniquement) -->

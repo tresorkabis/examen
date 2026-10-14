@@ -48,11 +48,8 @@
 
     <div class="card shadow-sm">
         <div class="card-body">
-            <div class="print-header">
-                <div class="print-title">Liste des cours non notés</div>
-                <div class="small mt-1">État des examens dont les copies n'ont pas encore été corrigées
-                    — édité le {% now 'd/m/Y' %} à {% now 'H:i' %}.</div>
-            </div>
+        <!-- En-tête officiel RDC/ESFORCA (masqué à l'écran) -->
+        {% include "app/partials/_entete_officiel.html" with titre_document="LISTE DES COURS NON NOTÉS" %}
 
             {% if examens %}
             <p class="print-nb">Nombre total : <strong>{{ total }}</strong> cours non noté{{ total|pluralize }}.</p>

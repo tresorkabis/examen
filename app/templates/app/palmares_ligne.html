@@ -13,7 +13,6 @@
 
     /* ===== Éléments réservés à l'impression (même cadre que la fiche
        étudiant : en-tête officiel + emplacement de signature). ===== */
-    .print-only-header,
     .print-only-footer {
         display: none;
     }
@@ -70,27 +69,6 @@
             border: 1px solid #444 !important;
         }
 
-        /* En-tête académique officiel */
-        .print-only-header {
-            display: block !important;
-            text-align: center;
-            border-bottom: 2px solid #000;
-            padding-bottom: 5px;
-            margin-bottom: 8px;
-        }
-        .print-only-header h1 {
-            font-size: 11pt;
-            font-weight: 700;
-            margin: 0;
-            text-transform: uppercase;
-            letter-spacing: .03em;
-        }
-        .print-only-header h2 {
-            font-size: 11pt;
-            font-weight: 700;
-            margin: 2px 0 0;
-            letter-spacing: .05em;
-        }
         .print-header-meta {
             font-size: 8.5pt;
             margin-top: 3px;
@@ -181,10 +159,8 @@
 {% block content %}
 <!-- En-tête officiel imprimable (visible uniquement à l'impression) :
      même cadre que le relevé de la fiche étudiant. -->
-<div class="print-only-header">
-    <h1>ÉCOLE SUPÉRIEURE DE FORMATION DES CADRES</h1>
-    <h2>RELEVÉ DE NOTES</h2>
-    <div class="print-header-meta">
+{% include "app/partials/_entete_officiel.html" with titre_document="RELEVÉ DE NOTES" %}
+<div class="print-header-meta">
         Étudiant(e) : <strong>{{ ligne.nom_affiche }}</strong> &nbsp;|&nbsp;
         Promotion : <strong>{{ selection.grille.promotion.nom }}</strong> &nbsp;|&nbsp;
         Année académique : <strong>{{ selection.grille.annee_academique|default:"—" }}</strong>

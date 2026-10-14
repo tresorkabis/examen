@@ -1521,9 +1521,9 @@ class ReleveGlobalTests(TestCase):
         self._grille(self.promotion_l3, '2025-2026')
         reponse = self.client.get(self._url())
         contenu = reponse.content.decode()
-        self.assertIn('print-only-header', contenu)
+        self.assertIn('entete-officiel', contenu)
         self.assertIn('RELEVÉ DE NOTES GLOBAL', contenu)
-        self.assertIn('ÉCOLE SUPÉRIEURE DE FORMATION DES CADRES', contenu)
+        self.assertIn('Ecole Supérieure de Formation des Cadres', contenu)
         self.assertIn('print-only-footer', contenu)
         self.assertIn('Le Secrétaire Général Académique', contenu)
         self.assertIn('@media print', contenu)
@@ -3853,8 +3853,8 @@ class PalmaresLigneDetailTests(TestCase):
         self.assertIn('Imprimer la fiche', contenu)
         self.assertIn('window.print()', contenu)
         # En-tête officiel imprimable, masqué à l'écran.
-        self.assertIn('print-only-header', contenu)
-        self.assertIn('ÉCOLE SUPÉRIEURE DE FORMATION DES CADRES', contenu)
+        self.assertIn('entete-officiel', contenu)
+        self.assertIn('Ecole Supérieure de Formation des Cadres', contenu)
         self.assertIn('RELEVÉ DE NOTES', contenu)
         self.assertIn('relevé établi d\'après la grille archivée', contenu)
         # Règles d'impression A4 + emplacement de signature officiel.
