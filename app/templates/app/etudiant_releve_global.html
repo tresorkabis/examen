@@ -165,9 +165,18 @@
             border: 1px solid #bbb !important;
             line-height: 1.05 !important;
         }
-        /* Colonne « Statut » élargie pour que « À reprendre » ne se replie
-           pas sur deux lignes ; la colonne UE garde tout le reste. */
-        .table-ue th:last-child { width: 96px !important; }
+        /* Colonnes techniques resserrées : « Unité d'enseignement » doit
+           être la colonne dominante (les intitulés sont longs), les autres
+           ne portent que de courtes valeurs numériques. */
+        .table-ue th:nth-child(1) { width: 20px !important; }
+        .table-ue th:nth-child(3) { width: 28px !important; }
+        .table-ue th:nth-child(4) { width: 44px !important; }
+        /* Colonne « Statut » réduite (96 → 64 px) : avec le badge resserré
+           ci-dessous, « À reprendre » — le libellé le plus long — tient
+           toujours sur UNE ligne, et les ~32 px récupérés reviennent à
+           la colonne UE. */
+        .table-ue th:last-child { width: 64px !important; }
+        .table-ue td:last-child .badge { padding: .2em .4em !important; }
         .table-ue th {
             background-color: #f8f9fa !important;
             font-weight: 700 !important;
@@ -419,11 +428,11 @@
                             <table class="table table-sm table-hover align-middle mb-0 table-ue">
                                 <thead class="table-light small">
                                     <tr>
-                                        <th style="width: 24px;" class="text-center">#</th>
+                                        <th style="width: 20px;" class="text-center">#</th>
                                         <th>Unité d'enseignement (UE)</th>
-                                        <th class="text-center" style="width: 32px;" title="Crédits">Cr.</th>
-                                        <th class="text-center" style="width: 48px;">Note</th>
-                                        <th class="text-center" style="width: 68px;">Statut</th>
+                                        <th class="text-center" style="width: 28px;" title="Crédits">Cr.</th>
+                                        <th class="text-center" style="width: 44px;">Note</th>
+                                        <th class="text-center" style="width: 64px;">Statut</th>
                                     </tr>
                                 </thead>
                                 <tbody>

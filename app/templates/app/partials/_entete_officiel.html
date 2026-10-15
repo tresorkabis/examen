@@ -24,7 +24,10 @@
         border-collapse: collapse;
         border-bottom: 2px solid #000;
     }
-    .entete-logo-cell { width: 72px; vertical-align: top; text-align: left; padding: 0; }
+    /* Largeur de la colonne du logo : elle réserve la place des armoiries
+       à gauche des mentions. Le logo garde ses dimensions d'origine (ratio
+       respecté) — seul l'espace qui lui est dédié s'élargit. */
+    .entete-logo-cell { width: 110px; vertical-align: top; text-align: left; padding: 0; }
     .entete-logo { height: 82px; }
     .entete-texte-cell { vertical-align: middle; padding: 0; }
     .entete-recherche {
@@ -49,6 +52,8 @@
     @media print {
         .entete-officiel { display: block !important; }
         .entete-logo { height: 68px; }
+        /* Colonne du logo réduite en proportion du logo imprimé. */
+        .entete-logo-cell { width: 92px; }
         .entete-ligne { font-size: 10.5pt; }
         .entete-ecole { font-size: 12.5pt; }
     }
