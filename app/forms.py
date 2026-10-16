@@ -256,6 +256,7 @@ class ExcelImportForm(forms.Form):
 
 class EnseignantUserForm(UserCreationForm):
     email = forms.EmailField(required=True)
+    default_password = "demo"
 
     class Meta:
         model = User
@@ -263,6 +264,15 @@ class EnseignantUserForm(UserCreationForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
+        # Tous les comptes créés depuis la fiche enseignant utilisent
+        # le mot de passe par défaut pour que l'accès soit simple et
+        # cohérent avec le reste du projet.
+        for field_name in ("password1", "password2"):
+            field = self.fields[field_name]
+            field.required = False
+            field.initial = self.default_password
+            field.widget = forms.PasswordInput(attrs={"autocomplete": "new-password"})
         for field in self.fields.values():
             if isinstance(field.widget, (forms.Select, forms.SelectMultiple,
                                          forms.CheckboxSelectMultiple, forms.RadioSelect)):

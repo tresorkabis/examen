@@ -1133,7 +1133,10 @@ class EnseignantUserCreateView(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         user = form.save(commit=False)
         # Définir le mot de passe via la méthode sécurisée de Django.
-        user.set_password(form.cleaned_data['password1'])
+        # Si le champ est laissé vide, on utilise le mot de passe par
+        # défaut défini dans EnseignantUserForm (défaut : "demo").
+        password = form.cleaned_data.get("password1") or form.default_password
+        user.set_password(password)
         user.save()
         # Lier l'utilisateur au compte de l'enseignant.
         enseignant = self.get_object()
