@@ -9,7 +9,8 @@ from app.views import (
     etudiant_ues_reprendre_pdf,
     PromotionListView, PromotionCreateView, PromotionDetailView, PromotionUpdateView, PromotionDeleteView, promotion_bulk_delete,
     promotion_grille_apercu, promotion_grille_retirer,
-    EnseignantListView, EnseignantDetailView, EnseignantCreateView, EnseignantUpdateView, EnseignantDeleteView,
+    EnseignantListView, EnseignantDetailView, EnseignantCreateView,
+    EnseignantUpdateView, EnseignantDeleteView, EnseignantUserCreateView,
     SessionListView, SessionDetailView, SessionCreateView, SessionUpdateView, SessionDeleteView,
     session_participants_pdf, session_grille_apercu, session_grille_retirer,
     session_definir_active,
@@ -65,6 +66,7 @@ urlpatterns = [
     path('enseignants/add/', EnseignantCreateView.as_view(), name='enseignant_create'),
     path('enseignants/<int:pk>/', EnseignantDetailView.as_view(), name='enseignant_detail'),
     path('enseignants/<int:pk>/edit/', EnseignantUpdateView.as_view(), name='enseignant_update'),
+    path('enseignants/<int:pk>/user/create/', EnseignantUserCreateView.as_view(), name='enseignant_user_create'),
     path('enseignants/<int:pk>/delete/', EnseignantDeleteView.as_view(), name='enseignant_delete'),
 
     # URLs Session

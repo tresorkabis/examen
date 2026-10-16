@@ -251,6 +251,84 @@ class PaginationTests(TestCase):
         # Page valide : 200
         response = self.client.get(url, {'page': 1})
         self.assertEqual(response.status_code, 200)
+
+class EnseignantListViewSearchTests(BaseDataMixin, TestCase):
+    """Recherche sur /enseignants/?q= et pagination avec filtre q."""
+
+    def setUp(self):
+        super().setUp()
+        Enseignant.objects.create(
+            noms='BABANEMI ALBERT',
+            email='babanemi.albert@example.com')
+
+    def _get(self, extra=None):
+        return self.client.get(reverse('enseignant_list'), extra or {})
+
+    def test_recherche_par_noms(self):
+        response = self._get({'q': 'BABANEMI'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'BABANEMI ALBERT')
+        self.assertNotContains(response, 'KABISAYI TRESOR')
+
+    def test_recherche_par_email(self):
+        response = self._get({'q': 'babanemi.albert@example.com'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'BABANEMI ALBERT')
+        self.assertNotContains(response, 'KABISAYI TRESOR')
+
+    def test_resultat_vide(self):
+        response = self._get({'q': 'ZZZ_INEXISTANT'})
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'BABANEMI ALBERT')
+        self.assertNotContains(response, 'KABISAYI TRESOR')
+
+    def test_pagination_conserve_le_filtre(self):
+        # 30 enseignants > paginate_by=25 -> 2 pages.
+        # Le filtre q='KABISAYI' ne peut pas fonctionner car les noms des
+        # nouveaux enseignants ne contiennent pas 'KABISAYI', sauf si on les
+        # crée avec ce nom. On crée donc 30 enseignants du type 'KABISAYI',
+        # ce qui mène à la pagination, tout en gardant le filtre q.
+        for i in range(30):
+            Enseignant.objects.create(
+                noms=f'KABISAYI TEST {i}',
+                email=f'test{i}@example.com')
+        response = self._get({'q': 'KABISAYI', 'page': 1})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'q=KABISAYI')
+        # Vérifie que la pagination est active et que la page 2 conserve q.
+        page2 = self.client.get(reverse('enseignant_list'), {
+            'q': 'KABISAYI', 'page': 2})
+        self.assertEqual(page2.status_code, 200)
+        self.assertContains(page2, 'q=KABISAYI')
+        self.assertContains(page2, 'KABISAYI TRESOR')
+
+    def test_creer_compte_associe(self):
+        """Crée un compte utilisateur lié à un enseignant existant."""
+        user = User.objects.create_user('testcreator2', 'creer@example.com', 'pass12345')
+        self.client.force_login(user)
+
+        enseignant = Enseignant.objects.create(
+            noms='TEST CREER COMPTE',
+            email='creer.compte@example.com')
+        self.assertIsNone(enseignant.user)
+
+        url = reverse('enseignant_user_create', args=[enseignant.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Créer un compte')
+
+        data = {
+            'username': 'testcreator',
+            'email': 'creer.compte@example.com',
+            'password1': 'SecurePass123!',
+            'password2': 'SecurePass123!',
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 302)  # redirect après création
+        enseignant.refresh_from_db()
+        self.assertIsNotNone(enseignant.user)
+        self.assertEqual(enseignant.user.username, 'testcreator')
+        self.assertTrue(enseignant.user.check_password('SecurePass123!'))
 class AuthAccessTests(TestCase):
     """Les vues en écriture exigent une session authentifiée."""
 

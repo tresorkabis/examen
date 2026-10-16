@@ -1,5 +1,6 @@
 from django import forms
-from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.models import User
+from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 
 from .models import (Promotion, Enseignant, Etudiant, Cours, Session, Examen,
                      CotationProjetTutore)
@@ -252,4 +253,22 @@ class ExcelImportForm(forms.Form):
                 'promotion',
                 "Pour une grille de délibération, la promotion est obligatoire "
                 "(une grille couvre une seule promotion).")
-        return donnees
+
+class EnseignantUserForm(UserCreationForm):
+    email = forms.EmailField(required=True)
+
+    class Meta:
+        model = User
+        fields = ('username', 'email', 'password1', 'password2')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            if isinstance(field.widget, (forms.Select, forms.SelectMultiple,
+                                         forms.CheckboxSelectMultiple, forms.RadioSelect)):
+                css = 'form-select'
+            elif isinstance(field.widget, forms.CheckboxInput):
+                css = 'form-check-input'
+            else:
+                css = 'form-control'
+            field.widget.attrs.setdefault('class', css)

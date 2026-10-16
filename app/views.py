@@ -24,7 +24,9 @@ from django.views.generic import (ListView, CreateView, UpdateView, DeleteView,
 
 from .forms import (PromotionForm, EnseignantForm, EtudiantForm, CoursForm,
                     SessionForm, ExamenForm, ExcelImportForm,
+                    EnseignantUserForm,
                     CotationProjetTutoreForm)
+from django.contrib.auth.models import User
 from .models import (Etudiant, Cours, Session, Enseignant, Promotion, Examen,
                      Inscription, Grille, GrilleUE, GrilleEtudiant, GrilleNote,
                      HistoriquePromotion, CotationProjetTutore)
@@ -1067,9 +1069,25 @@ class EnseignantListView(SafePaginationMixin, ListView):
     paginate_by = 25
 
     def get_queryset(self):
+        q = self.request.GET.get('q', '').strip()
+        if q:
+            # Recherche en base (indexée) : noms ou email.
+            return (Enseignant.objects
+                    .filter(Q(noms__icontains=q) | Q(email__icontains=q))
+                    .order_by('noms'))
         return (super().get_queryset()
                 .annotate(nb_cours=Count('cours', distinct=True))
                 .order_by('noms'))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['q'] = self.request.GET.get('q', '').strip()
+        # Chaîne de requête conservant les filtres pour les liens de tri et
+        # de pagination (sans le paramètre page).
+        params = self.request.GET.copy()
+        params.pop('page', None)
+        context['qs'] = params.urlencode()
+        return context
 
 
 class EnseignantCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
@@ -1092,6 +1110,49 @@ class EnseignantDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     model = Enseignant
     template_name = "app/enseignant_confirm_delete.html"
     success_url = reverse_lazy("enseignant_list")
+
+class EnseignantUserCreateView(LoginRequiredMixin, CreateView):
+    """Crée un compte utilisateur et le lie à un enseignant existant."""
+    model = User
+    form_class = EnseignantUserForm
+    template_name = "app/enseignant_user_form.html"
+    success_url = reverse_lazy("enseignant_detail")
+
+    def get_success_url(self):
+        return reverse_lazy("enseignant_detail", kwargs={"pk": self.object.enseignant.pk})
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        enseignant = self.get_object()
+        kwargs['initial'] = {
+            'username': enseignant.noms.replace(' ', '_').lower(),
+            'email': enseignant.email,
+        }
+        return kwargs
+
+    def form_valid(self, form):
+        user = form.save(commit=False)
+        # Définir le mot de passe via la méthode sécurisée de Django.
+        user.set_password(form.cleaned_data['password1'])
+        user.save()
+        # Lier l'utilisateur au compte de l'enseignant.
+        enseignant = self.get_object()
+        enseignant.user = user
+        enseignant.save(update_fields=['user'])
+        messages.success(
+            self.request,
+            "Le compte utilisateur « %s » a été créé pour %s."
+            % (user.username, enseignant.noms),
+        )
+        return super().form_valid(form)
+
+    def get_object(self):
+        return get_object_or_404(Enseignant, pk=self.kwargs['pk'])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['enseignant'] = self.get_object()
+        return context
     success_message = "L'enseignant « %(object)s » a été supprimé."
 
 
