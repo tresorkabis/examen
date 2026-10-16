@@ -1,0 +1,86 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Réglages{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div>
+        <h2 class="mb-0 fw-bold">Réglages</h2>
+        <div class="text-muted small">Maintenance des données de l'application</div>
+    </div>
+    <span class="badge text-bg-light border">{{ nb_total_etapes }} étape(s) de parcours en base</span>
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="bi bi-broom me-2 text-primary"></i>Nettoyage du parcours académique</h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-2">
+            Une étape est contradictoire lorsqu'elle n'a <strong>aucune grille</strong> (aucun résultat),
+            porte une année académique, et que le <strong>même étudiant</strong> possède déjà pour
+            <strong>cette année-là</strong> une étape qui, elle, <strong>a</strong> une grille.
+            Deux promotions ne peuvent pas être suivies la même année : l'étape sans grille est un
+            artefact d'écriture en lot, pas un souvenir réel.
+        </p>
+        <p class="small mb-0">
+            La sélection est <strong>recalculée côté serveur</strong> à chaque requête :
+            le bouton ci-dessous ne supprime que ce que la règle vient exactement de retenir.
+            La suppression est <strong>tout ou rien</strong> (transaction).
+        </p>
+    </div>
+</div>
+
+{% if conflits %}
+<div class="card shadow-sm border-warning">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="mb-0 text-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>{{ conflits|length }} étape(s) contradictoire(s) détectée(s)
+        </h5>
+        <form method="post" class="m-0">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-warning"
+                    onclick="return confirm('Supprimer {{ conflits|length }} étape(s) contradictoire(s) ? Cette action est irréversible.');">
+                <i class="bi bi-broom me-1"></i>Nettoyage
+            </button>
+        </form>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th class="text-center" style="width:5%">#</th>
+                    <th>Étudiant</th>
+                    <th>Étape à supprimer (sans grille)</th>
+                    <th>Étape conservée (avec grille)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in conflits %}
+                <tr>
+                    <td class="text-center text-muted">{{ forloop.counter }}</td>
+                    <td>
+                        <a href="{% url 'etudiant_detail' c.etape.etudiant_id %}">{{ c.etape.etudiant }}</a>
+                    </td>
+                    <td>
+                        <span class="badge text-bg-warning text-dark">{{ c.etape.promotion }}</span>
+                        <span class="text-muted small">{{ c.etape.annee_academique }}</span>
+                    </td>
+                    <td>
+                        <span class="badge text-bg-success">{{ c.contraire.promotion }}</span>
+                        <span class="text-muted small">{{ c.contraire.annee_academique }}</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-success mb-0">
+    <i class="bi bi-check-circle me-1"></i>
+    Aucun enregistrement à nettoyer : base conforme.
+    {% if nb_supprimes %}{{ nb_supprimes }} étape(s) supprimée(s) à l'instant.{% endif %}
+</div>
+{% endif %}
+{% endblock %}
