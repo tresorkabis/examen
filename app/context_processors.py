@@ -55,6 +55,9 @@ BREADCRUMB_MAP = {
     "enseignant_delete": ("Supprimer un Enseignant", [("Enseignants", "enseignant_list")]),
     "session_delete": ("Supprimer une Session", [("Sessions", "session_list")]),
     "examen_delete": ("Supprimer un Examen", [("Examens", "examen_list")]),
+
+    # Réglages / maintenance des données
+    "reglages": ("Réglages", []),
 }
 
 

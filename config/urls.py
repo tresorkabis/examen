@@ -20,6 +20,7 @@ from app.views import (
     cotation_tutore_saisie, cotation_tutore_impression, cotation_tutore_supprimer,
     PalmaresView, palmares_ligne,
     DefenseListView,
+    reglages,
 )
 
 urlpatterns = [
@@ -99,4 +100,7 @@ urlpatterns = [
     path('examens/<int:pk>/notee/', examen_marquer_notee, name='examen_notee'),
     path('palmares/', PalmaresView.as_view(), name='palmares'),
     path('palmares/lignes/<int:pk>/', palmares_ligne, name='palmares_ligne'),
+
+    # Réglages / maintenance des données
+    path('reglages/', reglages, name='reglages'),
 ]

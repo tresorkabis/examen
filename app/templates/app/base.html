@@ -301,6 +301,12 @@
                 <i class="bi bi-file-earmark-excel"></i><span>Import Excel</span>
             </a>
 
+            <span class="sidebar-group">Réglages</span>
+            <a class="nav-link {% if current_url_name == 'reglages' %}active{% endif %}"
+               href="{% url 'reglages' %}">
+                <i class="bi bi-gear"></i><span>Réglages</span>
+            </a>
+
 	            <div class="sidebar-footer mt-auto">
 	                {% if user.is_authenticated %}
 	                <div class="dropdown mb-3">

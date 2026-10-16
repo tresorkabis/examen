@@ -149,6 +149,11 @@
             border: 1px solid #bbb !important;
             line-height: 1.15 !important;
         }
+        /* Colonnes techniques resserrées (mêmes valeurs que le relevé
+           global) : l'intitulé de l'UE est la colonne dominante. Les ~16 px
+           récupérés évitent le retour à la ligne des intitulés longs
+           (« Méthode de recherche informatique » tenait à ~3 pt près). */
+        .table-ue td:last-child .badge { padding: .2em .4em !important; }
         .table-ue th {
             background-color: #f8f9fa !important;
             font-weight: 700 !important;
@@ -457,11 +462,11 @@
                                 <table class="table table-sm table-hover align-middle mb-0 table-ue">
                                     <thead class="table-light small">
                                         <tr>
-                                            <th style="width: 24px;" class="text-center">#</th>
+                                            <th style="width: 20px;" class="text-center">#</th>
                                             <th>Unité d'Enseignement (UE)</th>
-                                            <th class="text-center" style="width: 32px;" title="Crédits">Cr.</th>
-                                            <th class="text-center" style="width: 48px;">Note</th>
-                                            <th class="text-center" style="width: 68px;">Statut</th>
+                                            <th class="text-center" style="width: 28px;" title="Crédits">Cr.</th>
+                                            <th class="text-center" style="width: 44px;">Note</th>
+                                            <th class="text-center" style="width: 64px;">Statut</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -534,11 +539,11 @@
                                 <table class="table table-sm table-hover align-middle mb-0 table-ue">
                                     <thead class="table-light small">
                                         <tr>
-                                            <th style="width: 24px;" class="text-center">#</th>
+                                            <th style="width: 20px;" class="text-center">#</th>
                                             <th>Unité d'Enseignement (UE)</th>
-                                            <th class="text-center" style="width: 32px;" title="Crédits">Cr.</th>
-                                            <th class="text-center" style="width: 48px;">Note</th>
-                                            <th class="text-center" style="width: 68px;">Statut</th>
+                                            <th class="text-center" style="width: 28px;" title="Crédits">Cr.</th>
+                                            <th class="text-center" style="width: 44px;">Note</th>
+                                            <th class="text-center" style="width: 64px;">Statut</th>
                                         </tr>
                                     </thead>
                                     <tbody>

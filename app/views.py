@@ -730,12 +730,28 @@ class EtudiantDetailView(DetailView):
         # mémoire du parcours, elle ne se montre juste pas.
         # L'année en cours, elle, reste visible même sans délibération :
         # c'est celle que l'étudiant suit actuellement.
-        parcours = []
-        for etape in (HistoriquePromotion.objects
+        # Une seule année peut être « en cours ». Le tri du modèle
+        # (`-annee_academique`) place l'année la plus récente en tête des
+        # étapes ouvertes de la promotion courante : c'est elle, et elle
+        # seule, qui porte le badge. Sans cette sélection, deux étapes sans
+        # `date_fin` pour la même promotion — un doublon d'historique, par
+        # exemple une étape rattachée à une année déjà close et sans grille —
+        # afficheraient deux fois « Année en cours » et feraient apparaître
+        # une année impossible (l'étudiant y figurait déjà avec sa grille).
+        # Le candidat retenu sans délibération reste visible : c'est l'année
+        # suivie dont les résultats ne sont pas encore importés.
+        etapes = list(HistoriquePromotion.objects
                       .filter(etudiant=etudiant)
-                      .select_related('promotion', 'grille')):
-            est_courante = (etape.promotion_id == etudiant.promotion_id
-                            and etape.date_fin is None)
+                      .select_related('promotion', 'grille'))
+        candidats = [e for e in etapes
+                     if e.promotion_id == etudiant.promotion_id
+                     and e.date_fin is None]
+        etape_courante = candidats[0] if candidats else None
+
+        parcours = []
+        for etape in etapes:
+            est_courante = (etape_courante is not None
+                            and etape.pk == etape_courante.pk)
             ligne = lignes_par_grille.get(etape.grille_id)
             if ligne is None and not est_courante:
                 continue
@@ -2481,3 +2497,41 @@ def cotation_tutore_supprimer(request, pk):
         messages.success(request,
                          "La cotation du projet tutoré a été supprimée.")
     return redirect('etudiant_detail', pk=etudiant.pk)
+
+
+@login_required
+def reglages(request):
+    """Réglages : maintenance des données de l'application.
+
+    Le bouton « Nettoyage » repère les étapes de parcours contradictoires
+    (voir `HistoriquePromotion.etapes_conflictuelles`) puis les supprime.
+
+    Sécurité : la sélection est **recalculée côté serveur** à chaque requête.
+    Le formulaire n'envoie aucun identifiant — un clic ne peut donc supprimer
+    que ce que la règle vient exactement de retenir, jamais une liste
+    fournie par le client. La suppression est enveloppée dans une
+    transaction : elle est tout ou rien.
+    """
+    conflits_avant = HistoriquePromotion.etapes_conflictuelles()
+    nb_avant = len(conflits_avant)
+    nb_supprimes = 0
+
+    if request.method == 'POST':
+        if nb_avant:
+            with transaction.atomic():
+                HistoriquePromotion.objects.filter(
+                    pk__in=[c['etape'].pk for c in conflits_avant]).delete()
+            nb_supprimes = nb_avant
+            messages.success(
+                request,
+                "%d étape(s) de parcours contradictoire(s) supprimée(s)."
+                % nb_supprimes)
+        else:
+            messages.info(request,
+                          "Aucun enregistrement à nettoyer : base conforme.")
+
+    return render(request, 'app/reglages.html', {
+        'conflits': HistoriquePromotion.etapes_conflictuelles(),
+        'nb_supprimes': nb_supprimes,
+        'nb_total_etapes': HistoriquePromotion.objects.count(),
+    })

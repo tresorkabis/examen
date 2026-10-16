@@ -131,6 +131,46 @@ class HistoriquePromotion(models.Model):
             etape.save(update_fields=champs)
         return etape, False
 
+    @classmethod
+    def etapes_conflictuelles(cls):
+        """Étapes de parcours à nettoyer : enregistrements contradictoires.
+
+        Une étape est retenue lorsqu'elle n'a **aucune grille** (aucun résultat
+        n'y est rattaché), porte une année académique, et que le **même
+        étudiant** possède déjà une étape pour **cette année-là** qui, elle,
+        **a** une grille.
+
+        Deux promotions ne peuvent pas être suivies la même année : quand
+        « L3 / 2024-2025 » coexiste avec « L2 / 2024-2025 » délibérée (grille
+        renseignée), la première est un artefact d'écriture en lot et non un
+        souvenir réel. L'étape reste en base — c'est la consigne `SET_NULL`,
+        l'étape survit à la suppression de sa grille — mais elle parasite le
+        parcours affiché (année impossible, double badge « Année en cours »).
+
+        Retourne une liste de couples ``{'etape': <fausse>, 'contraire': <preuve>}``,
+        triée par id d'étape. **Cette méthode ne modifie rien** : c'est
+        l'appelant qui décide d'afficher ou de supprimer.
+
+        Voir `ReglagesTests` pour le contrat complet.
+        """
+        resultats = []
+        orphelines = (cls.objects
+                      .filter(grille__isnull=True)
+                      .exclude(annee_academique='')
+                      .select_related('etudiant', 'promotion'))
+        for etape in orphelines:
+            contraire = (cls.objects
+                         .filter(etudiant=etape.etudiant_id,
+                                 annee_academique=etape.annee_academique)
+                         .exclude(pk=etape.pk)
+                         .filter(grille__isnull=False)
+                         .select_related('promotion', 'grille')
+                         .first())
+            if contraire is not None:
+                resultats.append({'etape': etape, 'contraire': contraire})
+        resultats.sort(key=lambda c: c['etape'].pk)
+        return resultats
+
     class Meta:
         # Tri décroissant : l'année la plus récente d'abord (les années
         # académiques sont au format « AAAA-AAAA », donc triables telles
