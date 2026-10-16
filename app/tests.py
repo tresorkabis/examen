@@ -834,6 +834,8 @@ class DashboardSessionActiveTests(TestCase):
 
     def setUp(self):
         cache.clear()  # isole chaque test du cache des compteurs
+        self.user = User.objects.create_user('dashuser', 'dash@example.com', 'pass12345')
+        self.client.force_login(self.user)
 
     def test_compteurs_limites_a_la_session_active(self):
         response = self.client.get(reverse('dashboard'))
