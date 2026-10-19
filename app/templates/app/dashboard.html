@@ -4,7 +4,13 @@
 <div class="hero-header p-4 p-md-5 mb-4">
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
 <div>
-<p class="hero-kicker mb-1"><i class="bi bi-mortarboard-fill me-1"></i>Gestion des examens</p>
+<p class="hero-kicker mb-1">
+    {% if is_teacher %}
+        <i class="bi bi-person-badge me-1"></i>Espace Enseignant
+    {% else %}
+        <i class="bi bi-mortarboard-fill me-1"></i>Gestion des examens
+    {% endif %}
+</p>
 <h2 class="mb-1 fw-bold">Tableau de Bord</h2>
 <p class="mb-0 hero-sub">Vue d'ensemble — {% now 'l j F Y' %}.
 {% if session_active %}<span class="badge text-bg-success ms-1">Session en cours : {{ session_active.nom|truncatechars:40 }}</span>{% endif %}</p>
@@ -22,6 +28,42 @@
     <a href="{% url 'session_list' %}" class="alert-link">Définir une session en cours</a>.
 </div>
 {% endif %}
+{% if is_teacher %}
+<div class="row g-3 g-md-4 mb-4">
+<div class="col-6 col-xl-3">
+<a class="stat-card bg-courses p-3 p-md-4" href="{% url 'cours_list' %}" aria-label="Voir les cours">
+<div class="stat-icon"><i class="bi bi-book"></i></div>
+<div class="stat-value">{{ total_cours }}</div>
+<div class="stat-label">Mes cours</div>
+<div class="stat-foot">Voir la liste<i class="bi bi-arrow-right ms-1"></i></div>
+</a>
+</div>
+<div class="col-6 col-xl-3">
+<a class="stat-card bg-teachers p-3 p-md-4" href="{% url 'examen_list' %}" aria-label="Voir les examens">
+<div class="stat-icon"><i class="bi bi-file-earmark-text"></i></div>
+<div class="stat-value">{{ total_examens }}</div>
+<div class="stat-label">Examens programmés</div>
+<div class="stat-foot">Voir la liste<i class="bi bi-arrow-right ms-1"></i></div>
+</a>
+</div>
+<div class="col-6 col-xl-3">
+<a class="stat-card bg-sessions p-3 p-md-4" href="{% url 'session_list' %}" aria-label="Voir les sessions">
+<div class="stat-icon"><i class="bi bi-calendar-event"></i></div>
+<div class="stat-value">{{ total_sessions }}</div>
+<div class="stat-label">Sessions</div>
+<div class="stat-foot">Voir la liste<i class="bi bi-arrow-right ms-1"></i></div>
+</a>
+</div>
+<div class="col-6 col-xl-3">
+<a class="stat-card bg-primary p-3 p-md-4" href="{% url 'promotion_list' %}" aria-label="Voir les promotions">
+<div class="stat-icon"><i class="bi bi-diagram-3"></i></div>
+<div class="stat-value">{{ total_promotions }}</div>
+<div class="stat-label">Promotions</div>
+<div class="stat-foot">Voir la liste<i class="bi bi-arrow-right ms-1"></i></div>
+</a>
+</div>
+</div>
+{% else %}
 <div class="row g-3 g-md-4 mb-4">
 <div class="col-6 col-xl-3">
 <a class="stat-card bg-students p-3 p-md-4" href="{% url 'etudiant_list' %}" aria-label="Voir les étudiants">
@@ -56,6 +98,7 @@
 </a>
 </div>
 </div>
+{% endif %}
 <div class="row g-3 g-md-4 mb-4">
 <div class="col-6">
 <div class="mini-stat">

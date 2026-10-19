@@ -245,6 +245,7 @@
 	        </div>
 	    </nav>
 
+{% if user.is_authenticated %}
     <!-- Sidebar (fixe à gauche sur desktop, drawer sur mobile) -->
     <aside id="sidebar" class="offcanvas offcanvas-start bg-dark text-white" tabindex="-1" aria-labelledby="sidebarTitle">
         <div class="offcanvas-header d-flex align-items-center">
@@ -253,6 +254,16 @@
             </a>
             <button type="button" class="btn-close btn-close-white d-lg-none" data-bs-dismiss="offcanvas" aria-label="Fermer"></button>
         </div>
+        {% if user.enseignant %}
+        <div class="d-flex align-items-center gap-2 bg-teachers bg-opacity-10 border border-teachers border-opacity-25 rounded-3 p-3 mb-3">
+            <i class="bi bi-person-badge fs-3"></i>
+            <div>
+                <div class="fw-semibold small text-uppercase">Enseignant</div>
+                <div class="small text-white-50">{{ user.get_full_name|default:user.username }}</div>
+                <div class="small text-white-50">{{ user.email|default:'' }}</div>
+            </div>
+        </div>
+        {% endif %}
         <div class="offcanvas-body">
             <span class="sidebar-group">Pilotage</span>
             <a class="nav-link {% if current_url_name == 'dashboard' %}active{% endif %}"
@@ -356,6 +367,7 @@
 	            </div>
         </div>
     </aside>
+{% endif %}
 
     <main class="main-content">
         <div class="container flex-grow-1 mt-3">

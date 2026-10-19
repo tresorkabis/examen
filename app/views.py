@@ -93,17 +93,49 @@ def dashboard(request):
     les dernières sessions, la session en cours y étant signalée.
     """
     session_active = Session.objects.filter(est_active=True).first()
-    compteurs = _compteurs_tableau_de_bord(session_active)
-    prochains = (Examen.objects
-                 .select_related('cours__promotion', 'cours__enseignant', 'session')
-                 .filter(date_examen__gte=timezone.now())
-                 .order_by('date_examen')[:5])
+    enseignant = getattr(request.user, 'enseignant', None)
+    is_teacher = enseignant is not None
+
+    if is_teacher:
+        compteurs = {
+            'total_cours': (
+                Cours.objects.filter(enseignant=enseignant).distinct().count()
+            ),
+            'total_etudiants': 0,
+            'total_sessions': (
+                Session.objects.filter(examens__cours__enseignant=enseignant).distinct().count()
+            ),
+            'total_enseignants': 1,
+            'total_promotions': (
+                Promotion.objects.filter(cours__enseignant=enseignant).distinct().count()
+            ),
+            'total_examens': (
+                Examen.objects.filter(cours__enseignant=enseignant).count()
+            ),
+        }
+        prochains = (
+            Examen.objects
+            .select_related('cours__promotion', 'cours__enseignant', 'session')
+            .filter(date_examen__gte=timezone.now(), cours__enseignant=enseignant)
+            .order_by('date_examen')[:5]
+        )
+    else:
+        compteurs = _compteurs_tableau_de_bord(session_active)
+        prochains = (
+            Examen.objects
+            .select_related('cours__promotion', 'cours__enseignant', 'session')
+            .filter(date_examen__gte=timezone.now())
+            .order_by('date_examen')[:5]
+        )
+
     dernieres_sessions = (Session.objects.order_by('-date_debut')[:3])
     context = {
         **compteurs,
         'prochains_examens': prochains,
         'dernieres_sessions': dernieres_sessions,
         'session_active': session_active,
+        'is_teacher': is_teacher,
+        'enseignant': enseignant,
     }
     return render(request, 'app/dashboard.html', context)
 
