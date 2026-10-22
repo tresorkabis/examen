@@ -15,7 +15,8 @@
     /* ===== Bloc d'informations de l'étudiant =====
        Remplace l'ancienne ligne unique « Étudiant(e) : … | Matricule : … |
        … » par une grille de champs étiquetés (lisibilité) et des tuiles
-       de synthèse du parcours (années, crédits, moyenne pondérée).
+       de synthèse du parcours (années, période couverte, crédits,
+       moyenne pondérée).
        Le même bloc est repris à l'impression, en plus compact. */
     .bloc-infos {
         background: #fff;
@@ -36,15 +37,14 @@
         margin-bottom: .65rem;
     }
     /* Grille à 5 colonnes sur la 1ʳᵉ ligne (le nom de l'étudiant dispose
-       d'une colonne élargie) et une 2ᵉ ligne dédiée à la période
-       couverte, dont la valeur « 2023-2024 à 2025-2026 » ne peut plus
-       être tronquée ni mal repliée. */
+       d'une colonne élargie). La période couverte n'est plus un champ de
+       cette grille : elle rejoint la rangée de tuiles « Années de parcours /
+       Période couverte / Crédits validés / Moyenne pondérée ». */
     .infos-grille {
         display: grid;
         grid-template-columns: 1.7fr 1fr 1.1fr 1fr 1.1fr;
         grid-template-areas:
-            "nom matricule promotion naissance lieu"
-            "periode periode periode periode periode";
+            "nom matricule promotion naissance lieu";
         gap: .55rem 1.4rem;
     }
     .info-item { display: flex; flex-direction: column; min-width: 0; }
@@ -53,17 +53,14 @@
     .info-promotion { grid-area: promotion; }
     .info-naissance { grid-area: naissance; }
     .info-lieu { grid-area: lieu; }
-    .info-periode { grid-area: periode; }
-    /* Écrans étroits : la grille se replie en 2 puis 1 colonne, la période
-       couverte occupant toujours sa propre ligne. */
+    /* Écrans étroits : la grille se replie en 2 puis 1 colonne. */
     @media (max-width: 992px) {
         .infos-grille {
             grid-template-columns: 1fr 1fr;
             grid-template-areas:
                 "nom nom"
                 "matricule promotion"
-                "naissance lieu"
-                "periode periode";
+                "naissance lieu";
         }
     }
     @media (max-width: 576px) {
@@ -74,8 +71,7 @@
                 "matricule"
                 "promotion"
                 "naissance"
-                "lieu"
-                "periode";
+                "lieu";
         }
     }
     .info-label {
@@ -90,9 +86,14 @@
         color: #212529;
         overflow-wrap: anywhere;
     }
+    /* Quatre tuiles sur une seule rangée : « Années de parcours » (le
+       nombre), « Période couverte » (la plage 2023-2024 à 2025-2026),
+       « Crédits validés » et « Moyenne pondérée ». La tuile de la période
+       reçoit une colonne plus large et une valeur un peu moins grande :
+       la plage tient sur une ligne sans être repliée. */
     .tuiles {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: .8fr 2fr 1fr 1.1fr;
         gap: .6rem;
         margin-top: .85rem;
         padding-top: .75rem;
@@ -118,6 +119,17 @@
         font-weight: 700;
         line-height: 1.25;
         color: #0d6efd;
+    }
+    .tuile-periode .tuile-valeur {
+        font-size: .95rem;
+        white-space: nowrap;
+    }
+    @media (max-width: 992px) {
+        .tuiles { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 576px) {
+        .tuiles { grid-template-columns: 1fr; }
+        .tuile-periode .tuile-valeur { white-space: normal; }
     }
 
     /* ===== Éléments réservés à l'impression ===== */
@@ -190,9 +202,10 @@
 
         /* Bloc d'informations : compacté au maximum pour ne pas rogner la
            place de la page 1 (la L3 occupe déjà ~87 % de la feuille).
-           Les champs passent sur une seule rangée (6 colonnes), les tuiles
-           de synthèse sur une rangée à droite — la hauteur ajoutée reste
-           inférieure à 2 lignes de tableau. */
+           Les 5 champs passent sur une seule rangée, les 4 tuiles de
+           synthèse (années, période couverte, crédits, moyenne) sur une
+           rangée également — la hauteur ajoutée reste inférieure à 2 lignes
+           de tableau. */
         .bloc-infos {
             background: transparent !important;
             border: 1px solid #444 !important;
@@ -209,11 +222,10 @@
         }
         .infos-grille {
             /* Même structure qu'à l'écran : 5 champs sur la 1ʳᵉ ligne
-               (nom élargi) + la période couverte sur une ligne dédiée. */
+               (nom élargi). */
             grid-template-columns: 1.7fr 1fr 1.1fr 1fr 1.1fr !important;
             grid-template-areas:
-                "nom matricule promotion naissance lieu"
-                "periode periode periode periode periode" !important;
+                "nom matricule promotion naissance lieu" !important;
             gap: 3px 10px !important;
         }
         .info-label {
@@ -227,7 +239,9 @@
             line-height: 1.15 !important;
         }
         .tuiles {
-            grid-template-columns: repeat(3, 1fr) !important;
+            /* 4 tuiles sur une seule rangée : années de parcours, période
+               couverte (colonne élargie), crédits validés, moyenne. */
+            grid-template-columns: .8fr 2fr 1fr 1.1fr !important;
             gap: 4px !important;
             margin-top: 3px !important;
             padding-top: 3px !important;
@@ -246,6 +260,10 @@
         .tuile-valeur {
             font-size: 9pt !important;
             color: #000 !important;
+        }
+        .tuile-periode .tuile-valeur {
+            font-size: 8.2pt !important;
+            white-space: nowrap !important;
         }
 
         /* Pagination contrôlée sur 2 pages : la 1ʳᵉ année du parcours (L3,
@@ -467,15 +485,15 @@
                 <span class="info-label">Lieu de naissance</span>
                 <span class="info-valeur">{{ etudiant.lieu_naissance|default:"—" }}</span>
             </div>
-            <div class="info-item info-periode">
-                <span class="info-label">Période couverte</span>
-                <span class="info-valeur">{{ periode|default:"—" }}</span>
-            </div>
         </div>
         <div class="tuiles">
             <div class="tuile">
                 <span class="tuile-label">Années de parcours</span>
                 <span class="tuile-valeur">{{ nb_annees }}</span>
+            </div>
+            <div class="tuile tuile-periode">
+                <span class="tuile-label">Période couverte</span>
+                <span class="tuile-valeur">{{ periode|default:"—" }}</span>
             </div>
             <div class="tuile">
                 <span class="tuile-label">Crédits validés</span>
