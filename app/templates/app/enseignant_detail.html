@@ -12,7 +12,14 @@
             <a href="{% url 'enseignant_delete' enseignant.pk %}" class="btn btn-outline-danger">
                 <i class="bi bi-trash me-1"></i>Supprimer
             </a>
-            {% if not enseignant.user %}
+            {% if enseignant.user %}
+            <form method="post" action="{% url 'enseignant_password_reset' enseignant.pk %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-warning">
+                    <i class="bi bi-key me-1"></i>Réinitialiser le mot de passe
+                </button>
+            </form>
+            {% else %}
             <a href="{% url 'enseignant_user_create' enseignant.pk %}" class="btn btn-outline-primary">
                 <i class="bi bi-person-plus me-1"></i>Créer un compte
             </a>

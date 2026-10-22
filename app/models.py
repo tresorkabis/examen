@@ -1015,3 +1015,103 @@ class CotationProjetTutore(models.Model):
                 ),
             ),
         ]
+    def membres_jury(self):
+        """Enseignants affectés au jury, dans l'ordre (None = rôle vacant)."""
+
+        def _norm(s):
+            return s.strip().lower() if s else ''
+
+        # Contexte : on est déjà dans un jury (cohérent avec la défense).
+        members = {}
+        for membre, libelle in CotationProjetTutore.MEMBRES:
+            eid = _norm(getattr(self, membre))
+            if eid:
+                members[eid] = libelle
+        return members
+
+
+class UserRole:
+    """Niveaux d'accès dans l'application.
+
+    ADMIN    : accès illimité à toutes les fonctionnalités.
+    GESTIONNAIRE : accès à la gestion des données (créer/modifier/supprimer).
+    ENSEIGNANT : accès à sa fiche et à la cotation pour les étudiants auxquels
+                 il est affecté au jury.
+    """
+
+    ADMIN = 'admin'
+    GESTIONNAIRE = 'gestionnaire'
+    ENSEIGNANT = 'enseignant'
+
+    CHOICES = [
+        (ADMIN, 'Administrateur'),
+        (GESTIONNAIRE, 'Gestionnaire'),
+        (ENSEIGNANT, 'Enseignant'),
+    ]
+
+    ALL = (ADMIN, GESTIONNAIRE, ENSEIGNANT)
+
+
+def get_user_role(user):
+    """Retourne le rôle de l'utilisateur.
+
+    - Si l'utilisateur n'est pas connecté, retourne None.
+    - Par défaut, les utilisateurs sans rôle explicite sont des 'enseignants'.
+    """
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return None
+    return getattr(user, 'role', UserRole.ENSEIGNANT)
+
+
+class UserProfile(models.Model):
+    """Profil étendu de l'utilisateur Django.
+
+    Django gère nativement l'authentification via ``django.contrib.auth.User``
+    ; ce modèle complète ce profil avec le rôle de l'utilisateur et le lien
+    vers le modèle ``Enseignant`` (si l'utilisateur est un enseignant).
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='profile',
+    )
+    role = models.CharField(
+        max_length=20,
+        choices=UserRole.CHOICES,
+        default=UserRole.ENSEIGNANT,
+    )
+    enseignant = models.OneToOneField(
+        'app.Enseignant',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='user_profile',
+        help_text='Lien avec la fiche enseignant.',
+    )
+
+    def __str__(self):
+        return f"{self.user.username} - {self.get_role_display()}"
+
+    class Meta:
+        verbose_name = 'Profil utilisateur'
+        verbose_name_plural = 'Profils utilisateurs'
+
+    @classmethod
+    def ensure_for(cls, user):
+        """Crée le profil pour l'utilisateur s'il n'existe pas."""
+        if not hasattr(user, 'profile'):
+            cls.objects.create(user=user)
+        return user.profile
+
+    @property
+    def is_admin(self):
+        return self.role == UserRole.ADMIN
+
+    @property
+    def is_gestionnaire(self):
+        return self.role == UserRole.GESTIONNAIRE
+
+    @property
+    def is_enseignant(self):
+        return self.role == UserRole.ENSEIGNANT

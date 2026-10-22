@@ -20,7 +20,37 @@ from django.urls import reverse_lazy
 from django.utils import timezone
 from django.utils.text import slugify
 from django.views.generic import (ListView, CreateView, UpdateView, DeleteView,
-                                  DetailView)
+                                  DetailView, View)
+from django.contrib.auth.mixins import AccessMixin
+from django.core.exceptions import PermissionDenied
+
+
+class RoleRequiredMixin(AccessMixin):
+    """Restriction d'accès selon le rôle (`UserProfile.role`).
+
+    Utilisez-le sur les vues qui nécessitent un rôle précis, par exemple
+    ``role_required_fields = {'admin': 'admin'}`` ou un ensemble de rôles
+    autorisés.
+    """
+
+    # Rôles autorisés (par défaut : administrateur uniquement)
+    allowed_roles = ['admin']
+
+    def dispatch(self, request, *args, **kwargs):
+        user = request.user
+        if not user.is_authenticated:
+            return self.handle_no_permission()
+        role = get_user_role(user)
+        if role is None or role not in self.allowed_roles:
+            return self.handle_no_permission()
+        return super().dispatch(request, *args, **kwargs)
+
+
+
+from django.contrib.messages.views import SuccessMessageMixin
+from django.db import models
+from django.shortcuts import render, get_object_or_404, redirect
+from django.urls import reverse_lazy
 
 from .forms import (PromotionForm, EnseignantForm, EtudiantForm, CoursForm,
                     SessionForm, ExamenForm, ExcelImportForm,
@@ -1190,6 +1220,33 @@ class EnseignantUserCreateView(LoginRequiredMixin, CreateView):
         context['enseignant'] = self.get_object()
         return context
     success_message = "L'enseignant « %(object)s » a été supprimé."
+
+
+class EnseignantPasswordResetView(LoginRequiredMixin, SuccessMessageMixin, View):
+    """Réinitialise le mot de passe de l'utilisateur lié à un enseignant en "demo"."""
+
+    def post(self, request, *args, **kwargs):
+        enseignant = self.get_object()
+        user = enseignant.user
+        if user is None:
+            # Aucun compte lié : on redirige vers la création du compte.
+            return redirect('enseignant_user_create', pk=enseignant.pk)
+        user.set_password('demo')
+        user.save()
+        messages.success(
+            request,
+            'Le mot de passe de « %s » a été réinitialisé à « demo ».'
+            % enseignant.noms,
+        )
+        return redirect('enseignant_detail', pk=enseignant.pk)
+
+    def get(self, request, *args, **kwargs):
+        # Méthode GET : redirection vers la fiche détaillée (on n’autorise que
+        # le formulaire POST pour éviter les réinitialisations par erreur).
+        return redirect('enseignant_detail', pk=kwargs['pk'])
+
+    def get_object(self):
+        return get_object_or_404(Enseignant, pk=self.kwargs['pk'])
 
 
 class EnseignantDetailView(DetailView):

@@ -7,11 +7,13 @@ compteurs à la session active) purge la clé pour que le tableau de bord reste
 exact.
 """
 
+from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from .models import (Cours, Enseignant, Etudiant, Examen, Inscription, Session)
+from .models import (Cours, Enseignant, Etudiant, Examen, Inscription, Session,
+                     UserProfile)
 
 CLE_COMPTEURS = 'dashboard_compteurs'
 
@@ -30,3 +32,13 @@ CLE_COMPTEURS = 'dashboard_compteurs'
           sender=Inscription, dispatch_uid='app.purge_dashboard_inscription')
 def purger_compteurs_dashboard(sender, **kwargs):
     cache.delete(CLE_COMPTEURS)
+
+
+@receiver([post_save], sender=User, dispatch_uid='app.create_user_profile')
+def create_user_profile(sender, instance, created, **kwargs):
+    """S'assurer qu'un profil existe pour chaque utilisateur."""
+    if created:
+        try:
+            UserProfile.objects.get(user=instance)
+        except UserProfile.DoesNotExist:
+            UserProfile.objects.create(user=instance)
