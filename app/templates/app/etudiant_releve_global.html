@@ -35,12 +35,49 @@
         color: #6c757d;
         margin-bottom: .65rem;
     }
+    /* Grille à 5 colonnes sur la 1ʳᵉ ligne (le nom de l'étudiant dispose
+       d'une colonne élargie) et une 2ᵉ ligne dédiée à la période
+       couverte, dont la valeur « 2023-2024 à 2025-2026 » ne peut plus
+       être tronquée ni mal repliée. */
     .infos-grille {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        grid-template-columns: 1.7fr 1fr 1.1fr 1fr 1.1fr;
+        grid-template-areas:
+            "nom matricule promotion naissance lieu"
+            "periode periode periode periode periode";
         gap: .55rem 1.4rem;
     }
     .info-item { display: flex; flex-direction: column; min-width: 0; }
+    .info-nom { grid-area: nom; }
+    .info-matricule { grid-area: matricule; }
+    .info-promotion { grid-area: promotion; }
+    .info-naissance { grid-area: naissance; }
+    .info-lieu { grid-area: lieu; }
+    .info-periode { grid-area: periode; }
+    /* Écrans étroits : la grille se replie en 2 puis 1 colonne, la période
+       couverte occupant toujours sa propre ligne. */
+    @media (max-width: 992px) {
+        .infos-grille {
+            grid-template-columns: 1fr 1fr;
+            grid-template-areas:
+                "nom nom"
+                "matricule promotion"
+                "naissance lieu"
+                "periode periode";
+        }
+    }
+    @media (max-width: 576px) {
+        .infos-grille {
+            grid-template-columns: 1fr;
+            grid-template-areas:
+                "nom"
+                "matricule"
+                "promotion"
+                "naissance"
+                "lieu"
+                "periode";
+        }
+    }
     .info-label {
         font-size: .7rem;
         text-transform: uppercase;
@@ -171,8 +208,13 @@
             margin-bottom: 2px !important;
         }
         .infos-grille {
-            grid-template-columns: repeat(6, 1fr) !important;
-            gap: 1px 10px !important;
+            /* Même structure qu'à l'écran : 5 champs sur la 1ʳᵉ ligne
+               (nom élargi) + la période couverte sur une ligne dédiée. */
+            grid-template-columns: 1.7fr 1fr 1.1fr 1fr 1.1fr !important;
+            grid-template-areas:
+                "nom matricule promotion naissance lieu"
+                "periode periode periode periode periode" !important;
+            gap: 3px 10px !important;
         }
         .info-label {
             font-size: 6.6pt !important;
@@ -403,29 +445,29 @@
             <i class="bi bi-person-vcard"></i>Informations de l'étudiant
         </div>
         <div class="infos-grille">
-            <div class="info-item">
+            <div class="info-item info-nom">
                 <span class="info-label">Étudiant(e)</span>
                 <span class="info-valeur">{{ etudiant.noms }}</span>
             </div>
-            <div class="info-item">
+            <div class="info-item info-matricule">
                 <span class="info-label">Matricule</span>
                 <span class="info-valeur">{{ etudiant.numero_etudiant|default:"—" }}</span>
             </div>
-            <div class="info-item">
+            <div class="info-item info-promotion">
                 <span class="info-label">Promotion actuelle</span>
                 <span class="info-valeur">{{ etudiant.promotion.nom }}</span>
             </div>
-            <div class="info-item">
+            <div class="info-item info-naissance">
                 <span class="info-label">Né(e) le</span>
                 <span class="info-valeur">
                     {% if etudiant.date_naissance %}{{ etudiant.date_naissance|date:"d/m/Y" }}{% else %}—{% endif %}
                 </span>
             </div>
-            <div class="info-item">
+            <div class="info-item info-lieu">
                 <span class="info-label">Lieu de naissance</span>
                 <span class="info-valeur">{{ etudiant.lieu_naissance|default:"—" }}</span>
             </div>
-            <div class="info-item">
+            <div class="info-item info-periode">
                 <span class="info-label">Période couverte</span>
                 <span class="info-valeur">{{ periode|default:"—" }}</span>
             </div>
