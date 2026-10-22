@@ -1,0 +1,100 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Gestion des rôles{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div>
+        <h2 class="mb-0 fw-bold">Gestion des rôles</h2>
+        <div class="text-muted small">
+            Attribution des niveaux d'accès des utilisateurs (hors administration Django)
+        </div>
+    </div>
+    <a href="{% url 'reglages' %}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-gear me-1"></i>Réglages
+    </a>
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="bi bi-shield-lock me-2 text-primary"></i>Changer le rôle d'un utilisateur</h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">
+            <strong>Administrateur</strong> : accès complet à l'application.
+            <strong>Gestionnaire</strong> : gestion des données (création, modification, suppression).
+            <strong>Enseignant</strong> : accès à sa fiche et à la cotation des jurys dont il est membre.
+        </p>
+        <form method="post" class="row g-3 align-items-end">
+            {% csrf_token %}
+            <div class="col-md-4">
+                <label for="username" class="form-label">Utilisateur</label>
+                <select name="username" id="username" class="form-select" required>
+                    <option value="">-- Sélectionner --</option>
+                    {% for u in users %}
+                        <option value="{{ u.username }}">
+                            {{ u.username }}{% if u.get_full_name %} — {{ u.get_full_name }}{% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="role" class="form-label">Nouveau rôle</label>
+                <select name="role" id="role" class="form-select" required>
+                    <option value="">-- Sélectionner --</option>
+                    {% for value, label in roles %}
+                        <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg me-1"></i>Appliquer
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="bi bi-people me-2 text-primary"></i>Utilisateurs et rôles</h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Utilisateur</th>
+                    <th>Nom</th>
+                    <th>Rôle actuel</th>
+                    <th class="text-center">Statut</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td class="fw-semibold">{{ u.username }}</td>
+                    <td>{{ u.nom|default:"—" }}</td>
+                    <td>
+                        <span class="badge {% if u.role == 'admin' %}text-bg-danger{% elif u.role == 'gestionnaire' %}text-bg-warning text-dark{% else %}text-bg-info{% endif %}">
+                            {{ u.role_label }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        {% if u.is_active %}
+                            <span class="badge text-bg-success">Actif</span>
+                        {% else %}
+                            <span class="badge text-bg-secondary">Inactif</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="text-center text-muted py-4">Aucun utilisateur.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

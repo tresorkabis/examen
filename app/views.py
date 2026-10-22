@@ -59,7 +59,8 @@ from .forms import (PromotionForm, EnseignantForm, EtudiantForm, CoursForm,
 from django.contrib.auth.models import User
 from .models import (Etudiant, Cours, Session, Enseignant, Promotion, Examen,
                      Inscription, Grille, GrilleUE, GrilleEtudiant, GrilleNote,
-                     HistoriquePromotion, CotationProjetTutore)
+                     HistoriquePromotion, CotationProjetTutore,
+                     UserProfile, UserRole, get_user_role)
 from .excel_import import (import_etudiants_excel, import_enseignants_excel,
                           import_cours_excel, import_grille_excel)
 
@@ -2689,3 +2690,111 @@ def reglages(request):
         'nb_supprimes': nb_supprimes,
         'nb_total_etapes': HistoriquePromotion.objects.count(),
     })
+
+
+class UserRoleManageView(RoleRequiredMixin, View):
+    """Interface (hors admin Django) de gestion des rôles des utilisateurs.
+
+    Réservée au rôle ``admin`` : elle permet de consulter la liste des
+    utilisateurs et de changer le rôle de chacun.
+
+    Sécurité :
+    - le contrôle d'accès est fait côté serveur par ``RoleRequiredMixin``
+      (le rôle est relu dans ``UserProfile.role`` à chaque requête) ;
+    - le changement de rôle se fait exclusivement en POST avec jeton CSRF ;
+    - le rôle demandé est validé contre ``UserRole.CHOICES`` (jamais de valeur
+      arbitraire injectée en base) ;
+    - l'administrateur ne peut pas retirer son propre rôle d'administrateur
+      (sinon plus personne ne pourrait plus administrer les rôles).
+    """
+
+    allowed_roles = [UserRole.ADMIN]
+    template_name = 'app/user_role_manage.html'
+
+    def handle_no_permission(self):
+        """Refus explicite avec message (au lieu d'une 403 brute)."""
+        if not self.request.user.is_authenticated:
+            return super().handle_no_permission()
+        messages.error(
+            self.request,
+            "Accès refusé : la gestion des rôles est réservée aux administrateurs.")
+        return redirect('dashboard')
+
+    def _contexte(self):
+        # On passe par les profils explicitement : la relation inversée
+        # ``user.profile`` peut être absente (utilisateur créé avant la
+        # migration) ou périmée en cache.
+        profils = {
+            p.user_id: p
+            for p in UserProfile.objects.select_related('user')
+            .filter(user__isnull=False)
+        }
+        utilisateurs = []
+        for u in User.objects.order_by('username'):
+            profil = profils.get(u.pk)
+            if profil is None:
+                profil = UserProfile.ensure_for(u)
+            utilisateurs.append({
+                'pk': u.pk,
+                'username': u.username,
+                'nom': u.get_full_name(),
+                'email': u.email,
+                'is_active': u.is_active,
+                'role': profil.role,
+                'role_label': profil.get_role_display(),
+            })
+        return {
+            'users': utilisateurs,
+            'roles': UserRole.CHOICES,
+            'role_labels': dict(UserRole.CHOICES),
+        }
+
+    def get(self, request):
+        return render(request, self.template_name, self._contexte())
+
+    def post(self, request):
+        username = (request.POST.get('username') or '').strip()
+        role = (request.POST.get('role') or '').strip()
+
+        if not username or not role:
+            messages.error(
+                request, "Veuillez sélectionner un utilisateur et un rôle.")
+            return render(request, self.template_name, self._contexte())
+
+        if role not in dict(UserRole.CHOICES):
+            messages.error(request, "Rôle inconnu : %s." % role)
+            return render(request, self.template_name, self._contexte())
+
+        try:
+            target = User.objects.get(username=username)
+        except User.DoesNotExist:
+            messages.error(
+                request, "Utilisateur « %s » introuvable." % username)
+            return render(request, self.template_name, self._contexte())
+
+        # Garde-fou : on ne permet pas à l'admin de se retirer son propre rôle.
+        if target == request.user and role != UserRole.ADMIN:
+            messages.error(
+                request,
+                "Vous ne pouvez pas retirer votre propre rôle d'administrateur.")
+            return render(request, self.template_name, self._contexte())
+
+        profil = UserProfile.ensure_for(target)
+        ancien_role = profil.role
+        if ancien_role == role:
+            messages.info(
+                request,
+                "Le rôle de %s est déjà « %s »."
+                % (target.username, dict(UserRole.CHOICES)[role]))
+            return redirect('user_role_manage')
+
+        profil.role = role
+        profil.save()
+
+        messages.success(
+            request,
+            "Rôle de %s : « %s » → « %s »."
+            % (target.username,
+               dict(UserRole.CHOICES)[ancien_role],
+               dict(UserRole.CHOICES)[role]))
+        return redirect('user_role_manage')

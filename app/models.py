@@ -1056,11 +1056,24 @@ def get_user_role(user):
     """Retourne le rôle de l'utilisateur.
 
     - Si l'utilisateur n'est pas connecté, retourne None.
+    - Le rôle est stocké dans son profil (``UserProfile.role``) ; il est lu
+      directement en base pour ne jamais renvoyer une valeur périmée (le cache
+      de la relation inversée ``user.profile`` peut être obsolète).
     - Par défaut, les utilisateurs sans rôle explicite sont des 'enseignants'.
     """
     if user is None or not getattr(user, 'is_authenticated', False):
         return None
-    return getattr(user, 'role', UserRole.ENSEIGNANT)
+
+    role = (UserProfile.objects
+            .filter(user_id=user.pk)
+            .values_list('role', flat=True)
+            .first())
+
+    if role in UserRole.ALL:
+        return role
+
+    # Repli sûr : pas de profil (ou profil sans rôle valide) => enseignant.
+    return UserRole.ENSEIGNANT
 
 
 class UserProfile(models.Model):
@@ -1099,10 +1112,14 @@ class UserProfile(models.Model):
 
     @classmethod
     def ensure_for(cls, user):
-        """Crée le profil pour l'utilisateur s'il n'existe pas."""
-        if not hasattr(user, 'profile'):
-            cls.objects.create(user=user)
-        return user.profile
+        """Retourne le profil de l'utilisateur, en le créant s'il manque.
+
+        ``get_or_create`` est utilisé plutôt qu'un test d'existence : le cache
+        de la relation inversée ``user.profile`` peut être obsolète et
+        ``hasattr(user, 'profile')`` renvoie ``True`` avec une valeur ``None``.
+        """
+        profil, _ = cls.objects.get_or_create(user=user)
+        return profil
 
     @property
     def is_admin(self):

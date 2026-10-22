@@ -24,7 +24,8 @@ from .views import _note_ue_proche
 from .models import (Promotion, Enseignant, Etudiant, Cours, Session,
                      Examen, Inscription, Grille, GrilleUE, GrilleEtudiant,
                      GrilleNote, HistoriquePromotion, normaliser_annee,
-                     CotationProjetTutore)
+                     CotationProjetTutore, UserProfile, UserRole,
+                     get_user_role)
 from .forms import ExamenForm, CotationProjetTutoreForm
 
 
@@ -4485,3 +4486,158 @@ class ImpressionCoursPromotionTests(BaseDataMixin, TestCase):
         self.assertNotIn('#}', contenu)
 
 
+class UserRoleTests(TestCase):
+    """Gestion des rôles : résolution du rôle et interface hors admin."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user('boss', 'boss@example.com', 'pass12345')
+        cls.gestionnaire = User.objects.create_user('gestion', 'gestion@example.com', 'pass12345')
+        cls.enseignant = User.objects.create_user('prof', 'prof@example.com', 'pass12345')
+
+        UserProfile.objects.update_or_create(user=cls.admin, defaults={'role': UserRole.ADMIN})
+        UserProfile.objects.update_or_create(user=cls.gestionnaire, defaults={'role': UserRole.GESTIONNAIRE})
+        UserProfile.objects.update_or_create(user=cls.enseignant, defaults={'role': UserRole.ENSEIGNANT})
+
+    # ------------------------------------------------------------------
+    # get_user_role()
+    # ------------------------------------------------------------------
+    def test_role_lu_dans_le_profil(self):
+        """Le rôle provient de ``UserProfile.role`` (et pas de ``user.role``)."""
+        self.assertEqual(get_user_role(self.admin), UserRole.ADMIN)
+        self.assertEqual(get_user_role(self.gestionnaire), UserRole.GESTIONNAIRE)
+        self.assertEqual(get_user_role(self.enseignant), UserRole.ENSEIGNANT)
+
+    def test_role_par_defaut_enseignant_sans_profil(self):
+        """Sans profil, le repli est « enseignant » (jamais None)."""
+        orphelin = User.objects.create_user('orphelin', 'orphelin@example.com', 'pass12345')
+        UserProfile.objects.filter(user=orphelin).delete()
+        self.assertEqual(get_user_role(orphelin), UserRole.ENSEIGNANT)
+
+    def test_role_none_si_non_authentifie(self):
+        from django.contrib.auth.models import AnonymousUser
+        self.assertIsNone(get_user_role(AnonymousUser()))
+        self.assertIsNone(get_user_role(None))
+
+    # ------------------------------------------------------------------
+    # Contrôle d'accès
+    # ------------------------------------------------------------------
+    def test_admin_accede_a_la_page(self):
+        self.client.force_login(self.admin)
+        reponse = self.client.get(reverse('user_role_manage'))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'Gestion des rôles')
+
+    def test_gestionnaire_refuse(self):
+        """Le gestionnaire est redirigé vers le tableau de bord."""
+        self.client.force_login(self.gestionnaire)
+        reponse = self.client.get(reverse('user_role_manage'))
+        self.assertEqual(reponse.status_code, 302)
+        self.assertEqual(reponse.url, reverse('dashboard'))
+
+    def test_enseignant_refuse(self):
+        self.client.force_login(self.enseignant)
+        reponse = self.client.get(reverse('user_role_manage'))
+        self.assertEqual(reponse.status_code, 302)
+        self.assertEqual(reponse.url, reverse('dashboard'))
+
+    def test_anonyme_redirige_vers_login(self):
+        reponse = self.client.get(reverse('user_role_manage'))
+        self.assertEqual(reponse.status_code, 302)
+        self.assertIn(reverse('login'), reponse.url)
+
+    # ------------------------------------------------------------------
+    # Changement de rôle
+    # ------------------------------------------------------------------
+    def test_admin_change_le_role(self):
+        self.client.force_login(self.admin)
+        reponse = self.client.post(reverse('user_role_manage'), {
+            'username': 'prof', 'role': UserRole.GESTIONNAIRE})
+        self.assertEqual(reponse.status_code, 302)
+        self.assertEqual(reponse.url, reverse('user_role_manage'))
+        self.assertEqual(
+            UserProfile.objects.get(user=self.enseignant).role,
+            UserRole.GESTIONNAIRE)
+
+    def test_role_inconnu_refuse(self):
+        self.client.force_login(self.admin)
+        self.client.post(reverse('user_role_manage'), {
+            'username': 'prof', 'role': 'superadmin'})
+        self.assertEqual(
+            UserProfile.objects.get(user=self.enseignant).role,
+            UserRole.ENSEIGNANT)
+
+    def test_utilisateur_inconnu_refuse(self):
+        self.client.force_login(self.admin)
+        self.client.post(reverse('user_role_manage'), {
+            'username': 'fantome', 'role': UserRole.ADMIN})
+        self.assertEqual(
+            UserProfile.objects.get(user=self.enseignant).role,
+            UserRole.ENSEIGNANT)
+
+    def test_gestionnaire_ne_peut_pas_changer_de_role(self):
+        """Un gestionnaire ne peut pas se promouvoir administrateur."""
+        self.client.force_login(self.gestionnaire)
+        reponse = self.client.post(reverse('user_role_manage'), {
+            'username': 'gestion', 'role': UserRole.ADMIN})
+        self.assertEqual(reponse.status_code, 302)
+        self.assertEqual(
+            UserProfile.objects.get(user=self.gestionnaire).role,
+            UserRole.GESTIONNAIRE)
+
+    def test_admin_ne_peut_pas_se_retirer_son_role(self):
+        """Garde-fou : l'admin ne peut pas se rétrograder."""
+        self.client.force_login(self.admin)
+        self.client.post(reverse('user_role_manage'), {
+            'username': 'boss', 'role': UserRole.ENSEIGNANT})
+        self.assertEqual(
+            UserProfile.objects.get(user=self.admin).role,
+            UserRole.ADMIN)
+
+    def test_post_sans_csrf_refuse(self):
+        """Le changement de rôle exige un jeton CSRF valide."""
+        client = self.client_class(enforce_csrf_checks=True)
+        client.force_login(self.admin)
+        reponse = client.post(reverse('user_role_manage'), {
+            'username': 'prof', 'role': UserRole.ADMIN})
+        self.assertEqual(reponse.status_code, 403)
+        self.assertEqual(
+            UserProfile.objects.get(user=self.enseignant).role,
+            UserRole.ENSEIGNANT)
+
+    def test_profil_cree_automatiquement(self):
+        """Un utilisateur créé sans profil reçoit un profil (signal)."""
+        nouveau = User.objects.create_user('nouveau', 'nouveau@example.com', 'pass12345')
+        self.assertTrue(UserProfile.objects.filter(user=nouveau).exists())
+        self.assertEqual(
+            UserProfile.objects.get(user=nouveau).role,
+            UserRole.ENSEIGNANT)
+
+    # ------------------------------------------------------------------
+    # Intégration dans l'interface
+    # ------------------------------------------------------------------
+    def test_menu_affiche_le_lien_roles_pour_admin(self):
+        """Le lien « Rôles » n'apparaît que pour le rôle administrateur."""
+        self.client.force_login(self.admin)
+        reponse = self.client.get(reverse('dashboard'))
+        self.assertContains(reponse, reverse('user_role_manage'))
+
+        self.client.force_login(self.gestionnaire)
+        reponse = self.client.get(reverse('dashboard'))
+        self.assertNotContains(reponse, reverse('user_role_manage'))
+
+    def test_page_affiche_la_liste_des_utilisateurs(self):
+        self.client.force_login(self.admin)
+        reponse = self.client.get(reverse('user_role_manage'))
+        self.assertContains(reponse, 'boss')
+        self.assertContains(reponse, 'Gestionnaire')
+        self.assertContains(reponse, 'Enseignant')
+
+    def test_page_de_gestion_des_roles_est_liee_aux_reglages(self):
+        """Le fil d'Ariane et le bouton de retour vers les réglages."""
+        self.client.force_login(self.admin)
+        reponse = self.client.get(reverse('user_role_manage'))
+        self.assertContains(reponse, reverse('reglages'))
+
+        reponse = self.client.get(reverse('reglages'))
+        self.assertContains(reponse, reverse('user_role_manage'))

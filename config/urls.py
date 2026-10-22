@@ -23,6 +23,7 @@ from app.views import (
     PalmaresView, palmares_ligne,
     DefenseListView,
     reglages,
+    UserRoleManageView,
 )
 
 urlpatterns = [
@@ -107,4 +108,7 @@ urlpatterns = [
 
     # Réglages / maintenance des données
     path('reglages/', reglages, name='reglages'),
+
+    # Gestion des rôles (réservée au rôle administrateur)
+    path('utilisateurs/roles/', UserRoleManageView.as_view(), name='user_role_manage'),
 ]

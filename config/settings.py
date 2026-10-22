@@ -76,6 +76,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'app.context_processors.breadcrumbs',
+                'app.context_processors.current_user_role',
             ],
         },
     },

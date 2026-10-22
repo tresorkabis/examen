@@ -285,6 +285,14 @@
 	            </a>
 	            {% endif %}
 
+            {% if user_is_admin %}
+            <a class="nav-link {% if current_url_name == 'user_role_manage' %}active{% endif %}"
+               href="{% url 'user_role_manage' %}"
+               {% if current_url_name == 'user_role_manage' %}aria-current="page"{% endif %}>
+                <i class="bi bi-shield-lock"></i><span>Rôles</span>
+            </a>
+            {% endif %}
+
 	            <span class="sidebar-group">Défenses</span>
             <a class="nav-link {% if 'defense_list' in current_url_name|default:'' %}active{% endif %}"
                href="{% url 'defense_list' %}">

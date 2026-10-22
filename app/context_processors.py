@@ -58,6 +58,9 @@ BREADCRUMB_MAP = {
 
     # Réglages / maintenance des données
     "reglages": ("Réglages", []),
+
+    # Gestion des rôles
+    "user_role_manage": ("Gestion des rôles", [("Réglages", "reglages")]),
 }
 
 
@@ -80,4 +83,22 @@ def breadcrumbs(request):
             "parents": parents,
         },
         "current_url_name": url_name,
+    }
+
+
+def current_user_role(request):
+    """Expose le rôle de l'utilisateur connecté (``UserProfile.role``).
+
+    Permet aux templates d'afficher le rôle et d'afficher conditionnellement
+    les entrées de menu réservées aux administrateurs, sans dupliquer la
+    logique de résolution du rôle.
+    """
+    user = getattr(request, "user", None)
+    role = None
+    if user is not None and getattr(user, "is_authenticated", False):
+        from .models import get_user_role
+        role = get_user_role(user)
+    return {
+        "user_role": role,
+        "user_is_admin": role == "admin",
     }
