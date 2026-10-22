@@ -6,6 +6,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.utils import timezone
 
 
 def generate_numero_etudiant():
@@ -219,6 +220,13 @@ class Etudiant(models.Model):
     noms = models.CharField(max_length=150, default='')
 
     email = models.EmailField(blank=True, null=True)
+    date_naissance = models.DateField(
+        blank=True, null=True, verbose_name='Date de naissance',
+        help_text="Date de naissance de l'étudiant (facultative).")
+    lieu_naissance = models.CharField(
+        max_length=150, blank=True, default='',
+        verbose_name='Lieu de naissance',
+        help_text="Lieu de naissance de l'étudiant (facultatif).")
     numero_etudiant = models.CharField(
         max_length=20, unique=True, blank=True)
     promotion = models.ForeignKey(Promotion, on_delete=models.CASCADE, related_name='etudiants')
@@ -231,6 +239,19 @@ class Etudiant(models.Model):
     def prenom(self):
         return ''
 
+    @property
+    def age(self):
+        """Âge révolu (années) à la date du jour, ou None si la date est absente."""
+        if not self.date_naissance:
+            return None
+        today = timezone.localdate()
+        age = today.year - self.date_naissance.year
+        # On n'a pas encore fêté l'anniversaire cette année.
+        if (today.month, today.day) < (self.date_naissance.month,
+                                      self.date_naissance.day):
+            age -= 1
+        return age
+
     def save(self, *args, **kwargs):
         if self.pk:
             # Mise à jour : on vérifie si la promotion a changé. Une promotion
@@ -239,7 +260,6 @@ class Etudiant(models.Model):
             # l'historique de leurs années antérieures.
             ancienne_promotion = Etudiant.objects.get(pk=self.pk).promotion
             if ancienne_promotion != self.promotion:
-                from django.utils import timezone
                 # Clôturer l'étape de l'ancienne promotion
                 HistoriquePromotion.objects.filter(
                     etudiant=self, promotion=ancienne_promotion,

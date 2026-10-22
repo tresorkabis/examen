@@ -4,7 +4,7 @@ Couvre : les calculs de moyenne (modèle Inscription), la fiche de cote,
 l'inscription/désinscription des étudiants, la pagination hors bornes et
 l'authentification (accès en écriture protégé).
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from io import BytesIO
 
 from django.core.exceptions import ValidationError
@@ -4641,3 +4641,363 @@ class UserRoleTests(TestCase):
 
         reponse = self.client.get(reverse('reglages'))
         self.assertContains(reponse, reverse('user_role_manage'))
+
+
+class EtudiantDateNaissanceTests(TestCase):
+    """Date de naissance de l'étudiant : modèle, formulaire, affichage, import."""
+
+    def setUp(self):
+        self.user = User.objects.create_user('gest_naissance', 'g@example.com',
+                                             'pass12345')
+        self.user.is_staff = True
+        self.user.save()
+        self.client.force_login(self.user)
+        self.promotion = Promotion.objects.create(nom='L3 INFO A')
+
+    # --- Modèle ---------------------------------------------------------
+
+    def test_champ_facultatif_et_null_par_defaut(self):
+        etu = Etudiant.objects.create(noms='KABISAYI TRESOR',
+                                      promotion=self.promotion)
+        self.assertIsNone(etu.date_naissance)
+        self.assertIsNone(etu.age)
+
+    def test_age_calcule_apres_anniversaire(self):
+        """L'âge révolu : l'anniversaire du jour est déjà fêté."""
+        today = timezone.localdate()
+        # Né il y a 25 ans exactement (années bissextiles comprises).
+        naissance = today.replace(year=today.year - 25)
+        etu = Etudiant.objects.create(noms='KABISAYI TRESOR',
+                                      promotion=self.promotion,
+                                      date_naissance=naissance)
+        self.assertEqual(etu.age, 25)
+
+        # Anniversaire demain : l'âge n'est pas encore fêté.
+        demain = today + timedelta(days=1)
+        etu2 = Etudiant.objects.create(
+            noms='MUJINGA MAGUY', promotion=self.promotion,
+            date_naissance=demain.replace(year=demain.year - 25))
+        self.assertEqual(etu2.age, 24)
+
+    # --- Formulaire -----------------------------------------------------
+
+    def test_formulaire_accepte_une_date_valide(self):
+        from .forms import EtudiantForm
+        form = EtudiantForm(data={'noms': 'KABISAYI TRESOR',
+                                  'promotion': self.promotion.pk,
+                                  'date_naissance': '2000-05-12'})
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['date_naissance'], date(2000, 5, 12))
+
+    def test_formulaire_refuse_une_date_future(self):
+        from .forms import EtudiantForm
+        demain = (timezone.localdate() + timedelta(days=1)).isoformat()
+        form = EtudiantForm(data={'noms': 'KABISAYI TRESOR',
+                                  'promotion': self.promotion.pk,
+                                  'date_naissance': demain})
+        self.assertFalse(form.is_valid())
+        self.assertIn('date_naissance', form.errors)
+
+    def test_formulaire_refuse_un_age_incoherent(self):
+        """Moins de 10 ans ou plus de 100 ans : refusé."""
+        from .forms import EtudiantForm
+        trop_recent = (timezone.localdate() - timedelta(days=365 * 5)).isoformat()
+        form = EtudiantForm(data={'noms': 'KABISAYI TRESOR',
+                                  'promotion': self.promotion.pk,
+                                  'date_naissance': trop_recent})
+        self.assertFalse(form.is_valid())
+        self.assertIn('date_naissance', form.errors)
+
+        trop_ancien = (timezone.localdate() - timedelta(days=365 * 120)).isoformat()
+        form2 = EtudiantForm(data={'noms': 'KABISAYI TRESOR',
+                                   'promotion': self.promotion.pk,
+                                   'date_naissance': trop_ancien})
+        self.assertFalse(form2.is_valid())
+        self.assertIn('date_naissance', form2.errors)
+
+    def test_formulaire_champ_vide_accepte(self):
+        """La date est facultative : une fiche sans date reste valide."""
+        from .forms import EtudiantForm
+        form = EtudiantForm(data={'noms': 'KABISAYI TRESOR',
+                                  'promotion': self.promotion.pk,
+                                  'date_naissance': ''})
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_creation_via_la_vue(self):
+        """La date saisie dans le formulaire est enregistrée."""
+        reponse = self.client.post(reverse('etudiant_create'), {
+            'noms': 'KABISAYI TRESOR',
+            'promotion': self.promotion.pk,
+            'date_naissance': '2000-05-12',
+        })
+        self.assertEqual(reponse.status_code, 302)
+        etu = Etudiant.objects.get(noms='KABISAYI TRESOR')
+        self.assertEqual(etu.date_naissance, date(2000, 5, 12))
+
+
+    # --- Affichage ------------------------------------------------------
+
+    def test_fiche_affiche_la_date_et_l_age(self):
+        etu = Etudiant.objects.create(noms='KABISAYI TRESOR',
+                                      promotion=self.promotion,
+                                      date_naissance=date(2000, 5, 12))
+        reponse = self.client.get(reverse('etudiant_detail', args=[etu.pk]))
+        self.assertContains(reponse, 'Date de naissance')
+        self.assertContains(reponse, '12/05/2000')
+
+    def test_fiche_sans_date_affiche_un_tiret(self):
+        etu = Etudiant.objects.create(noms='KABISAYI TRESOR',
+                                      promotion=self.promotion)
+        reponse = self.client.get(reverse('etudiant_detail', args=[etu.pk]))
+        self.assertContains(reponse, 'Date de naissance')
+
+    def test_rendu_fiche(self):
+        """Contrôle du rendu : date et âge présents sur la fiche."""
+        etu = Etudiant.objects.create(noms='KABISAYI TRESOR',
+                                      promotion=self.promotion,
+                                      date_naissance=date(2000, 5, 12))
+        reponse = self.client.get(reverse('etudiant_detail', args=[etu.pk]))
+        html = reponse.content.decode()
+        self.assertIn('Date de naissance', html)
+        self.assertIn('12/05/2000', html)
+        # L'âge est affiché en toutes lettres.
+        self.assertIn(' ans', html)
+
+    # --- Import Excel ---------------------------------------------------
+
+    def _excel(self, donnees):
+        import pandas as pd
+        bio = BytesIO()
+        with pd.ExcelWriter(bio, engine='openpyxl') as writer:
+            pd.DataFrame(donnees).to_excel(writer, sheet_name='L3 INFO A',
+                                           index=False)
+        bio.seek(0)
+        return bio
+
+    def test_import_avec_colonne_date_de_naissance(self):
+        from .excel_import import import_etudiants_excel
+        bio = self._excel({
+            'Nom': ['KABISAYI'],
+            'Prénom': ['Trésor'],
+            'N° Étudiant': ['L3INFO-001'],
+            'Date de naissance': ['12/05/2000'],
+        })
+        res = import_etudiants_excel(bio)
+        self.assertTrue(res['success'], res['errors'])
+        self.assertEqual(res['created'], 1)
+        etu = Etudiant.objects.get(numero_etudiant='L3INFO-001')
+        self.assertEqual(etu.date_naissance, date(2000, 5, 12))
+
+    def test_import_reimport_met_a_jour_la_date(self):
+        """Un ré-import avec une nouvelle date met à jour la fiche."""
+        from .excel_import import import_etudiants_excel
+        bio = self._excel({
+            'Nom': ['KABISAYI'],
+            'N° Étudiant': ['L3INFO-001'],
+            'Date de naissance': ['12/05/2000'],
+        })
+        import_etudiants_excel(bio)
+
+        bio2 = self._excel({
+            'Nom': ['KABISAYI'],
+            'N\u00b0 \u00c9tudiant': ['L3INFO-001'],
+            'Date de naissance': ['20/06/2001'],
+        })
+        res = import_etudiants_excel(bio2)
+        self.assertEqual(res['updated'], 1)
+        etu = Etudiant.objects.get(numero_etudiant='L3INFO-001')
+        self.assertEqual(etu.date_naissance, date(2001, 6, 20))
+
+    def test_import_cellule_invalide_ignoree_sans_echec(self):
+        """Une date illisible n'échoue pas l'import : la date reste vide."""
+        from .excel_import import import_etudiants_excel
+        bio = self._excel({
+            'Nom': ['KABISAYI'],
+            'N° Étudiant': ['L3INFO-001'],
+            'Date de naissance': ['pas une date'],
+        })
+        res = import_etudiants_excel(bio)
+        self.assertTrue(res['success'], res['errors'])
+        self.assertEqual(res['created'], 1)
+        etu = Etudiant.objects.get(numero_etudiant='L3INFO-001')
+        self.assertIsNone(etu.date_naissance)
+
+
+class EtudiantLieuNaissanceTests(TestCase):
+    """Lieu de naissance de l'étudiant : modèle, formulaire, affichage, import."""
+
+    def setUp(self):
+        self.user = User.objects.create_user('gest_lieu', 'l@example.com',
+                                             'pass12345')
+        self.user.is_staff = True
+        self.user.save()
+        self.client.force_login(self.user)
+        self.promotion = Promotion.objects.create(nom='L3 INFO A')
+
+    # --- Modèle ---------------------------------------------------------
+
+    def test_champ_facultatif_et_vide_par_defaut(self):
+        etu = Etudiant.objects.create(noms='KABISAYI TRESOR',
+                                      promotion=self.promotion)
+        self.assertEqual(etu.lieu_naissance, '')
+
+    # --- Formulaire -----------------------------------------------------
+
+    def test_formulaire_accepte_un_lieu(self):
+        from .forms import EtudiantForm
+        form = EtudiantForm(data={'noms': 'KABISAYI TRESOR',
+                                  'promotion': self.promotion.pk,
+                                  'lieu_naissance': 'Goma'})
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['lieu_naissance'], 'Goma')
+
+    def test_formulaire_champ_vide_accepte(self):
+        """Le lieu est facultatif : une fiche sans lieu reste valide."""
+        from .forms import EtudiantForm
+        form = EtudiantForm(data={'noms': 'KABISAYI TRESOR',
+                                  'promotion': self.promotion.pk,
+                                  'lieu_naissance': ''})
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_formulaire_refuse_un_lieu_trop_long(self):
+        from .forms import EtudiantForm
+        form = EtudiantForm(data={'noms': 'KABISAYI TRESOR',
+                                  'promotion': self.promotion.pk,
+                                  'lieu_naissance': 'x' * 200})
+        self.assertFalse(form.is_valid())
+        self.assertIn('lieu_naissance', form.errors)
+
+    def test_creation_via_la_vue(self):
+        """Le lieu saisi dans le formulaire est enregistré."""
+        reponse = self.client.post(reverse('etudiant_create'), {
+            'noms': 'KABISAYI TRESOR',
+            'promotion': self.promotion.pk,
+            'lieu_naissance': 'Beni',
+        })
+        self.assertEqual(reponse.status_code, 302)
+        etu = Etudiant.objects.get(noms='KABISAYI TRESOR')
+        self.assertEqual(etu.lieu_naissance, 'Beni')
+
+    # --- Affichage ------------------------------------------------------
+
+    def test_fiche_affiche_le_lieu(self):
+        etu = Etudiant.objects.create(noms='KABISAYI TRESOR',
+                                      promotion=self.promotion,
+                                      lieu_naissance='Goma')
+        reponse = self.client.get(reverse('etudiant_detail', args=[etu.pk]))
+        self.assertContains(reponse, 'Lieu de naissance')
+        self.assertContains(reponse, 'Goma')
+
+    # --- Import Excel ---------------------------------------------------
+
+    def _excel(self, donnees):
+        import pandas as pd
+        bio = BytesIO()
+        with pd.ExcelWriter(bio, engine='openpyxl') as writer:
+            pd.DataFrame(donnees).to_excel(writer, sheet_name='L3 INFO A',
+                                           index=False)
+        bio.seek(0)
+        return bio
+
+    def test_import_avec_colonne_lieu_de_naissance(self):
+        from .excel_import import import_etudiants_excel
+        bio = self._excel({
+            'Nom': ['KABISAYI'],
+            'N° Étudiant': ['L3INFO-001'],
+            'Lieu de naissance': ['Goma'],
+        })
+        res = import_etudiants_excel(bio)
+        self.assertTrue(res['success'], res['errors'])
+        self.assertEqual(res['created'], 1)
+        etu = Etudiant.objects.get(numero_etudiant='L3INFO-001')
+        self.assertEqual(etu.lieu_naissance, 'Goma')
+
+    def test_import_date_et_lieu_ne_se_confondent_pas(self):
+        """Les colonnes « Date » et « Lieu » de naissance sont distinguées."""
+        from .excel_import import import_etudiants_excel
+        bio = self._excel({
+            'Nom': ['KABISAYI'],
+            'N° Étudiant': ['L3INFO-001'],
+            'Date de naissance': ['12/05/2000'],
+            'Lieu de naissance': ['Goma'],
+        })
+        res = import_etudiants_excel(bio)
+        self.assertTrue(res['success'], res['errors'])
+        self.assertEqual(res['created'], 1)
+        etu = Etudiant.objects.get(numero_etudiant='L3INFO-001')
+        self.assertEqual(etu.date_naissance, date(2000, 5, 12))
+        self.assertEqual(etu.lieu_naissance, 'Goma')
+
+    def test_import_reimport_met_a_jour_le_lieu(self):
+        from .excel_import import import_etudiants_excel
+        bio = self._excel({
+            'Nom': ['KABISAYI'],
+            'N° Étudiant': ['L3INFO-001'],
+            'Lieu de naissance': ['Goma'],
+        })
+        import_etudiants_excel(bio)
+
+        bio2 = self._excel({
+            'Nom': ['KABISAYI'],
+            'N° Étudiant': ['L3INFO-001'],
+            'Lieu de naissance': ['Beni'],
+        })
+        res = import_etudiants_excel(bio2)
+        self.assertEqual(res['updated'], 1)
+        etu = Etudiant.objects.get(numero_etudiant='L3INFO-001')
+        self.assertEqual(etu.lieu_naissance, 'Beni')
+
+    def test_import_cellule_vide_nefface_pas_le_lieu(self):
+        """Une cellule vide ne doit pas effacer un lieu déjà saisi."""
+        from .excel_import import import_etudiants_excel
+        Etudiant.objects.create(noms='KABISAYI',
+                                 numero_etudiant='L3INFO-001',
+                                 promotion=self.promotion,
+                                 lieu_naissance='Goma')
+        bio = self._excel({
+            'Nom': ['KABISAYI'],
+            'N° Étudiant': ['L3INFO-001'],
+            'Lieu de naissance': [None],
+        })
+        res = import_etudiants_excel(bio)
+        self.assertTrue(res['success'], res['errors'])
+        etu = Etudiant.objects.get(numero_etudiant='L3INFO-001')
+        self.assertEqual(etu.lieu_naissance, 'Goma')
+
+
+
+class DefenseListViewTests(TestCase):
+    """Page « Défenses L3 » : le jury affiché ne doit pas lever d'exception."""
+
+    def setUp(self):
+        self.user = User.objects.create_user('defense', 'def@example.com',
+                                             'pass12345')
+        self.user.is_staff = True
+        self.user.save()
+        self.client.force_login(self.user)
+        self.promotion = Promotion.objects.create(nom='L3 INFO A')
+        self.etudiant = Etudiant.objects.create(noms='NOM0 Prenom0',
+                                                promotion=self.promotion)
+        self.enseignant = Enseignant.objects.create(
+            noms='KABISAYI TRESOR', email='tkabisayi@example.com')
+
+    def test_page_defenses_sans_jury(self):
+        """Fiche sans jury : la page s'affiche (rôles vacants)."""
+        CotationProjetTutore.objects.create(etudiant=self.etudiant)
+        reponse = self.client.get(reverse('defense_list'))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'Défenses L3')
+
+    def test_page_defenses_avec_jury(self):
+        """Jury complet : la page s'affiche (non-régression du .strip())."""
+        lecteur1 = Enseignant.objects.create(noms='LECTEUR Un',
+                                             email='lecteur1@example.com')
+        lecteur2 = Enseignant.objects.create(noms='LECTEUR Deux',
+                                             email='lecteur2@example.com')
+        CotationProjetTutore.objects.create(
+            etudiant=self.etudiant, directeur=self.enseignant,
+            lecteur1=lecteur1, lecteur2=lecteur2)
+        reponse = self.client.get(reverse('defense_list'))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'Complet')
+        self.assertContains(reponse, self.etudiant.noms)

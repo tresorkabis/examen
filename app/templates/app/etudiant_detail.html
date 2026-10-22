@@ -217,6 +217,8 @@
         Étudiant(e) : <strong>{{ etudiant.noms }}</strong> &nbsp;|&nbsp;
         Matricule : <strong>{{ etudiant.numero_etudiant }}</strong> &nbsp;|&nbsp;
         Promotion : <strong>{{ etudiant.promotion.nom }}</strong>
+        {% if etudiant.date_naissance %} &nbsp;|&nbsp; Né(e) le : <strong>{{ etudiant.date_naissance|date:"d/m/Y" }}</strong>{% endif %}
+        {% if etudiant.lieu_naissance %} &nbsp;|&nbsp; Lieu de naissance : <strong>{{ etudiant.lieu_naissance }}</strong>{% endif %}
         {% if grille_ligne %} &nbsp;|&nbsp; Année académique : <strong>{{ grille_ligne.grille.annee_academique }}</strong>{% endif %}
     </div>
 
@@ -298,6 +300,38 @@
                         {{ nb_examens }} examen{{ nb_examens|pluralize }}
                     </span>
                     {% endif %}
+                </div>
+            </div>
+            <div class="row g-2 align-items-center mt-1">
+                <div class="col-md-3">
+                    <span class="text-muted small d-block">Date de naissance</span>
+                    <span>
+                        {% if etudiant.date_naissance %}
+                            <i class="bi bi-calendar3 me-1 text-muted"></i>{{ etudiant.date_naissance|date:"d/m/Y" }}
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted small d-block">Âge</span>
+                    <span>
+                        {% if etudiant.age is not None %}
+                            {{ etudiant.age }} an{{ etudiant.age|pluralize }}
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted small d-block">Lieu de naissance</span>
+                    <span>
+                        {% if etudiant.lieu_naissance %}
+                            <i class="bi bi-geo-alt me-1 text-muted"></i>{{ etudiant.lieu_naissance }}
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </span>
                 </div>
             </div>
         </div>

@@ -1,3 +1,4 @@
+import datetime
 import re
 import unicodedata
 from decimal import Decimal, InvalidOperation
@@ -75,6 +76,39 @@ def _email_pris(email, pris=None):
     if pris is not None:
         return email in pris
     return Enseignant.objects.filter(email=email).exists()
+
+
+def _parse_date_naissance(valeur):
+    """Date de naissance lue dans une cellule Excel (date ou None).
+
+    Accepte une vraie date Python (pandas la donne ainsi pour les vraies
+    dates Excel), une date/heure (`Timestamp`), ou une chaîne dans les
+    formats courants : « JJ/MM/AAAA », « JJ-MM-AAAA », « AAAA-MM-JJ ».
+    Toute valeur illisible est ignorée (None) plutôt que fatale : une
+    cellule mal remplie ne doit pas faire échouer l'import entier.
+    """
+    if valeur is None or (not isinstance(valeur, str) and pd.isna(valeur)):
+        return None
+    if isinstance(valeur, datetime.datetime):
+        return valeur.date()
+    if isinstance(valeur, datetime.date):
+        return valeur
+    if hasattr(valeur, 'to_pydatetime'):      # pandas.Timestamp
+        return valeur.to_pydatetime().date()
+    texte = str(valeur).strip()
+    if not texte:
+        return None
+    # Timestamp pandas : 2003-05-12 00:00:00
+    if ' ' in texte:
+        texte = texte.split(' ')[0]
+    if 'T' in texte:
+        texte = texte.split('T')[0]
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%d.%m.%Y', '%Y/%m/%d'):
+        try:
+            return datetime.datetime.strptime(texte, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 def _numero_ordre(valeur):
@@ -203,7 +237,8 @@ class ReferentielImport:
                                   etudiant)
         self.etudiants_par_numero[etudiant.numero_etudiant] = etudiant
 
-    def maj_etudiant(self, etudiant, noms, promotion, email=None):
+    def maj_etudiant(self, etudiant, noms, promotion, email=None,
+                      date_naissance=None, lieu_naissance=None):
         """Met à jour l'étudiant *seulement* si une valeur a changé.
 
         Un ré-import du même fichier ne génère ainsi aucun UPDATE (retourne
@@ -221,6 +256,17 @@ class ReferentielImport:
         if email and etudiant.email != email:
             etudiant.email = email
             modifie = True
+        # La date de naissance n'est écrasée que si le fichier en fournit
+        # une : une cellule vide ne doit pas effacer une donnée déjà
+        # saisie manuellement.
+        if date_naissance and etudiant.date_naissance != date_naissance:
+            etudiant.date_naissance = date_naissance
+            modifie = True
+        # Même règle pour le lieu : une cellule vide ne doit pas effacer
+        # une donnée déjà saisie manuellement.
+        if lieu_naissance and etudiant.lieu_naissance != lieu_naissance:
+            etudiant.lieu_naissance = lieu_naissance
+            modifie = True
         if not modifie:
             return False
         if ancienne_cle != (promotion.pk, noms):
@@ -236,6 +282,39 @@ def _normalize_header(col_name):
         return ''
     text = str(col_name).lower().replace('n°', 'num').replace('#', 'num')
     return slugify(text)
+
+
+def _colonnes_naissance(col_map):
+    """Retrouve les colonnes « date de naissance » et « lieu de naissance ».
+
+    Les deux en-têtes contiennent « naissance » : on les distingue en
+    vérifiant qu'il s'agit bien d'une *date* (« date », « daten »,
+    « né(e) le », ...) et non d'un *lieu* (« lieu », « ville », « ville de
+    naissance », ...). Sans cette distinction, la colonne « Lieu de
+    naissance » serait détectée comme date et illisible.
+
+    Retourne le couple `(colonne_date, colonne_lieu)`, chaque élément
+    pouvant valoir None si la colonne est absente.
+    """
+    date_col = None
+    lieu_col = None
+    for col, norm in col_map.items():
+        if ('lieu' in norm or 'ville' in norm or 'localite' in norm
+                or 'commune' in norm):
+            if lieu_col is None:
+                lieu_col = col
+            continue
+        if ('naissance' in norm or norm.startswith('daten')
+                or 'date' in norm):
+            if date_col is None:
+                date_col = col
+            continue
+        # « né(e) le », « né le », « ne-e le »…
+        compact = norm.replace('-', '').replace('_', '')
+        if compact in ('ne', 'nee', 'nele', 'neele'):
+            if date_col is None:
+                date_col = col
+    return date_col, lieu_col
 
 
 def import_etudiants_excel(file_obj, default_promotion_id=None):
@@ -295,6 +374,7 @@ def import_etudiants_excel(file_obj, default_promotion_id=None):
                 numero_col = next((c for c, n in col_map.items() if any(k in n for k in ('numero', 'matricule', 'num', 'code'))), None)
                 email_col = next((c for c, n in col_map.items() if 'email' in n or 'mail' in n), None)
                 promo_col = next((c for c, n in col_map.items() if 'promotion' in n or 'promo' in n or 'filiere' in n), None)
+                naissance_col, lieu_col = _colonnes_naissance(col_map)
 
                 for idx, row in df.iterrows():
                     line_num = idx + 2  # Excel 1-based header row + 1
@@ -335,12 +415,25 @@ def import_etudiants_excel(file_obj, default_promotion_id=None):
                         # Email (optionnel)
                         email = str(row[email_col]).strip() if email_col and not pd.isna(row[email_col]) else None
 
+                        # Date de naissance (optionnelle) : cellule illisible
+                        # => None, la date n'est simplement pas renseignée.
+                        date_naissance = None
+                        if naissance_col and not pd.isna(row[naissance_col]):
+                            date_naissance = _parse_date_naissance(row[naissance_col])
+
+                        # Lieu de naissance (optionnel) : texte libre.
+                        lieu_naissance = None
+                        if lieu_col and not pd.isna(row[lieu_col]):
+                            lieu_naissance = str(row[lieu_col]).strip() or None
+
                         # Enregistrement (aucune requête de lecture : le
                         # cache de la promotion fournit l'étudiant).
                         etu = referentiel.etudiant(
                             promo_obj, noms=noms_val, numero=numero)
                         if etu is None:
                             etu = Etudiant(noms=noms_val, email=email,
+                                           date_naissance=date_naissance,
+                                           lieu_naissance=lieu_naissance or '',
                                            promotion=promo_obj)
                             if numero:
                                 etu.numero_etudiant = numero
@@ -348,7 +441,9 @@ def import_etudiants_excel(file_obj, default_promotion_id=None):
                             referentiel.ajouter_etudiant(etu)
                             created_count += 1
                         elif referentiel.maj_etudiant(
-                                etu, noms_val, promo_obj, email):
+                                etu, noms_val, promo_obj, email,
+                                date_naissance=date_naissance,
+                                lieu_naissance=lieu_naissance):
                             updated_count += 1
                         else:
                             skipped_count += 1

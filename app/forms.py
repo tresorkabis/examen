@@ -1,6 +1,8 @@
 from django import forms
 from django.contrib.auth.models import User
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from .models import (Promotion, Enseignant, Etudiant, Cours, Session, Examen,
                      CotationProjetTutore)
@@ -44,9 +46,54 @@ class EnseignantForm(BootstrapModelForm):
 
 
 class EtudiantForm(BootstrapModelForm):
+    """Formulaire de l'étudiant, avec la date de naissance (facultative).
+
+    Le champ « date de naissance » est rendu par un sélecteur natif
+    (`type="date"`) et contrôlé : une date future ou un âge invraisemblable
+    (moins de 10 ans ou plus de 100 ans) est refusé.
+    """
+
+    AGE_MIN = 10
+    AGE_MAX = 100
+
     class Meta:
         model = Etudiant
         fields = '__all__'
+        widgets = {
+            'date_naissance': forms.DateInput(
+                attrs={'type': 'date'}, format='%Y-%m-%d'),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['date_naissance'].input_formats = ['%Y-%m-%d']
+
+    def clean_lieu_naissance(self):
+        lieu_naissance = (self.cleaned_data.get('lieu_naissance') or '').strip()
+        if len(lieu_naissance) > 150:
+            raise ValidationError(
+                "Le lieu de naissance ne peut pas dépasser 150 caractères.")
+        return lieu_naissance
+
+    def clean_date_naissance(self):
+        date_naissance = self.cleaned_data.get('date_naissance')
+        if not date_naissance:
+            return date_naissance
+        today = timezone.localdate()
+        if date_naissance > today:
+            raise ValidationError("La date de naissance ne peut pas être dans le futur.")
+        age = (today.year - date_naissance.year
+               - ((today.month, today.day) <
+                  (date_naissance.month, date_naissance.day)))
+        if age < self.AGE_MIN:
+            raise ValidationError(
+                f"L'âge doit être d'au moins {self.AGE_MIN} ans : "
+                "date de naissance trop récente.")
+        if age > self.AGE_MAX:
+            raise ValidationError(
+                f"L'âge ne peut pas dépasser {self.AGE_MAX} ans "
+                "(date de naissance trop ancienne).")
+        return date_naissance
 
 
 class CoursForm(BootstrapModelForm):
