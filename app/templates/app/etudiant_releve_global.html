@@ -12,6 +12,77 @@
     .ue-row-validee { background-color: rgba(25, 135, 84, 0.04); }
     .ue-row-echec { background-color: rgba(220, 53, 69, 0.04); }
 
+    /* ===== Bloc d'informations de l'étudiant =====
+       Remplace l'ancienne ligne unique « Étudiant(e) : … | Matricule : … |
+       … » par une grille de champs étiquetés (lisibilité) et des tuiles
+       de synthèse du parcours (années, crédits, moyenne pondérée).
+       Le même bloc est repris à l'impression, en plus compact. */
+    .bloc-infos {
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: .6rem;
+        padding: .85rem 1rem;
+        margin-bottom: 1rem;
+    }
+    .infos-titre {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        font-size: .74rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: #6c757d;
+        margin-bottom: .65rem;
+    }
+    .infos-grille {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: .55rem 1.4rem;
+    }
+    .info-item { display: flex; flex-direction: column; min-width: 0; }
+    .info-label {
+        font-size: .7rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: #868e96;
+    }
+    .info-valeur {
+        font-weight: 600;
+        font-size: .95rem;
+        color: #212529;
+        overflow-wrap: anywhere;
+    }
+    .tuiles {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: .6rem;
+        margin-top: .85rem;
+        padding-top: .75rem;
+        border-top: 1px dashed #dee2e6;
+    }
+    .tuile {
+        background: #f1f5fb;
+        border: 1px solid #dbe4f0;
+        border-radius: .5rem;
+        padding: .45rem .6rem;
+        text-align: center;
+    }
+    .tuile-label {
+        display: block;
+        font-size: .7rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: #5a6b85;
+    }
+    .tuile-valeur {
+        display: block;
+        font-size: 1.15rem;
+        font-weight: 700;
+        line-height: 1.25;
+        color: #0d6efd;
+    }
+
     /* ===== Éléments réservés à l'impression ===== */
     .print-only-footer {
         display: none;
@@ -79,11 +150,60 @@
            n'existent qu'une fois, en tête de document — aucun effet sur la
            page 2). */
         .entete-officiel { margin-bottom: 6px !important; }
-        .print-header-meta {
-            font-size: 8.2pt;
-            margin-top: 6px !important;
-            margin-bottom: 12px !important;
-            color: #111;
+
+        /* Bloc d'informations : compacté au maximum pour ne pas rogner la
+           place de la page 1 (la L3 occupe déjà ~87 % de la feuille).
+           Les champs passent sur une seule rangée (6 colonnes), les tuiles
+           de synthèse sur une rangée à droite — la hauteur ajoutée reste
+           inférieure à 2 lignes de tableau. */
+        .bloc-infos {
+            background: transparent !important;
+            border: 1px solid #444 !important;
+            border-radius: 0 !important;
+            padding: 3px 6px !important;
+            margin-bottom: 6px !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+        }
+        .infos-titre {
+            font-size: 7.4pt !important;
+            color: #111 !important;
+            margin-bottom: 2px !important;
+        }
+        .infos-grille {
+            grid-template-columns: repeat(6, 1fr) !important;
+            gap: 1px 10px !important;
+        }
+        .info-label {
+            font-size: 6.6pt !important;
+            color: #444 !important;
+            line-height: 1.1 !important;
+        }
+        .info-valeur {
+            font-size: 8.2pt !important;
+            color: #000 !important;
+            line-height: 1.15 !important;
+        }
+        .tuiles {
+            grid-template-columns: repeat(3, 1fr) !important;
+            gap: 4px !important;
+            margin-top: 3px !important;
+            padding-top: 3px !important;
+            border-top: 1px solid #999 !important;
+        }
+        .tuile {
+            background: transparent !important;
+            border: 1px solid #bbb !important;
+            border-radius: 0 !important;
+            padding: 1px 4px !important;
+        }
+        .tuile-label {
+            font-size: 6.6pt !important;
+            color: #333 !important;
+        }
+        .tuile-valeur {
+            font-size: 9pt !important;
+            color: #000 !important;
         }
 
         /* Pagination contrôlée sur 2 pages : la 1ʳᵉ année du parcours (L3,
@@ -275,12 +395,58 @@
 <div class="releve-global-doc">
     <!-- En-tête officiel RDC/ESFORCA imprimable (masqué à l'écran) -->
     {% include "app/partials/_entete_officiel.html" with titre_document="RELEVÉ DE NOTES GLOBAL" %}
-    <div class="print-header-meta">
-            Étudiant(e) : <strong>{{ etudiant.noms }}</strong> &nbsp;|&nbsp;
-            Matricule : <strong>{{ etudiant.numero_etudiant }}</strong> &nbsp;|&nbsp;
-            Promotion actuelle : <strong>{{ etudiant.promotion.nom }}</strong>
-            {% if periode %} &nbsp;|&nbsp; Période couverte : <strong>{{ periode }}</strong>{% endif %}
+    <!-- Informations de l'étudiant : grille de champs étiquetés + tuiles
+         de synthèse du parcours (remplace l'ancienne ligne unique
+         « Étudiant(e) : … | Matricule : … | … », difficile à lire). -->
+    <div class="bloc-infos">
+        <div class="infos-titre">
+            <i class="bi bi-person-vcard"></i>Informations de l'étudiant
         </div>
+        <div class="infos-grille">
+            <div class="info-item">
+                <span class="info-label">Étudiant(e)</span>
+                <span class="info-valeur">{{ etudiant.noms }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Matricule</span>
+                <span class="info-valeur">{{ etudiant.numero_etudiant|default:"—" }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Promotion actuelle</span>
+                <span class="info-valeur">{{ etudiant.promotion.nom }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Né(e) le</span>
+                <span class="info-valeur">
+                    {% if etudiant.date_naissance %}{{ etudiant.date_naissance|date:"d/m/Y" }}{% else %}—{% endif %}
+                </span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Lieu de naissance</span>
+                <span class="info-valeur">{{ etudiant.lieu_naissance|default:"—" }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Période couverte</span>
+                <span class="info-valeur">{{ periode|default:"—" }}</span>
+            </div>
+        </div>
+        <div class="tuiles">
+            <div class="tuile">
+                <span class="tuile-label">Années de parcours</span>
+                <span class="tuile-valeur">{{ nb_annees }}</span>
+            </div>
+            <div class="tuile">
+                <span class="tuile-label">Crédits validés</span>
+                <span class="tuile-valeur">{{ credits_valides }}/{{ credits_exiges }}</span>
+            </div>
+            <div class="tuile">
+                <span class="tuile-label">Moyenne pondérée</span>
+                <span class="tuile-valeur">
+                    {% if moyenne_globale is not None %}{{ moyenne_globale }}<small>/20</small>{% else %}—{% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
 
     <!-- Barre d'action supérieure (écran uniquement) -->
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3 no-print">
