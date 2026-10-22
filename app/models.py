@@ -1015,19 +1015,6 @@ class CotationProjetTutore(models.Model):
                 ),
             ),
         ]
-    def membres_jury(self):
-        """Enseignants affectés au jury, dans l'ordre (None = rôle vacant)."""
-
-        def _norm(s):
-            return s.strip().lower() if s else ''
-
-        # Contexte : on est déjà dans un jury (cohérent avec la défense).
-        members = {}
-        for membre, libelle in CotationProjetTutore.MEMBRES:
-            eid = _norm(getattr(self, membre))
-            if eid:
-                members[eid] = libelle
-        return members
 
 
 class UserRole:
