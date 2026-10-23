@@ -3388,6 +3388,100 @@ class GrillesPromotionTests(TestCase):
         self.assertEqual(reponse.status_code, 405)
         self.assertTrue(Grille.objects.filter(pk=grille.pk).exists())
 
+class PromotionGenererCoursTests(TestCase):
+    """Génération des cours d'une promotion à partir de ses grilles UE.
+
+    Chaque intitulé d'UE (`GrilleUE.intitule`) des grilles de la promotion
+    doit donner lieu à la création d'un cours rattaché à la promotion,
+    sans duplication si l'opération est relancée. Réservée aux gestionnaires.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            'gestionnaire', 'gestionnaire@example.com', 'pass12345',
+            is_staff=True)
+        self.promotion = Promotion.objects.create(nom='L1 INFO A')
+        self.grille = Grille.objects.create(
+            promotion=self.promotion, annee_academique='2025-2026',
+            total_credits=8, fichier_source='L1 INFO A_2025_2026.xlsx')
+        GrilleUE.objects.create(
+            grille=self.grille, intitule='Informatique Générale', credits=4,
+            semestre=1, groupe='IBA', ordre=1)
+        GrilleUE.objects.create(
+            grille=self.grille, intitule='Mathématiques', credits=4,
+            semestre=1, groupe='IBA', ordre=2)
+
+    def _url(self):
+        return reverse('promotion_generer_cours', args=[self.promotion.pk])
+
+    def test_staff_generere_cours_cree_les_cours(self):
+        """Un gestionnaire crée un cours par intitulé d'UE des grilles."""
+        self.client.force_login(self.user)
+        reponse = self.client.post(self._url())
+        self.assertRedirects(
+            reponse, reverse('promotion_detail', args=[self.promotion.pk]),
+            fetch_redirect_response=False)
+        noms = set(Cours.objects.filter(promotion=self.promotion)
+                   .values_list('nom', flat=True))
+        self.assertEqual(noms, {'Informatique Générale', 'Mathématiques'})
+        # Message de succès restitué après la redirection.
+        suivie = self.client.get(
+            reverse('promotion_detail', args=[self.promotion.pk]))
+        messages = list(suivie.context['messages'])
+        self.assertTrue(any('cours créé' in str(m) for m in messages))
+
+    def test_generer_cours_est_idempotent(self):
+        """Relancer la génération ne duplique aucun cours existant."""
+        self.client.force_login(self.user)
+        self.client.post(self._url())
+        self.client.post(self._url())
+        self.assertEqual(
+            Cours.objects.filter(promotion=self.promotion).count(), 2)
+
+    def test_generer_cours_refuse_le_get(self):
+        """La génération n'accepte que le POST (geste explicite)."""
+        self.client.force_login(self.user)
+        reponse = self.client.get(self._url())
+        self.assertEqual(reponse.status_code, 405)
+        self.assertEqual(Cours.objects.filter(promotion=self.promotion).count(),
+                         0)
+
+    def test_non_staff_refuse_403(self):
+        """Un utilisateur non gestionnaire ne peut pas générer les cours."""
+        non_staff = User.objects.create_user(
+            'enseignant', 'ens@example.com', 'pass12345')
+        self.client.force_login(non_staff)
+        reponse = self.client.post(self._url())
+        self.assertEqual(reponse.status_code, 403)
+        self.assertEqual(Cours.objects.filter(promotion=self.promotion).count(),
+                         0)
+
+    def test_anonyme_redirige_vers_login(self):
+        """Un utilisateur non connecté est redirigé vers la connexion."""
+        reponse = self.client.post(self._url())
+        self.assertRedirects(
+            reponse,
+            f"{reverse('login')}?next={self._url()}",
+            fetch_redirect_response=False)
+
+    def test_bouton_visible_pour_staff(self):
+        """Le bouton apparaît sur la fiche promotion pour un gestionnaire."""
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('promotion_detail', args=[self.promotion.pk]))
+        self.assertContains(reponse, 'Générer les cours depuis les grilles')
+        self.assertContains(
+            reponse, reverse('promotion_generer_cours',
+                             args=[self.promotion.pk]))
+
+    def test_bouton_invisible_pour_non_staff(self):
+        """Le bouton est masqué pour un utilisateur non gestionnaire."""
+        self.client.force_login(User.objects.create_user(
+            'simple', 'simple@example.com', 'pass12345'))
+        reponse = self.client.get(
+            reverse('promotion_detail', args=[self.promotion.pk]))
+        self.assertNotContains(reponse, 'Générer les cours depuis les grilles')
+
 class ApercuGrilleImpressionTests(TestCase):
     """Garde-fous du rendu imprimable de l'aperçu de grille.
 

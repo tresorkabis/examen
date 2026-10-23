@@ -198,6 +198,16 @@
             <a href="{% url 'etudiant_list' %}?toutes=1" class="btn btn-primary">
                 <i class="bi bi-people me-1"></i>Gérer les étudiants
             </a>
+            {% if user.is_staff %}
+            <form method="post" action="{% url 'promotion_generer_cours' promotion.pk %}"
+                  class="d-inline"
+                  onsubmit="return confirm('Générer les cours de « {{ promotion.nom }} » à partir des grilles de délibération existantes ?\\nLes cours déjà créés ne seront pas dupliqués.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-success">
+                    <i class="bi bi-plus-square me-1"></i>Générer les cours depuis les grilles
+                </button>
+            </form>
+            {% endif %}
         </div>
     </div>
 

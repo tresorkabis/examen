@@ -1836,6 +1836,56 @@ def promotion_grille_retirer(request, pk, grille_pk):
     return redirect('promotion_detail', pk=pk)
 
 
+@login_required
+def promotion_generer_cours(request, pk):
+    """Génère les cours d'une promotion à partir de ses grilles de délibération.
+
+    Chaque intitulé d'UE (`GrilleUE.intitule`) des grilles de la promotion
+    donne lieu à la création d'un cours rattaché à la promotion, s'il
+    n'existe pas déjà. L'opération est idempotente : la relancer ne duplique
+    rien. Réservée aux gestionnaires (`is_staff`).
+    """
+    if not request.user.is_staff:
+        raise PermissionDenied
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    promotion = get_object_or_404(Promotion, pk=pk)
+    intitules = (GrilleUE.objects
+                 .filter(grille__promotion=promotion)
+                 .exclude(intitule='')
+                 .values_list('intitule', flat=True)
+                 .distinct()
+                 .order_by('intitule'))
+    cree = 0
+    deja_existant = 0
+    with transaction.atomic():
+        for intitule in intitules:
+            _, created = Cours.objects.get_or_create(
+                promotion=promotion, nom=intitule,
+                defaults={'coefficient': 1})
+            if created:
+                cree += 1
+            else:
+                deja_existant += 1
+    if cree:
+        messages.success(
+            request,
+            f"{cree} cours créé{'s' if cree > 1 else ''} pour « {promotion.nom} »"
+            + (f" ({deja_existant} déjà existant{'s' if deja_existant > 1 else ''})"
+               if deja_existant else ""))
+    elif deja_existant:
+        messages.info(
+            request,
+            f"Aucun nouveau cours : tous les cours des grilles de « {promotion.nom} » "
+            "existent déjà.")
+    else:
+        messages.warning(
+            request,
+            f"Aucune UE trouvée dans les grilles de « {promotion.nom} » : "
+            "rien à générer.")
+    return redirect('promotion_detail', pk=pk)
+
+
 class SessionCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     model = Session
     form_class = SessionForm
