@@ -16,8 +16,12 @@
 {% if session_active %}<span class="badge text-bg-success ms-1">Session en cours : {{ session_active.nom|truncatechars:40 }}</span>{% endif %}</p>
 </div>
 <div class="d-flex flex-wrap gap-2">
+{% if not is_teacher %}
 <a href="{% url 'examen_create' %}" class="btn btn-hero"><i class="bi bi-plus-circle me-1"></i>Programmer un examen</a>
+{% endif %}
+{% if not is_teacher %}
 <a href="{% url 'session_create' %}" class="btn btn-hero-outline"><i class="bi bi-calendar-plus me-1"></i>Nouvelle session</a>
+{% endif %}
 </div>
 </div>
 </div>
@@ -99,6 +103,7 @@
 </div>
 </div>
 {% endif %}
+{% if not is_teacher %}
 <div class="row g-3 g-md-4 mb-4">
 <div class="col-6">
 <div class="mini-stat">
@@ -119,6 +124,7 @@
 </div>
 <a href="{% url 'examen_list' %}" class="stretched-link" aria-label="Voir les examens"></a>
 </div>
+{% endif %}
 </div>
 </div>
 <div class="row g-3 g-md-4">
@@ -151,10 +157,12 @@
 </div>
 {% else %}
 <div class="card-body text-center text-muted py-4">
+{% if not is_teacher %}
 <i class="bi bi-calendar-check fs-3 d-block mb-2"></i>
 Aucun examen à venir.
 <a href="{% url 'examen_create' %}" class="d-block mt-1">Programmer un examen</a>
 </div>
+{% endif %}
 {% endif %}
 </div>
 </div>
@@ -179,7 +187,9 @@ Aucun examen à venir.
 {% else %}
 <div class="card-body text-center text-muted py-4">
 Aucune session.
+{% if not is_teacher %}
 <a href="{% url 'session_create' %}" class="d-block mt-1">Organiser une session</a>
+{% endif %}
 </div>
 {% endif %}
 </div>
@@ -187,9 +197,11 @@ Aucune session.
 <div class="card-body">
 <h5 class="mb-3"><i class="bi bi-lightning-charge me-2 text-warning"></i>Actions rapides</h5>
 <div class="d-grid gap-2">
+{% if not is_teacher %}
 <a href="{% url 'etudiant_create' %}" class="btn btn-outline-primary text-start"><i class="bi bi-person-plus me-2"></i>Ajouter un étudiant</a>
 <a href="{% url 'cours_create' %}" class="btn btn-outline-primary text-start"><i class="bi bi-journal-plus me-2"></i>Créer un cours</a>
 <a href="{% url 'session_create' %}" class="btn btn-outline-primary text-start"><i class="bi bi-calendar-plus me-2"></i>Organiser une session</a>
+{% endif %}
 </div>
 </div>
 </div>

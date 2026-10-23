@@ -855,6 +855,11 @@ class DashboardSessionActiveTests(TestCase):
         self.assertIn('Session en cours : SESSION EN COURS', contenu)
         # La carte Sessions affiche « Session en cours ».
         self.assertIn('Session en cours', contenu)
+        # Un utilisateur non enseignant voit les actions rapides.
+        self.assertIn('Ajouter un étudiant', contenu)
+        self.assertIn('Créer un cours', contenu)
+        self.assertIn('Organiser une session', contenu)
+        self.assertIn('Programmer un examen', contenu)
 
     def test_alerte_et_totaux_globaux_sans_session_active(self):
         Session.objects.filter(est_active=True).update(est_active=False)
@@ -868,6 +873,77 @@ class DashboardSessionActiveTests(TestCase):
         contenu = response.content.decode()
         self.assertIn('Aucune session en cours', contenu)
         self.assertNotIn('Session en cours : SESSION EN COURS', contenu)
+
+
+class DashboardEnseignantTests(TestCase):
+    """Les compteurs de l'enseignant reflètent ses propres étudiants (jamais 0)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.session = Session.objects.create(
+            nom='SESSION EN COURS', semestre=2, type_session='normale',
+            date_debut=date(2026, 6, 1), date_fin=date(2026, 6, 20),
+            est_active=True)
+        cls.promo = Promotion.objects.create(nom='L1')
+        cls.ens = Enseignant.objects.create(
+            noms='ENSEIGNANT Test', email='ens@example.com')
+        cls.autre_ens = Enseignant.objects.create(
+            noms='Autre Enseignant', email='autre@example.com')
+        cls.cours = Cours.objects.create(
+            nom='Cours de l\'enseignant', coefficient=1,
+            enseignant=cls.ens, promotion=cls.promo)
+        cls.examen = Examen.objects.create(
+            cours=cls.cours, session=cls.session,
+            date_examen=timezone.make_aware(datetime(2026, 6, 10, 8, 0)))
+        cls.cours_autre = Cours.objects.create(
+            nom='Cours autre', coefficient=1,
+            enseignant=cls.autre_ens, promotion=cls.promo)
+        cls.examen_autre = Examen.objects.create(
+            cours=cls.cours_autre, session=cls.session,
+            date_examen=timezone.make_aware(datetime(2026, 6, 11, 8, 0)))
+        cls.etu_a = Etudiant.objects.create(
+            noms='ETU A', email='a@example.com', numero_etudiant='L1-001',
+            promotion=cls.promo)
+        cls.etu_b = Etudiant.objects.create(
+            noms='ETU B', email='b@example.com', numero_etudiant='L1-002',
+            promotion=cls.promo)
+        cls.etu_c = Etudiant.objects.create(
+            noms='ETU C', email='c@example.com', numero_etudiant='L1-003',
+            promotion=cls.promo)
+        Inscription.objects.create(examen=cls.examen, etudiant=cls.etu_a)
+        Inscription.objects.create(examen=cls.examen, etudiant=cls.etu_b)
+        Inscription.objects.create(examen=cls.examen_autre, etudiant=cls.etu_c)
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user('ensuser', 'ens@example.com',
+                                             'pass12345')
+        self.ens.user = self.user
+        self.ens.save()
+        self.client.force_login(self.user)
+
+    def test_compteurs_enseignant_etudiants_reels(self):
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.status_code, 200)
+        ctx = response.context
+        self.assertTrue(ctx['is_teacher'])
+        self.assertEqual(ctx['total_enseignants'], 1)
+        # Seulement etu_a et etu_b (inscrits aux examens de l'enseignant) ;
+        # etu_c (autre enseignant) est exclu.
+        self.assertEqual(ctx['total_etudiants'], 2)
+        contenu = response.content.decode()
+        self.assertNotIn('Ajouter un étudiant', contenu)
+        self.assertNotIn('Créer un cours', contenu)
+        self.assertNotIn('Organiser une session', contenu)
+        self.assertNotIn('Nouvelle session', contenu)
+        self.assertNotIn('Programmer un examen', contenu)
+
+    def test_compteurs_enseignant_ne_sont_pas_nuls(self):
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.status_code, 200)
+        ctx = response.context
+        self.assertTrue(ctx['is_teacher'])
+        self.assertNotEqual(ctx['total_etudiants'], 0)
 
 
 class ExamensSessionEnCoursTests(TestCase):

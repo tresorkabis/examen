@@ -132,7 +132,11 @@ def dashboard(request):
             'total_cours': (
                 Cours.objects.filter(enseignant=enseignant).distinct().count()
             ),
-            'total_etudiants': 0,
+            'total_etudiants': (
+                Etudiant.objects
+                .filter(inscriptions__examen__cours__enseignant=enseignant)
+                .distinct().count()
+            ),
             'total_sessions': (
                 Session.objects.filter(examens__cours__enseignant=enseignant).distinct().count()
             ),
