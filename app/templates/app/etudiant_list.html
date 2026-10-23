@@ -60,6 +60,28 @@
                 </a>
             </div>
         </div>
+        {# Formulaire de changement de promotion en lot #}
+        <form method="post" action="{% url 'etudiant_list' %}?promotion={{ promotion_active.pk }}"
+              onsubmit="return confirm('Confirmez-vous le changement de promotion des étudiants sélectionnés ?');"
+              class="card shadow-sm p-3 mb-3 bg-light">
+            {% csrf_token %}
+            <input type="hidden" name="promotion_source" value="{{ promotion_active.pk }}">
+            <label class="form-label mb-2 me-2">Passer les sélectionnés vers :</label>
+            <select name="nouvelle_promotion" class="form-select d-inline-block w-auto me-2" required>
+                <option value="">— Promotion de destination —</option>
+                {% for p in groups %}
+                    {% if p.pk != promotion_active.pk %}
+                        <option value="{{ p.pk }}">{{ p.nom }}</option>
+                    {% endif %}
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-sm btn-warning">
+                <i class="bi bi-arrow-right-circle me-1"></i>Changer la promotion
+            </button>
+            <a href="#" id="select-all" class="btn btn-sm btn-outline-secondary ms-2">
+                <i class="bi bi-check-all me-1"></i>Tout sélectionner
+            </a>
+        </form>
         {% if page_obj and page_obj.paginator.num_pages > 1 %}
         <p class="text-muted small mb-2">
             Page {{ page_obj.number }} sur {{ page_obj.paginator.num_pages }} — {{ page_obj.paginator.count }} étudiant{{ page_obj.paginator.count|pluralize }} au total.
@@ -69,6 +91,8 @@
             <div class="list-group list-group-flush">
                 {% for e in promotion_active.filtered_etudiants %}
                     <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <input type="checkbox" name="etudiants" value="{{ e.pk }}"
+                               class="form-check-input etudiant-check mt-1 me-2 flex-shrink-0">
                         <div>
                             <a href="{% url 'etudiant_detail' e.pk %}" class="fw-semibold text-decoration-none">{{ e.noms }}</a>
                             <span class="badge text-bg-light border ms-2 font-monospace">{{ e.numero_etudiant }}</span>
@@ -145,5 +169,23 @@
         {% endfor %}
     </div>
     {% endif %}
+    <script>
+        (function () {
+            var selectAll = document.getElementById('select-all');
+            var checks = document.querySelectorAll('.etudiant-check');
+            if (!selectAll || !checks.length) { return; }
+            selectAll.addEventListener('click', function (e) {
+                e.preventDefault();
+                var checked = checks[0].checked;
+                checks.forEach(function (cb) { cb.checked = !checked; });
+                selectAll.textContent = (!checked ? 'Tout déselectionner' : 'Tout sélectionner');
+            });
+            // Masquer l'action si aucune destination possible.
+            var select = document.querySelector('select[name="nouvelle_promotion"]');
+            if (select && !select.querySelector('option[value]')) {
+                select.closest('form').style.display = 'none';
+            }
+        })();
+    </script>
 {% endblock %}
 

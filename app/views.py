@@ -18,6 +18,7 @@ from django.http import FileResponse, Http404, HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
+from django.urls import reverse, reverse_lazy
 from django.utils.text import slugify
 from django.views.generic import (ListView, CreateView, UpdateView, DeleteView,
                                   DetailView, View)
@@ -549,6 +550,52 @@ class EtudiantListView(ListView):
         params.pop('page', None)
         context['qs'] = f"&{params.urlencode()}" if params else ""
         return context
+
+    def post(self, request, *args, **kwargs):
+        """Change la promotion des étudiants sélectionnés (staff uniquement)."""
+        if not request.user.is_staff:
+            raise PermissionDenied
+        source_pk = (request.GET.get('promotion')
+                     or request.POST.get('promotion_source', '').strip())
+        if not source_pk or not source_pk.isdigit():
+            messages.error(request, "Promotion source introuvable.")
+            return redirect('etudiant_list')
+        source_pk = int(source_pk)
+
+        destination_pk = request.POST.get('nouvelle_promotion', '').strip()
+        etudiant_pks = request.POST.getlist('etudiants')
+        if not etudiant_pks:
+            messages.warning(request, "Aucun étudiant sélectionné.")
+            return redirect(f"{reverse('etudiant_list')}?promotion={source_pk}")
+        if not destination_pk.isdigit():
+            messages.error(request, "Promotion de destination invalide.")
+            return redirect(f"{reverse('etudiant_list')}?promotion={source_pk}")
+        destination_pk = int(destination_pk)
+        if source_pk == destination_pk:
+            messages.warning(
+                request,
+                "La promotion de destination est identique à l'originale.")
+            return redirect(f"{reverse('etudiant_list')}?promotion={source_pk}")
+
+        source = get_object_or_404(Promotion, pk=source_pk)
+        destination = get_object_or_404(Promotion, pk=destination_pk)
+
+        etudiants = Etudiant.objects.filter(
+            pk__in=etudiant_pks, promotion_id=source_pk)
+        count = 0
+        with transaction.atomic():
+            for etudiant in etudiants:
+                etudiant.promotion = destination
+                etudiant.save()  # save() clôture/ouvre les étapes d'HistoriquePromotion
+                count += 1
+
+        suffixe = '' if count == 1 else 's'
+        messages.success(
+            request,
+            f"{count} étudiant{suffixe} passé{suffixe} de « {source.nom} » "
+            f"vers « {destination.nom} »."
+        )
+        return redirect(f"{reverse('etudiant_list')}?promotion={destination_pk}")
 
     def _page_obj(self, paginator):
         """Page demandée, rabattue sur la dernière page valide si hors bornes."""

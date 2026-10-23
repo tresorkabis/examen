@@ -5171,3 +5171,86 @@ class DefenseListViewTests(TestCase):
         self.assertEqual(reponse.status_code, 200)
         self.assertContains(reponse, 'Complet')
         self.assertContains(reponse, self.etudiant.noms)
+
+
+class EtudiantsChangerPromotionTests(BaseDataMixin, TestCase):
+    """Changement de promotion en lot depuis /etudiants/?promotion=<pk>."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.destination = Promotion.objects.create(nom='L3 INFO B')
+        cls.etudiants = []
+        for i in range(3):
+            cls.etudiants.append(Etudiant.objects.create(
+                noms=f'ETU{i} Prenom{i}',
+                email=f'etu{i}@example.com',
+                numero_etudiant=f'L3INFOA-{i:03d}',
+                promotion=cls.promotion))
+
+    def _connexion_staff(self):
+        user = User.objects.create_user(
+            'staff', 'staff@example.com', 'pass12345')
+        user.is_staff = True
+        user.save()
+        self.client.force_login(user)
+        return user
+
+    def test_anonyme_refuse(self):
+        reponse = self.client.post(
+            reverse('etudiant_list') + '?promotion=' + str(self.promotion.pk),
+            {'nouvelle_promotion': self.destination.pk,
+             'etudiants': [str(e.pk) for e in self.etudiants]})
+        self.assertEqual(reponse.status_code, 403)
+
+    def test_non_staff_refuse(self):
+        self._connexion()
+        reponse = self.client.post(
+            reverse('etudiant_list') + '?promotion=' + str(self.promotion.pk),
+            {'nouvelle_promotion': self.destination.pk,
+             'etudiants': [str(e.pk) for e in self.etudiants]})
+        self.assertEqual(reponse.status_code, 403)
+
+    def test_selection_multiple_staff(self):
+        self._connexion_staff()
+        reponse = self.client.post(
+            reverse('etudiant_list') + '?promotion=' + str(self.promotion.pk),
+            {'nouvelle_promotion': self.destination.pk,
+             'etudiants': [str(e.pk) for e in self.etudiants]},
+            follow=True)
+        self.assertEqual(reponse.status_code, 200)
+        self.assertRedirects(
+            reponse,
+            reverse('etudiant_list') + '?promotion=' + str(self.destination.pk))
+        # Tous les étudiants ont changé de promotion.
+        for e in self.etudiants:
+            e.refresh_from_db()
+            self.assertEqual(e.promotion_id, self.destination.pk)
+        # Un HistoriquePromotion a été ouvert pour chaque étudiant.
+        self.assertEqual(
+            HistoriquePromotion.objects.filter(
+                promotion=self.destination, date_fin__isnull=True).count(),
+            len(self.etudiants))
+
+    def test_aucune_selection(self):
+        self._connexion_staff()
+        reponse = self.client.post(
+            reverse('etudiant_list') + '?promotion=' + str(self.promotion.pk),
+            {'nouvelle_promotion': self.destination.pk},
+            follow=True)
+        self.assertEqual(reponse.status_code, 200)
+        self.assertTrue(
+            any('Aucun étudiant sélectionné' in m.message
+                for m in reponse.context.get('messages', [])))
+
+    def test_meme_promotion_refusee(self):
+        self._connexion_staff()
+        reponse = self.client.post(
+            reverse('etudiant_list') + '?promotion=' + str(self.promotion.pk),
+            {'nouvelle_promotion': self.promotion.pk,
+             'etudiants': [str(self.etudiants[0].pk)]},
+            follow=True)
+        self.assertEqual(reponse.status_code, 200)
+        self.assertTrue(
+            any('identique' in m.message
+                for m in reponse.context.get('messages', [])))
