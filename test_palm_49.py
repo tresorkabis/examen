@@ -1,30 +1,46 @@
-import os
-import django
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-django.setup()
-from app.models import Grille, GrilleEtudiant, Etudiant, HistoriquePromotion
-from django.db.models import Min, Max, F
+def main():
+    import os
 
-g = Grille.objects.get(pk=49)
-print('Grille 49 historique_promotions count:', g.parcours.count())
+    import django
 
-# The exact palmares filter
-meilleures = (
-    GrilleEtudiant.objects
-    .filter(grille__parcours__isnull=False, etudiant__isnull=False)
-    .filter(grille=g)
-    .values('etudiant')
-    .annotate(meilleur_rang=Min('rang'), meilleure_moyenne=Max('moyenne'))
-    .order_by('meilleur_rang', '-meilleure_moyenne')
-)
-print('Palmares count for grille 49:', meilleures.count())
-for m in meilleures:
-    etu = Etudiant.objects.get(pk=m['etudiant'])
-    print('  etudiant_id', m['etudiant'], '|', etu.noms, '| rang', m['meilleur_rang'], '| moy', m['meilleure_moyenne'])
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+    django.setup()
 
-# Rows excluded (etudiant_id=None)
-print()
-print('Rows excluded (etudiant_id=NULL):')
-excl = GrilleEtudiant.objects.filter(grille=g, etudiant_id__isnull=True).order_by('rang')
-for ge in excl:
-    print('  rang', ge.rang, '| noms:', repr(ge.noms), '| moyenne:', ge.moyenne)
+    from django.db.models import Max, Min
+
+    from app.models import Etudiant, Grille, GrilleEtudiant
+
+    grille = Grille.objects.get(pk=49)
+    print('Grille 49 historique_promotions count:', grille.parcours.count())
+
+    meilleures = (
+        GrilleEtudiant.objects
+        .filter(grille__parcours__isnull=False, etudiant__isnull=False)
+        .filter(grille=grille)
+        .values('etudiant')
+        .annotate(meilleur_rang=Min('rang'), meilleure_moyenne=Max('moyenne'))
+        .order_by('meilleur_rang', '-meilleure_moyenne')
+    )
+    print('Palmares count for grille 49:', meilleures.count())
+    for resultat in meilleures:
+        etudiant = Etudiant.objects.get(pk=resultat['etudiant'])
+        print(
+            '  etudiant_id', resultat['etudiant'], '|', etudiant.noms,
+            '| rang', resultat['meilleur_rang'], '| moy',
+            resultat['meilleure_moyenne'],
+        )
+
+    print()
+    print('Rows excluded (etudiant_id=NULL):')
+    exclus = GrilleEtudiant.objects.filter(
+        grille=grille, etudiant_id__isnull=True
+    ).order_by('rang')
+    for ligne in exclus:
+        print(
+            '  rang', ligne.rang, '| noms:', repr(ligne.noms),
+            '| moyenne:', ligne.moyenne,
+        )
+
+
+if __name__ == '__main__':
+    main()

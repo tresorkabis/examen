@@ -84,7 +84,6 @@
                 top: 0;
                 left: 0;
                 bottom: 0;
-                height: 100vh;
                 transform: none;
                 visibility: visible;
                 background-color: #212529;
@@ -92,13 +91,14 @@
                 overflow-y: auto;
             }
             #sidebar .offcanvas-body { flex-grow: 1; display: flex; flex-direction: column; }
-            .main-content { margin-left: 280px; }
+            .main-content.has-sidebar { margin-left: 280px; }
         }
 
         .main-content {
             display: flex;
             flex-direction: column;
             min-height: 100vh;
+            min-height: 100svh;
         }
 
         /* Fil d'Ariane */
@@ -197,10 +197,12 @@
 	    <nav class="navbar navbar-dark bg-dark d-lg-none sticky-top py-2 shadow-sm">
 	        <div class="container-fluid px-3">
 	            <div class="d-flex align-items-center gap-3">
+                {% if user.is_authenticated %}
                 <button class="navbar-toggler me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar"
                         aria-controls="sidebar" aria-expanded="false" aria-label="Ouvrir le menu">
                     <span class="navbar-toggler-icon"></span>
                 </button>
+                {% endif %}
                 <a class="navbar-brand mb-0 d-flex align-items-center" href="{% url 'dashboard' %}">
                     <i class="bi bi-mortarboard-fill me-2"></i>ExamManager
 	                </a>
@@ -377,7 +379,7 @@
     </aside>
 {% endif %}
 
-    <main class="main-content">
+    <main class="main-content{% if user.is_authenticated %} has-sidebar{% endif %}">
         <div class="container flex-grow-1 mt-3">
         {% if breadcrumb %}
         <nav aria-label="Fil d'Ariane">

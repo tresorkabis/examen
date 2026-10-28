@@ -116,7 +116,6 @@ def _compteurs_tableau_de_bord(session):
     return par_cle[cle_session]
 
 
-@login_required
 def dashboard(request):
     """Tableau de bord : statistiques liées à la session en cours.
 

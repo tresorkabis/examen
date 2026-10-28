@@ -3559,7 +3559,7 @@ class ApercuGrilleImpressionTests(TestCase):
         de rendu, jusqu'à la colonne de 24,75 px des grilles à 29 UE)."""
         gabarit = self._gabarit()
         self.assertIn('font-size: 12px;', gabarit)
-        self.assertIn('font-size: 7.5pt;', gabarit)
+        self.assertIn('font-size: 8pt;', gabarit)
         self.assertNotIn(
             'font-size: 6pt;', gabarit,
             "6 pt rendait l'intitulé plus petit que les notes en 7 pt")
@@ -3568,15 +3568,16 @@ class ApercuGrilleImpressionTests(TestCase):
         """Sans largeur explicite, `table-layout: fixed` égalise les colonnes."""
         gabarit = self._gabarit()
         attendus = {
-            '.col-num': '24px',
-            '.col-etudiant': '165px',
-            '.col-moy': '26px',
-            '.col-dec': '34px',
-            '.col-mention': '70px',
+            '.col-num': '22px',
+            '.col-etudiant': '145px',
+            '.col-moy': '24px',
+            '.col-dec': '30px',
+            '.col-mention': '60px',
         }
         for classe, largeur in attendus.items():
             with self.subTest(classe=classe):
-                self.assertIn(f'{classe} {{ width: {largeur};', gabarit)
+                self.assertIn(
+                    f'.table-grille {classe} {{ width: {largeur};', gabarit)
 
     def test_la_colonne_des_noms_autorise_le_repli(self):
         """Le nom est le seul contenu long des colonnes fixes."""
