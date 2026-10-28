@@ -18,7 +18,9 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 from decimal import Decimal
 
-from .excel_import import _alerte_decisions
+from .excel_import import (
+    _alerte_decisions, generate_unique_student_email, normalize_promotion_name,
+)
 from .views import _note_ue_proche
 
 from .models import (Promotion, Enseignant, Etudiant, Cours, Session,
@@ -149,6 +151,33 @@ class ModelesOptimisationTests(TestCase):
         self.assertEqual(etudiant.numero_etudiant, '')
         etudiant.save()
         self.assertRegex(etudiant.numero_etudiant, r'^ETU-\d{8}$')
+
+
+class EdgeCaseImportTests(TestCase):
+    """Régression sur les valeurs incomplètes ou les formulaires en édition."""
+
+    def test_normalize_promotion_name_reconnait_les_alias_sans_casse(self):
+        self.assertEqual(normalize_promotion_name('  l3 info lmd a  '), 'L3 INFO A')
+        self.assertEqual(normalize_promotion_name('l2 ts lmd a'), 'L2 SDA')
+
+    def test_generate_unique_student_email_ne_genere_pas_de_doublon_au_debut(self):
+        self.assertEqual(generate_unique_student_email('Dupont', ''), 'dupont@example.com')
+        self.assertEqual(generate_unique_student_email('', 'Jean'), 'jean@example.com')
+        self.assertEqual(generate_unique_student_email('', ''), 'etudiant@example.com')
+
+    def test_examen_form_conserve_la_salle_a_l_edition(self):
+        promotion = Promotion.objects.create(nom='L2 INFO')
+        cours = Cours.objects.create(nom='Programmation', coefficient=1, promotion=promotion)
+        session = Session.objects.create(
+            nom='Session 1', semestre=1, type_session='normale',
+            date_debut=date(2026, 1, 5), date_fin=date(2026, 2, 5))
+        examen = Examen.objects.create(
+            cours=cours, session=session,
+            date_examen=timezone.make_aware(datetime(2026, 1, 15, 8, 0)),
+            salle='A205')
+
+        form = ExamenForm(instance=examen)
+        self.assertEqual(form.initial.get('salle'), 'A205')
 
 
 class FicheCoteTests(BaseDataMixin, TestCase):

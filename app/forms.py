@@ -136,7 +136,8 @@ class ExamenForm(BootstrapModelForm):
             return ' '.join(parts)
         self.fields['cours'].label_from_instance = label_cours
         self.fields['date_examen'].input_formats = ['%Y-%m-%dT%H:%M']
-        self.fields['salle'].initial = 'Local 1'
+        if instance is None:
+            self.fields['salle'].initial = 'Local 1'
         # À la création, présélectionner la session en cours (si définie).
         if instance is None:
             active = Session.objects.filter(est_active=True).first()

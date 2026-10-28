@@ -34,6 +34,8 @@ fi
 # --- Choix de l'interpréteur Python (virtualenv prioritaire) ---
 if [ -x "$SCRIPT_DIR/.venv/bin/python" ]; then
     PYTHON="$SCRIPT_DIR/.venv/bin/python"
+elif command -v python3.12 >/dev/null 2>&1; then
+    PYTHON="python3.12"
 else
     PYTHON="python3"
 fi

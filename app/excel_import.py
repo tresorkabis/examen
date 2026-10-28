@@ -31,8 +31,12 @@ def normalize_promotion_name(name):
     """Mappe les variations et alias des noms de promotions vers un nom officiel unique."""
     if not name:
         return name
-    clean_name = str(name).strip()
-    return PROMOTION_ALIASES.get(clean_name, clean_name)
+    clean_name = ' '.join(str(name).strip().split())
+    normalized = clean_name.casefold()
+    for alias, target in PROMOTION_ALIASES.items():
+        if ' '.join(alias.split()).casefold() == normalized:
+            return target
+    return clean_name
 
 
 def slugify(text):
@@ -50,7 +54,8 @@ def generate_unique_student_email(nom, prenom, pris=None):
     `pris` : ensemble des emails déjà utilisés. Le passer évite une requête
     SQL par tentative (sinon on retombe sur un `exists()` à chaque essai).
     """
-    base = f"{slugify(prenom)}.{slugify(nom)}" or 'etudiant'
+    base_parts = [slugify(prenom), slugify(nom)]
+    base = '.'.join(part for part in base_parts if part) or 'etudiant'
     email = f"{base}@example.com"
     n = 2
     while _email_pris(email, pris):

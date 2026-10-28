@@ -1,18 +1,21 @@
 # Frameworks
-Django==6.1.1
-asgiref==3.12.1
-sqlparse==0.6.0
+Django==4.2.24
+asgiref==3.8.1
+sqlparse==0.5.1
 
 # Data / imports Excel (gestion des examens)
-pandas==3.0.5
-numpy==2.5.3
+pandas==2.2.3
+numpy==1.26.4
 openpyxl==3.1.5
 et_xmlfile==2.0.0
 python-dateutil==2.9.0.post0
 six==1.17.0
 
 # Export PDF
-reportlab==5.0.1
+reportlab==4.2.5
+
+# Fichiers statiques / WhiteNoise
+whitenoise==6.7.0
 
 # Utilitaires (lecture de PDF de référence)
 pypdf==6.18.0

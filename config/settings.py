@@ -24,12 +24,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Surchargeable via la variable d'environnement DJANGO_SECRET_KEY.
 SECRET_KEY = os.environ.get(
     'DJANGO_SECRET_KEY',
-    'django-insecure-6*g6&mqv^p+p93m#!n(h*u+9_j&&q1h=krh5oml&73rdtg0z*4'
+    '9u4@FzN1!m0&hL2$K8xQ7p^wV6sD3rT%gY5cH8nJ2mLqR4vB7zC6'
 )
 
-# SECURITY WARNING: don't run with debug turned on in production!
-# Surchargeable via DJANGO_DEBUG (ex. « DJANGO_DEBUG=False »).
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+# Pour un usage local, on peut repasser en mode debug avec
+# DJANGO_DEBUG=True ; par défaut le projet est en mode sécurisé.
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
 # Hôtes autorisés (séparés par des virgules via ALLOWED_HOSTS).
 # « testserver » est ajouté pour la suite de tests de Django.
@@ -139,6 +139,17 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# Sécurité renforcée pour le déploiement et les environnements HTTPS.
+# En local / tests, on ne force pas le HTTPS par défaut pour éviter les
+# redirections 301 intempestives qui cassent les tests et le développement.
+SECURE_HSTS_SECONDS = int(os.environ.get('DJANGO_SECURE_HSTS_SECONDS', '31536000')) if not DEBUG else 0
+SECURE_SSL_REDIRECT = os.environ.get('DJANGO_SECURE_SSL_REDIRECT', 'False').lower() == 'true'
+SESSION_COOKIE_SECURE = os.environ.get('DJANGO_SESSION_COOKIE_SECURE', 'False').lower() == 'true'
+CSRF_COOKIE_SECURE = os.environ.get('DJANGO_CSRF_COOKIE_SECURE', 'False').lower() == 'true'
+
+# Clés primaires par défaut (évite les avertissements Django 4.2+)
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 # Authentification

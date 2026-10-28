@@ -9,17 +9,21 @@ if [ ! -f "manage.py" ]; then
     exit 1
 fi
 
-# Utilisation de l'interpréteur du virtualenv si présent
+# Préférence: virtualenv local, puis Python 3.12, puis Python 3/ système.
 if [ -x ".venv/bin/python" ]; then
     PYTHON=".venv/bin/python"
+elif command -v python3.12 >/dev/null 2>&1; then
+    PYTHON="python3.12"
+elif command -v python3 >/dev/null 2>&1; then
+    PYTHON="python3"
 else
     PYTHON="python"
 fi
 
 # Application des migrations pour s'assurer que la DB est à jour
 echo "🔄 Mise à jour de la base de données..."
-$PYTHON manage.py migrate
+"$PYTHON" manage.py migrate
 
 # Lancement du serveur
 echo "🌐 Démarrage du serveur sur http://127.0.0.1:8000/"
-$PYTHON manage.py runserver
+"$PYTHON" manage.py runserver
