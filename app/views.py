@@ -1832,7 +1832,9 @@ def etudiant_attestation_pdf(request, pk):
     etudiant = get_object_or_404(
         Etudiant.objects.select_related('promotion'), pk=pk)
 
-    # Dernière étape du parcours : année académique et mention de délibération.
+    # Dernière étape du parcours : année académique de délibération.
+    # (Le champ `mention` n'existe pas sur le modèle HistoriquePromotion ;
+    #  il est affiché avec des tirets en attendant d'être renseigné ailleurs.)
     derniere_etape = (etudiant.historique_promotions
                       .select_related('promotion', 'grille')
                       .order_by('-annee_academique', '-pk')
@@ -1840,9 +1842,7 @@ def etudiant_attestation_pdf(request, pk):
     annee_academique = (derniere_etape.annee_academique
                         if derniere_etape and derniere_etape.annee_academique
                         else '——————————')
-    mention = (derniere_etape.mention
-               if derniere_etape and derniere_etape.mention
-               else '——————————')
+    mention = '——————————'
 
     tampon = BytesIO()
     doc = SimpleDocTemplate(
@@ -2075,6 +2075,65 @@ def promotion_generer_cours(request, pk):
             request,
             f"Aucune UE trouvée dans les grilles de « {promotion.nom} » : "
             "rien à générer.")
+    return redirect('promotion_detail', pk=pk)
+
+
+@login_required
+def promotion_generer_etudiants(request, pk):
+    """Crée les étudiants d'une promotion à partir de ses grilles de délibération.
+
+    Pour chaque ligne ``GrilleEtudiant`` des grilles de la promotion qui n'est
+    pas encore liée à un ``Etudiant``, cette vue :
+
+    1. crée l'étudiant (noms, promotion) — son numéro étudiant est généré
+       automatiquement par ``Etudiant.save()`` ;
+    2. relie la ligne de grille à l'étudiant créé ;
+    3. inscrit l'étape de parcours dans ``HistoriquePromotion`` (promotion,
+       année académique de la grille, grille elle-même).
+
+    L'opération est idempotente : une ligne déjà liée n'est pas retraite.
+    Réservée aux gestionnaires (``is_staff``).
+    """
+    if not request.user.is_staff:
+        raise PermissionDenied
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    promotion = get_object_or_404(Promotion, pk=pk)
+    lignes = (GrilleEtudiant.objects
+              .filter(grille__promotion=promotion, etudiant__isnull=True)
+              .select_related('grille'))
+    cree = 0
+    deja_lie = 0
+    with transaction.atomic():
+        for ligne in lignes:
+            etudiant = Etudiant.objects.create(
+                noms=ligne.noms, promotion=promotion)
+            ligne.etudiant = etudiant
+            ligne.save(update_fields=['etudiant'])
+            HistoriquePromotion.enregistrer(
+                etudiant, promotion, ligne.grille.annee_academique,
+                ligne.grille)
+            cree += 1
+    total_lignes = GrilleEtudiant.objects.filter(
+        grille__promotion=promotion).count()
+    deja_lie = total_lignes - cree
+    if cree:
+        messages.success(
+            request,
+            f"{cree} étudiant{'s' if cree > 1 else ''} créé{'s' if cree > 1 else ''} "
+            f"pour « {promotion.nom} »"
+            + (f" ({deja_lie} déjà lié{'s' if deja_lie > 1 else ''})"
+               if deja_lie else ""))
+    elif deja_lie:
+        messages.info(
+            request,
+            f"Aucun nouvel étudiant : toutes les lignes des grilles de "
+            f"« {promotion.nom} » sont déjà liées à un étudiant.")
+    else:
+        messages.warning(
+            request,
+            f"Aucune ligne d'étudiant trouvée dans les grilles de "
+            f"« {promotion.nom} » : rien à générer.")
     return redirect('promotion_detail', pk=pk)
 
 

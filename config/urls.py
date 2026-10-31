@@ -10,7 +10,7 @@ from app.views import (
     etudiant_attestation_pdf,
     PromotionListView, PromotionCreateView, PromotionDetailView, PromotionUpdateView, PromotionDeleteView, promotion_bulk_delete,
     promotion_grille_apercu, promotion_grille_retirer,
-    promotion_generer_cours,
+    promotion_generer_cours, promotion_generer_etudiants,
     EnseignantListView, EnseignantDetailView, EnseignantCreateView,
     EnseignantUpdateView, EnseignantDeleteView, EnseignantUserCreateView,
     EnseignantPasswordResetView,
@@ -63,6 +63,7 @@ urlpatterns = [
     path('promotions/<int:pk>/grilles/<int:grille_pk>/', promotion_grille_apercu, name='promotion_grille_apercu'),
     path('promotions/<int:pk>/grilles/<int:grille_pk>/retirer/', promotion_grille_retirer, name='promotion_grille_retirer'),
     path('promotions/<int:pk>/generer-cours/', promotion_generer_cours, name='promotion_generer_cours'),
+    path('promotions/<int:pk>/generer-etudiants/', promotion_generer_etudiants, name='promotion_generer_etudiants'),
     path('promotions/<int:pk>/edit/', PromotionUpdateView.as_view(), name='promotion_update'),
     path('promotions/<int:pk>/delete/', PromotionDeleteView.as_view(), name='promotion_delete'),
 

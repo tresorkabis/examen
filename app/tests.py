@@ -3526,6 +3526,126 @@ class PromotionGenererCoursTests(TestCase):
             reverse('promotion_detail', args=[self.promotion.pk]))
         self.assertNotContains(reponse, 'Générer les cours depuis les grilles')
 
+class PromotionGenererEtudiantsTests(TestCase):
+    """Création des étudiants à partir des lignes de grille de délibération.
+
+    Chaque ligne ``GrilleEtudiant`` sans étudiant lié donne lieu à la
+    création d'un ``Etudiant`` rattaché à la promotion, au lien
+    ``ligne.etudiant`` et à une étape ``HistoriquePromotion``.
+    Réservée aux gestionnaires (``is_staff``).
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            'gestionnaire', 'gestionnaire@example.com', 'pass12345',
+            is_staff=True)
+        self.promotion = Promotion.objects.create(nom='L1 INFO A')
+        self.grille = Grille.objects.create(
+            promotion=self.promotion, annee_academique='2025-2026',
+            total_credits=8, fichier_source='L1 INFO A_2025_2026.xlsx')
+        self.ligne1 = GrilleEtudiant.objects.create(
+            grille=self.grille, noms='Kabis Tresor', rang=1,
+            moyenne='12.50', decision='AD', mention='AB')
+        self.ligne2 = GrilleEtudiant.objects.create(
+            grille=self.grille, noms='Mambo Marie', rang=2,
+            moyenne='14.00', decision='AD', mention='B')
+
+    def _url(self):
+        return reverse('promotion_generer_etudiants', args=[self.promotion.pk])
+
+    def test_staff_generer_etudiants_cree_les_etudiants(self):
+        """Un gestionnaire crée un étudiant par ligne de grille non liée."""
+        self.client.force_login(self.user)
+        reponse = self.client.post(self._url())
+        self.assertRedirects(
+            reponse, reverse('promotion_detail', args=[self.promotion.pk]),
+            fetch_redirect_response=False)
+        etudiants = set(Etudiant.objects.filter(
+            promotion=self.promotion).values_list('noms', flat=True))
+        self.assertEqual(etudiants, {'Kabis Tresor', 'Mambo Marie'})
+        # Chaque ligne est maintenant liée à son étudiant.
+        self.assertIsNotNone(
+            GrilleEtudiant.objects.get(pk=self.ligne1.pk).etudiant_id)
+        self.assertIsNotNone(
+            GrilleEtudiant.objects.get(pk=self.ligne2.pk).etudiant_id)
+        # L'historique de parcours est renseigné pour chaque étudiant.
+        self.assertEqual(
+            HistoriquePromotion.objects.filter(
+                etudiant__promotion=self.promotion,
+                grille=self.grille).count(), 2)
+        # Message de succès restitué après la redirection.
+        suivie = self.client.get(
+            reverse('promotion_detail', args=[self.promotion.pk]))
+        messages = list(suivie.context['messages'])
+        self.assertTrue(any('étudiant' in str(m) for m in messages))
+
+    def test_generer_etudiants_est_idempotent(self):
+        """Relancer la génération ne duplique aucun étudiant déjà lié."""
+        self.client.force_login(self.user)
+        self.client.post(self._url())
+        self.client.post(self._url())
+        self.assertEqual(
+            Etudiant.objects.filter(promotion=self.promotion).count(), 2)
+
+    def test_generer_etudiants_ne_retraite_pas_ligne_deja_liee(self):
+        """Une ligne déjà liée à un étudiant n'est pas recréée."""
+        etudiant_existant = Etudiant.objects.create(
+            noms='Déjà Là', promotion=self.promotion)
+        self.ligne1.etudiant = etudiant_existant
+        self.ligne1.save(update_fields=['etudiant'])
+        self.client.force_login(self.user)
+        self.client.post(self._url())
+        # Seule la ligne2 (non liée) donne lieu à une création.
+        self.assertEqual(
+            Etudiant.objects.filter(promotion=self.promotion).count(), 2)
+        self.ligne1.refresh_from_db()
+        self.assertEqual(self.ligne1.etudiant, etudiant_existant)
+
+    def test_generer_etudiants_refuse_le_get(self):
+        """La création n'accepte que le POST (geste explicite)."""
+        self.client.force_login(self.user)
+        reponse = self.client.get(self._url())
+        self.assertEqual(reponse.status_code, 405)
+        self.assertEqual(Etudiant.objects.filter(
+            promotion=self.promotion).count(), 0)
+
+    def test_non_staff_refuse_403(self):
+        """Un utilisateur non gestionnaire ne peut pas créer les étudiants."""
+        non_staff = User.objects.create_user(
+            'enseignant', 'ens@example.com', 'pass12345')
+        self.client.force_login(non_staff)
+        reponse = self.client.post(self._url())
+        self.assertEqual(reponse.status_code, 403)
+        self.assertEqual(Etudiant.objects.filter(
+            promotion=self.promotion).count(), 0)
+
+    def test_anonyme_redirige_vers_login(self):
+        """Un utilisateur non connecté est redirigé vers la connexion."""
+        reponse = self.client.post(self._url())
+        self.assertRedirects(
+            reponse,
+            f"{reverse('login')}?next={self._url()}",
+            fetch_redirect_response=False)
+
+    def test_bouton_visible_pour_staff(self):
+        """Le bouton apparaît sur la fiche promotion pour un gestionnaire."""
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('promotion_detail', args=[self.promotion.pk]))
+        self.assertContains(reponse, 'Créer les étudiants depuis les grilles')
+        self.assertContains(
+            reponse, reverse('promotion_generer_etudiants',
+                             args=[self.promotion.pk]))
+
+    def test_bouton_invisible_pour_non_staff(self):
+        """Le bouton est masqué pour un utilisateur non gestionnaire."""
+        self.client.force_login(User.objects.create_user(
+            'simple', 'simple@example.com', 'pass12345'))
+        reponse = self.client.get(
+            reverse('promotion_detail', args=[self.promotion.pk]))
+        self.assertNotContains(reponse, 'Créer les étudiants depuis les grilles')
+
+
 class ApercuGrilleImpressionTests(TestCase):
     """Garde-fous du rendu imprimable de l'aperçu de grille.
 
