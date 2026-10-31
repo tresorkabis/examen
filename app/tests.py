@@ -4037,9 +4037,10 @@ class PalmaresLigneDetailTests(TestCase):
         self.assertEqual(reponse.status_code, 200)
         contenu = reponse.content.decode()
         texte = ' '.join(strip_tags(contenu).split())
-        # Deux colonnes parallèles, une par semestre.
-        self.assertEqual(
-            contenu.count('<div class="col-lg-6 print-semester-col">'), 2)
+        # Deux colonnes parallèles, une par semestre (disposition responsive
+        # via Bootstrap row-cols : 1 col sur xs, 2 cols sur sm+).
+        self.assertIn('row-cols-1 row-cols-sm-2 row-cols-lg-2', contenu)
+        self.assertEqual(contenu.count('<div class="col mb-4">'), 2)
         self.assertIn('Semestre 1', contenu)
         self.assertIn('Semestre 2', contenu)
         self.assertIn('Algorithmique 1', contenu)
