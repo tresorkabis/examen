@@ -101,6 +101,16 @@
                         <div class="flex-grow-1 min-width-0">
                             <a href="{% url 'etudiant_detail' e.pk %}" class="fw-semibold text-decoration-none">{{ e.noms }}</a>
                             <span class="badge text-bg-light border ms-2 font-monospace">{{ e.numero_etudiant }}</span>
+                            {% if e.promotion and e.promotion.mention %}
+                            <span class="badge text-bg-secondary ms-2 small">
+                                <i class="bi bi-tag me-1"></i>{{ e.promotion.mention.nom }}
+                            </span>
+                            {% if e.promotion.mention.filiere %}
+                            <span class="badge text-bg-light border ms-1 small">
+                                <i class="bi bi-building me-1"></i>{{ e.promotion.mention.filiere.nom }}
+                            </span>
+                            {% endif %}
+                            {% endif %}
                             {% if e.email %}
                             <div class="small text-muted">
                                 <i class="bi bi-envelope me-1"></i>{{ e.email }}

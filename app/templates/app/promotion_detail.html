@@ -172,6 +172,16 @@
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <div>
             <h2 class="mb-0">{{ promotion.nom }}</h2>
+            {% if promotion.mention %}
+            <span class="badge text-bg-secondary ms-2 small">
+                <i class="bi bi-tag me-1"></i>{{ promotion.mention.nom }}
+            </span>
+            {% endif %}
+            {% if promotion.mention and promotion.mention.filiere %}
+            <span class="badge text-bg-light border ms-1 small">
+                <i class="bi bi-building me-1"></i>{{ promotion.mention.filiere.nom }}
+            </span>
+            {% endif %}
             <div class="print-only small text-muted mt-1 titre-students">
                 Liste des étudiants — {{ etudiants|length }} étudiant{{ etudiants|length|pluralize }}
                 · imprimé le {% now 'd/m/Y à H:i' %}

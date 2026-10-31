@@ -32,6 +32,13 @@ class Promotion(models.Model):
     # `Index(fields=['nom'])`, devenu redondant.
     nom = models.CharField(max_length=100, unique=True)
 
+    # Mention associée à cette promotion (ex. L3 SCF LMD → Comptabilité et
+    # Finance). Permet de lier une promotion à sa filière/mention officielle.
+    mention = models.ForeignKey(
+        'Mention', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='promotions',
+        help_text="Mention officielle associée à cette promotion.")
+
     @property
     def est_l3(self):
         """La promotion est-elle de troisième licence (L3) ?
@@ -48,6 +55,44 @@ class Promotion(models.Model):
 
     class Meta:
         ordering = ['nom']
+
+
+class Filiere(models.Model):
+    """Filière de formation supérieure (ex. Licence en Sciences Informatiques).
+
+    Une filière regroupe plusieurs mentions officielles.
+    """
+    nom = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, default='')
+
+    def __str__(self):
+        return self.nom
+
+    class Meta:
+        ordering = ['nom']
+        verbose_name = 'filière'
+        verbose_name_plural = 'filières'
+
+
+class Mention(models.Model):
+    """Mention officielle rattachée à une filière.
+
+    Ex. : « Génie Logiciel » est rattachée à la filière « Licence en Sciences
+    Informatiques ».
+    """
+    nom = models.CharField(max_length=100, unique=True)
+    filiere = models.ForeignKey(
+        Filiere, on_delete=models.CASCADE, related_name='mentions',
+        help_text="Filière à laquelle cette mention est rattachée.")
+    description = models.TextField(blank=True, default='')
+
+    def __str__(self):
+        return self.nom
+
+    class Meta:
+        ordering = ['nom']
+        verbose_name = 'mention'
+        verbose_name_plural = 'mentions'
 
 
 def normaliser_annee(annee):
@@ -961,6 +1006,103 @@ class CotationProjetTutore(models.Model):
 
     @property
     def pourcentage(self):
+        """Pourcentage de la cotation (total général / 200 * 100)."""
+        total = self.total_general
+        if total is None:
+            return None
+        return (total / Decimal(200) * 100).quantize(Decimal('0.01'))
+
+    @property
+    def mention(self):
+        """Mention calculée sur le pourcentage (vide si vide ou < 50 %)."""
+        pct = self.pourcentage
+        if pct is None:
+            return ''
+        entier = int(pct.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+        for seuil, libelle in self.SEUILS_MENTION:
+            if entier >= seuil:
+                return libelle
+        return ''
+
+    @property
+    def cases_renseignees(self):
+        """Nombre de notes saisies (sur 18) — signale une fiche incomplète."""
+        return sum(len(self.notes_renseignees(membre))
+                   for membre, _ in self.MEMBRES)
+
+    @property
+    def est_complete(self):
+        """Les 18 cases de la fiche sont-elles cotées ?"""
+        return self.cases_renseignees == len(self.RUBRIQUES) * len(self.MEMBRES)
+
+    def __str__(self):
+        return f'Cotation projet tutoré — {self.etudiant}'
+
+    def clean(self):
+        """Un même enseignant ne peut pas cumuler deux rôles dans le jury."""
+        super().clean()
+        roles = [('directeur', self.directeur_id),
+                 ('1er lecteur', self.lecteur1_id),
+                 ('2ème lecteur', self.lecteur2_id)]
+        renseignes = [(libelle, eid) for libelle, eid in roles if eid]
+        vus = {}
+        for libelle, eid in renseignes:
+            if eid in vus:
+                raise ValidationError(
+                    f'Un enseignant ne peut pas cumuler deux rôles dans le '
+                    f'jury ({vus[eid]} et {libelle}).')
+            vus[eid] = libelle
+
+    def membres_jury(self):
+        """Enseignants affectés au jury, dans l'ordre (None = rôle vacant)."""
+        return [self.directeur, self.lecteur1, self.lecteur2]
+
+    @property
+    def jury_complet(self):
+        """Les trois rôles du jury sont-ils affectés ?"""
+        return all(self.membres_jury())
+
+
+def generate_numero_attestation():
+    """Génère un numéro d'attestation unique (ex: ATT-20261031-0001).
+
+    Format : ATT-AAAAMMJJ-NNNN, incrémenté dans la journée pour garantir
+    l'unicité sans collision.
+    """
+    today = timezone.localdate().strftime('%Y%m%d')
+    while True:
+        suffix = ''.join(random.choices(string.digits, k=4))
+        numero = f'ATT-{today}-{suffix}'
+        if not Attestation.objects.filter(numero=numero).exists():
+            return numero
+
+
+class Attestation(models.Model):
+    """Attestation d'authentification délivrée à un étudiant.
+
+    Chaque attestation porte un numéro unique qui figure sur le PDF généré,
+    permettant de la référencer et de la vérifier ultérieurement.
+    """
+
+    etudiant = models.ForeignKey(
+        'Etudiant', on_delete=models.CASCADE,
+        related_name='attestations')
+    numero = models.CharField(max_length=20, unique=True, db_index=True)
+    date_delivrance = models.DateTimeField(auto_now_add=True)
+    fichier_pdf = models.FileField(upload_to='attestations/', null=True, blank=True)
+
+    class Meta:
+        ordering = ['-date_delivrance']
+        verbose_name = 'attestation'
+        verbose_name_plural = 'attestations'
+
+    def save(self, *args, **kwargs):
+        if not self.numero:
+            self.numero = generate_numero_attestation()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.numero} — {self.etudiant.noms}'
         """Pourcentage de réussite sur 200 (None si fiche vide)."""
         total = self.total_general
         if total is None:
