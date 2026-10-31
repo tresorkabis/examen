@@ -22,7 +22,22 @@ except admin.sites.NotRegistered:
 class UserAdmin(BaseUserAdmin):
     inlines = (UserProfileInline,)
 
-admin.site.register([Promotion, Enseignant, Etudiant, Cours, Session,
+@admin.register(Etudiant)
+class EtudiantAdmin(admin.ModelAdmin):
+    """Administration des étudiants.
+
+    Le filtre « promotion » permet d'isoler les étudiants d'une promotion
+    donnée puis de les supprimer en masse via l'action par défaut de
+    l'administration (« Supprimer les étudiants sélectionnés »).
+    """
+    list_display = ("noms", "numero_etudiant", "promotion",
+                    "date_naissance", "lieu_naissance")
+    list_filter = ("promotion",)
+    search_fields = ("noms", "numero_etudiant")
+    ordering = ("noms",)
+
+
+admin.site.register([Promotion, Enseignant, Cours, Session,
                      Inscription, Grille, GrilleUE, GrilleEtudiant, GrilleNote])
 
 @admin.register(CotationProjetTutore)

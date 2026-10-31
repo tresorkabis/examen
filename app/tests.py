@@ -5464,3 +5464,49 @@ class EtudiantsChangerPromotionTests(BaseDataMixin, TestCase):
         self.assertTrue(
             any('identique' in m.message
                 for m in reponse.context.get('messages', [])))
+
+
+class EtudiantAdminTests(TestCase):
+    """L'administration des étudiants permet de supprimer les étudiants
+    d'une promotion : filtrage par promotion puis action de suppression
+    en masse de Django admin."""
+
+    def setUp(self):
+        self.user = User.objects.create_superuser(
+            'admin', 'admin@example.com', 'pass12345')
+        self.promotion = Promotion.objects.create(nom='L1 INFO A')
+        self.etudiant = Etudiant.objects.create(
+            noms='Kabis Tresor', promotion=self.promotion)
+
+    def test_liste_admin_accesible_avec_filtre_promotion(self):
+        """Un superuser accède à la liste admin des étudiants et voit le
+        filtre promotion permettant d'isoler ceux d'une promotion."""
+        self.client.force_login(self.user)
+        reponse = self.client.get(reverse('admin:app_etudiant_changelist'))
+        self.assertEqual(reponse.status_code, 200)
+        # Le nom de la promotion apparaît dans les options du filtre.
+        self.assertContains(reponse, self.promotion.nom)
+        # L'étudiant de la promotion apparaît dans la liste.
+        self.assertContains(reponse, self.etudiant.noms)
+
+    def test_suppression_en_masse_des_etudiants_d_une_promotion(self):
+        """Après filtrage par promotion, la suppression en masse retire
+        les étudiants de cette promotion."""
+        self.client.force_login(self.user)
+        # Premier POST : Django admin affiche la page de confirmation.
+        self.client.post(
+            reverse('admin:app_etudiant_changelist'),
+            {'action': 'delete_selected',
+             '_selected_action': [str(self.etudiant.pk)]},
+            follow=True)
+        # Second POST : confirmation effective de la suppression.
+        reponse = self.client.post(
+            reverse('admin:app_etudiant_changelist'),
+            {'action': 'delete_selected',
+             '_selected_action': [str(self.etudiant.pk)],
+             'post': 'yes'},
+            follow=True)
+        self.assertEqual(reponse.status_code, 200)
+        self.assertFalse(
+            Etudiant.objects.filter(pk=self.etudiant.pk).exists())
+
