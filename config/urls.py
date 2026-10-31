@@ -7,6 +7,7 @@ from app.views import (
     EtudiantListView, EtudiantDetailView, EtudiantCreateView, EtudiantUpdateView, EtudiantDeleteView,
     etudiant_releve_global,
     etudiant_ues_reprendre_pdf,
+    etudiant_attestation_pdf,
     PromotionListView, PromotionCreateView, PromotionDetailView, PromotionUpdateView, PromotionDeleteView, promotion_bulk_delete,
     promotion_grille_apercu, promotion_grille_retirer,
     promotion_generer_cours,
@@ -42,6 +43,7 @@ urlpatterns = [
     path('etudiants/<int:pk>/', EtudiantDetailView.as_view(), name='etudiant_detail'),
     path('etudiants/<int:pk>/releve-global/', etudiant_releve_global, name='etudiant_releve_global'),
     path('etudiants/<int:pk>/ues-a-reprendre.pdf', etudiant_ues_reprendre_pdf, name='etudiant_ues_reprendre_pdf'),
+    path('etudiants/<int:pk>/attestation.pdf', etudiant_attestation_pdf, name='etudiant_attestation_pdf'),
     path('etudiants/<int:pk>/edit/', EtudiantUpdateView.as_view(), name='etudiant_update'),
     path('etudiants/<int:pk>/delete/', EtudiantDeleteView.as_view(), name='etudiant_delete'),
 

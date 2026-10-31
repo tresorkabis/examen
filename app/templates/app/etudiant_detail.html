@@ -234,6 +234,9 @@
             <button type="button" class="btn btn-primary" onclick="window.print()">
                 <i class="bi bi-printer me-1"></i>Imprimer le relevé
             </button>
+            <a href="{% url 'etudiant_attestation_pdf' etudiant.pk %}" class="btn btn-success">
+                <i class="bi bi-file-earmark-pdf me-1"></i>Attestation
+            </a>
             {% if grille_lignes|length > 1 %}
             <a href="{% url 'etudiant_releve_global' etudiant.pk %}" class="btn btn-outline-primary"
                title="Imprimer toutes les années du parcours ({{ grille_lignes|length }} années) sur un seul document">

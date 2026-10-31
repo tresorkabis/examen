@@ -396,7 +396,7 @@ class AuthAccessTests(TestCase):
         response = self.client.get(reverse('dashboard'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Tableau de Bord')
-        self.assertContains(response, 'Prochains examens')
+        self.assertContains(response, 'Examens à venir')
         self.assertContains(response, 'Sessions récentes')
         self.assertContains(response, 'Actions rapides')
         self.assertContains(response, 'Promotions')
@@ -973,6 +973,21 @@ class DashboardEnseignantTests(TestCase):
         ctx = response.context
         self.assertTrue(ctx['is_teacher'])
         self.assertNotEqual(ctx['total_etudiants'], 0)
+
+    def test_dashboard_affiche_nouveaux_blocs(self):
+        """Le dashboard enseignant affiche les cartes et « Examens à venir »."""
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.status_code, 200)
+        contenu = response.content.decode()
+        # Cartes statistiques enseignant
+        self.assertIn('Mes cours', contenu)
+        self.assertIn('Examens programmés', contenu)
+        self.assertIn('Mes étudiants', contenu)
+        # Section « Examens à venir » (nouvel intitulé, pas « Prochains examens »)
+        self.assertIn('Examens à venir', contenu)
+        self.assertNotIn('Prochains examens', contenu)
+        # L'examen de l'enseignant figure dans la liste
+        self.assertIn("Cours de l&#x27;enseignant", contenu)
 
 
 class ExamensSessionEnCoursTests(TestCase):
@@ -3883,6 +3898,50 @@ class UesAReprendreTests(TestCase):
         reponse = self.client.get(
             reverse('etudiant_ues_reprendre_pdf', args=[self.etudiant.pk]))
 
+        self.assertEqual(reponse.status_code, 302)
+        self.assertIn('/login/', reponse.url)
+
+    # --- Attestation d'authentification ----------------------------------
+
+    def _attestation_pdf(self, pk):
+        """Télécharge le PDF d'attestation et en extrait le texte."""
+        from pypdf import PdfReader
+        from io import BytesIO
+        reponse = self.client.get(
+            reverse('etudiant_attestation_pdf', args=[pk]))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse['Content-Type'], 'application/pdf')
+        octets = b''.join(reponse.streaming_content)
+        self.assertTrue(octets.startswith(b'%PDF'))
+        return reponse, ''.join(
+            page.extract_text() or ''
+            for page in PdfReader(BytesIO(octets)).pages)
+
+    def test_attestation_pdf_genere_document_valide(self):
+        """L'attestation PDF contient les informations de l'étudiant."""
+        self.client.force_login(self.user)
+        reponse, texte = self._attestation_pdf(self.etudiant.pk)
+
+        # En-tête institution
+        self.assertIn('RÉPUBLIQUE DÉMOCRATIQUE DU CONGO', texte)
+        self.assertIn('AES FORCA', texte)
+        self.assertIn("ATTESTATION D'AUTHENTIFICATION", texte)
+        # État civil de l'étudiant
+        self.assertIn('APOTA KISOKI COLLINS', texte)
+        self.assertIn('L2SCFLMD-001', texte)
+        self.assertIn('L2 SCF LMD', texte)
+        self.assertIn('Licence Informatique', texte)
+        # Date et signature
+        self.assertIn('Fait à Kinshasa', texte)
+        self.assertIn('Le Directeur des Études', texte)
+        # Nom de fichier
+        self.assertIn('attestation-apota-kisoki-collins-L2SCFLMD-001.pdf',
+                      reponse['Content-Disposition'])
+
+    def test_attestation_pdf_anonyme_redirige_vers_login(self):
+        """L'attestation est réservée aux utilisateurs connectés."""
+        reponse = self.client.get(
+            reverse('etudiant_attestation_pdf', args=[self.etudiant.pk]))
         self.assertEqual(reponse.status_code, 302)
         self.assertIn('/login/', reponse.url)
 

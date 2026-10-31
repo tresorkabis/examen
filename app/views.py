@@ -172,6 +172,11 @@ def dashboard(request):
         'is_teacher': is_teacher,
         'enseignant': enseignant,
     }
+    if is_teacher:
+        context['cours_enseignes'] = (
+            Cours.objects.filter(enseignant=enseignant)
+            .select_related('promotion')
+            .order_by('-pk')[:5])
     return render(request, 'app/dashboard.html', context)
 
 
@@ -1799,6 +1804,147 @@ def etudiant_ues_reprendre_pdf(request, pk):
     # `as_attachment=False` : le PDF s'ouvre dans l'onglet (donc
     # immédiatement imprimable) au lieu d'être téléchargé — c'est un
     # document de travail à remettre à l'étudiant, pas une archive.
+    return FileResponse(
+        tampon, as_attachment=False, content_type='application/pdf',
+        filename=nom_fichier)
+
+
+@login_required
+def etudiant_attestation_pdf(request, pk):
+    """Génère une attestation d'authentification pour un étudiant.
+
+    Modèle inspiré de l'attestation officielle (AES FORCA, RDC) :
+    en-tête institution, titre ATTESTATION D'AUTHENTIFICATION, état civil
+    de l'étudiant (noms, matricule, date/lieu de naissance), filière,
+    année académique, mention, date et lieu de délivrance, et emplacement
+    de signature du Directeur des Études.
+
+    Le PDF s'ouvre dans l'onglet (`as_attachment=False`) pour être
+    immédiatement imprimable.
+    """
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (Paragraph, SimpleDocTemplate, Spacer,
+                                    HRFlowable)
+
+    etudiant = get_object_or_404(
+        Etudiant.objects.select_related('promotion'), pk=pk)
+
+    # Dernière étape du parcours : année académique et mention de délibération.
+    derniere_etape = (etudiant.historique_promotions
+                      .select_related('promotion', 'grille')
+                      .order_by('-annee_academique', '-pk')
+                      .first())
+    annee_academique = (derniere_etape.annee_academique
+                        if derniere_etape and derniere_etape.annee_academique
+                        else '——————————')
+    mention = (derniere_etape.mention
+               if derniere_etape and derniere_etape.mention
+               else '——————————')
+
+    tampon = BytesIO()
+    doc = SimpleDocTemplate(
+        tampon, pagesize=A4,
+        leftMargin=20 * mm, rightMargin=20 * mm,
+        topMargin=20 * mm, bottomMargin=20 * mm,
+        title=f"Attestation d'authentification - {etudiant.noms}")
+
+    styles = getSampleStyleSheet()
+
+    style_institution = ParagraphStyle(
+        'Institution', parent=styles['Normal'],
+        fontName='Helvetica-Bold', fontSize=13, alignment=1,
+        textColor=colors.HexColor('#1a3a5c'))
+    style_aes = ParagraphStyle(
+        'AES', parent=styles['Normal'],
+        fontName='Helvetica-Bold', fontSize=12, alignment=1,
+        textColor=colors.HexColor('#0b3d91'))
+    style_service = ParagraphStyle(
+        'Service', parent=styles['Normal'],
+        fontName='Helvetica', fontSize=10, alignment=1,
+        textColor=colors.HexColor('#4a4a4a'))
+    style_titre = ParagraphStyle(
+        'Titre', parent=styles['Normal'],
+        fontName='Helvetica-Bold', fontSize=16, alignment=1,
+        textColor=colors.HexColor('#0b3d91'), spaceAfter=2)
+    style_corps = ParagraphStyle(
+        'Corps', parent=styles['Normal'],
+        fontName='Helvetica', fontSize=11, alignment=0,
+        leading=17, spaceAfter=7)
+    style_corps_centre = ParagraphStyle(
+        'CorpsCentre', parent=styles['Normal'],
+        fontName='Helvetica', fontSize=11, alignment=1,
+        leading=17, spaceAfter=7)
+    style_signature = ParagraphStyle(
+        'Signature', parent=styles['Normal'],
+        fontName='Helvetica', fontSize=10, alignment=1,
+        textColor=colors.HexColor('#4a4a4a'))
+
+    date_naissance = (etudiant.date_naissance.strftime('%d/%m/%Y')
+                      if etudiant.date_naissance else '——————————')
+    lieu_naissance = etudiant.lieu_naissance or '——————————'
+    matricule = etudiant.numero_etudiant or '——————————'
+
+    elements = []
+
+    # --- En-tête institution ---
+    elements.append(Paragraph("RÉPUBLIQUE DÉMOCRATIQUE DU CONGO", style_institution))
+    elements.append(Spacer(1, 2 * mm))
+    elements.append(Paragraph("AES FORCA", style_aes))
+    elements.append(Spacer(1, 1 * mm))
+    elements.append(Paragraph("Direction des Études · Service des Scolarités", style_service))
+    elements.append(Spacer(1, 5 * mm))
+    elements.append(HRFlowable(width="100%", thickness=1.2, color=colors.HexColor('#0b3d91')))
+    elements.append(Spacer(1, 6 * mm))
+
+    # --- Titre du document ---
+    elements.append(Paragraph("ATTESTATION D'AUTHENTIFICATION", style_titre))
+    elements.append(Spacer(1, 3 * mm))
+
+    # --- Corps du texte ---
+    elements.append(Paragraph(
+        f"Nous certifions que <b>{etudiant.noms}</b>, né(e) le "
+        f"<b>{date_naissance}</b> à <b>{lieu_naissance}</b>, "
+        f"matricule n° <b>{matricule}</b>, est régulièrement inscrit(e) "
+        f"à l'AES FORCA pour l'année académique <b>{annee_academique}</b>.",
+        style_corps))
+
+    elements.append(Paragraph(
+        f"Il/Elle suit les cours de la promotion <b>{etudiant.promotion.nom}</b> "
+        f"(Licence Informatique) et est titulaire d'une mention "
+        f"<b>{mention}</b>.",
+        style_corps))
+
+    elements.append(Paragraph(
+        "La présente attestation lui est délivrée à sa demande pour servir "
+        f"et valoir ce que de droit.",
+        style_corps))
+
+    elements.append(Spacer(1, 12 * mm))
+
+    # --- Date et lieu de délivrance ---
+    from django.utils import timezone
+    date_du_jour = timezone.localdate()
+    elements.append(Paragraph(
+        f"Fait à Kinshasa, le {date_du_jour:%d %B %Y}.",
+        style_corps_centre))
+
+    elements.append(Spacer(1, 18 * mm))
+
+    # --- Signature ---
+    elements.append(HRFlowable(width="45%", thickness=0.8, color=colors.black))
+    elements.append(Spacer(1, 2 * mm))
+    elements.append(Paragraph("Le Directeur des Études", style_signature))
+    elements.append(Spacer(1, 1 * mm))
+    elements.append(Paragraph("AES FORCA", style_signature))
+
+    doc.build(elements)
+    tampon.seek(0)
+
+    nom_fichier = (f"attestation-{slugify(etudiant.noms)}"
+                   f"-{etudiant.numero_etudiant or 'sans-matricule'}.pdf")
     return FileResponse(
         tampon, as_attachment=False, content_type='application/pdf',
         filename=nom_fichier)
