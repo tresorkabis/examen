@@ -1844,10 +1844,12 @@ def etudiant_attestation_pdf(request, pk):
         annee_academique = (derniere_grille_etudiant.grille.annee_academique
                             if derniere_grille_etudiant.grille.annee_academique
                             else '——————————')
-        # X : mention de la filière (puisque vient de la Promotion/ Filière)
-        mention_filiere = (etudiant.promotion.mention.nom
+        # X : décision de l'étudiant dans la grille
+        decision = (derniere_grille_etudiant.decision or '—')
                            if etudiant.promotion and etudiant.promotion.mention
                            else '—')
+        # X : décision de l'étudiant dans la grille
+        decision = (derniere_grille_etudiant.decision or '—')
         # Y : Mention de la grille (telle quelle, depuis la délibération)
         mention = (derniere_grille_etudiant.mention or '—')
         filiere = (derniere_grille_etudiant.grille.promotion.nom

@@ -30,7 +30,7 @@ SECRET_KEY = os.environ.get(
 # Pour un usage local, on peut repasser en mode debug avec
 # DJANGO_DEBUG=True ; par défaut le projet est en mode sécurisé.
 DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
-
+DEBUG = True
 # Hôtes autorisés (séparés par des virgules via ALLOWED_HOSTS).
 # « testserver » est ajouté pour la suite de tests de Django.
 ALLOWED_HOSTS = [
