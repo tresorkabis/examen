@@ -1846,8 +1846,8 @@ def etudiant_attestation_pdf(request, pk):
                             else '——————————')
         # X : décision de l'étudiant dans la grille
         decision = (derniere_grille_etudiant.decision or '—')
-                           if etudiant.promotion and etudiant.promotion.mention
-                           else '—')
+                           # Y : Mention de la grille (telle quelle, depuis la délibération)
+        mention = (derniere_grille_etudiant.mention or '—')
         # X : décision de l'étudiant dans la grille
         decision = (derniere_grille_etudiant.decision or '—')
         # Y : Mention de la grille (telle quelle, depuis la délibération)
