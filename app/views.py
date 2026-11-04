@@ -1393,6 +1393,222 @@ class CoursDetailView(DetailView):
         return ctx
 
 
+def _dessiner_fiche_prestation(c, cours, numero_page, total_pages):
+    """Dessine une page A4 portrait de la fiche de prestation d'un cours."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    page_width, page_height = A4
+    margin = 28
+    navy = colors.HexColor('#18334A')
+    ink = colors.HexColor('#233746')
+    muted = colors.HexColor('#69777C')
+    brass = colors.HexColor('#A58A55')
+    rule = colors.HexColor('#D7D6CF')
+    paper = colors.HexColor('#FBFAF6')
+
+    def fit_text(value, x, y, max_width, size=9, font='Helvetica-Bold'):
+        value = str(value or '')
+        while size > 6 and stringWidth(value, font, size) > max_width:
+            size -= .25
+        c.setFont(font, size)
+        c.drawString(x, y, value)
+
+    c.setFillColor(muted)
+    c.setFont('Helvetica', 8)
+    c.drawCentredString(page_width / 2, page_height - 23,
+                        'RÉPUBLIQUE DÉMOCRATIQUE DU CONGO')
+    c.setFillColor(navy)
+    c.setFont('Helvetica-Bold', 8.5)
+    c.drawCentredString(page_width / 2, page_height - 36,
+                        'ÉCOLE SUPÉRIEURE DE FORMATION DES CADRES')
+    c.setFont('Helvetica-Bold', 12)
+    c.drawCentredString(page_width / 2, page_height - 48, 'ESFORCA')
+    c.setStrokeColor(brass)
+    c.setLineWidth(1.1)
+    c.line(margin, page_height - 58, page_width - margin, page_height - 58)
+
+    c.setFillColor(ink)
+    c.setFont('Helvetica-Bold', 14)
+    c.drawString(margin, page_height - 80,
+                 'FICHE DE PRESTATION DES ENSEIGNEMENTS')
+    c.setFillColor(muted)
+    c.setFont('Helvetica', 8)
+    c.drawString(margin, page_height - 94,
+                 'Document de suivi des séances réalisées')
+    c.drawRightString(page_width - margin, page_height - 94,
+                      f'Fiche {numero_page} / {total_pages}')
+
+    box_top = page_height - 108
+    row_height = 29
+    box_bottom = box_top - 2 * row_height
+    box_width = page_width - 2 * margin
+    c.setFillColor(paper)
+    c.setStrokeColor(rule)
+    c.roundRect(margin, box_bottom, box_width, 2 * row_height,
+                4, fill=1, stroke=1)
+    c.line(margin, box_top - row_height, page_width - margin,
+           box_top - row_height)
+
+    def field(x, top, width, label, value, size=9):
+        c.setFillColor(muted)
+        label_size = 6.7
+        while (label_size > 5.5 and
+               stringWidth(label.upper(), 'Helvetica', label_size) > width - 14):
+            label_size -= .2
+        c.setFont('Helvetica', label_size)
+        c.drawString(x + 7, top - 8.5, label.upper())
+        fit_text(value, x + 7, top - 19.5, width - 14, size)
+
+    widths_top = [box_width * .46, box_width * .18,
+                  box_width * .22, box_width * .14]
+    x = margin
+    top_fields = [
+        ('Cours', cours.nom),
+        ('Promotion', cours.promotion.nom),
+        ('Titulaire', cours.enseignant.noms if cours.enseignant else 'À compléter'),
+        ('Téléphone', '________________'),
+    ]
+    for width, (label, value) in zip(widths_top, top_fields):
+        field(x, box_top, width, label, value, 9)
+        x += width
+        if x < page_width - margin - 1:
+            c.setStrokeColor(rule)
+            c.line(x, box_top - row_height, x, box_top)
+
+    widths_bottom = [box_width * .27, box_width * .27,
+                     box_width * .18, box_width * .28]
+    bottom_fields = [
+        ('Date de début', '__/__/____'),
+        ('Date de fin', '__/__/____'),
+        ('Coefficient', str(cours.coefficient)),
+        ('Séances prévues', str(cours.nombre_seances_prestation)),
+    ]
+    x = margin
+    for width, (label, value) in zip(widths_bottom, bottom_fields):
+        field(x, box_top - row_height, width, label, value, 9)
+        x += width
+        if x < page_width - margin - 1:
+            c.setStrokeColor(rule)
+            c.line(x, box_bottom, x, box_top - row_height)
+
+    table_x = margin
+    table_top = box_bottom - 14
+    header_height = 21
+    columns = [24, 52, 150, 70, 90, 77, 76]
+    headings = ['N°', 'DATE', 'CONTENU / ACTIVITÉ PÉDAGOGIQUE',
+                'HEURES PRESTÉES', 'SIGNATURE DU TITULAIRE',
+                'VISA FILIÈRE', 'VISA APPARITAIRE']
+    c.setFillColor(navy)
+    c.rect(table_x, table_top - header_height, box_width, header_height,
+           fill=1, stroke=0)
+    c.setFillColor(colors.white)
+    x = table_x
+    for width, heading in zip(columns, headings):
+        heading_size = 6.8
+        while (heading_size > 5.5 and
+               stringWidth(heading, 'Helvetica-Bold', heading_size) > width - 6):
+            heading_size -= .2
+        c.setFont('Helvetica-Bold', heading_size)
+        c.drawCentredString(x + width / 2, table_top - 13.7, heading)
+        x += width
+
+    total_sessions = cours.nombre_seances_prestation
+    sessions_par_page = (total_sessions + total_pages - 1) // total_pages
+    start_num = (numero_page - 1) * sessions_par_page
+    rows = min(sessions_par_page, total_sessions - start_num)
+    row_height = min(25, (table_top - header_height - 55) / max(rows, 1))
+    grid_top = table_top - header_height
+    grid_bottom = grid_top - rows * row_height
+    for index in range(rows):
+        y_top = grid_top - index * row_height
+        y_bottom = y_top - row_height
+        c.setFillColor(colors.white if index % 2 else paper)
+        c.rect(table_x, y_bottom, box_width, row_height,
+               fill=1, stroke=0)
+        c.setFillColor(muted)
+        c.setFont('Helvetica', 8)
+        c.drawCentredString(table_x + columns[0] / 2,
+                            y_bottom + row_height / 2 - 2.5,
+                            str(start_num + index + 1))
+
+    c.setStrokeColor(rule)
+    c.setLineWidth(.45)
+    c.rect(table_x, grid_bottom, box_width,
+           header_height + rows * row_height, fill=0, stroke=1)
+    for index in range(1, rows + 1):
+        y = grid_top - index * row_height
+        c.line(table_x, y, table_x + box_width, y)
+    x = table_x
+    for width in columns[:-1]:
+        x += width
+        c.line(x, grid_bottom, x, table_top)
+
+    c.setFillColor(muted)
+    c.setFont('Helvetica', 7)
+    c.drawString(margin, 17,
+                 'Chaque ligne correspond à une séance de prestation. '
+                 'À compléter après réalisation du cours.')
+    c.drawRightString(page_width - margin, 17,
+                      f'ESFORCA  ·  {cours.promotion.nom}')
+    c.showPage()
+
+
+def _generer_fiches_prestation(cours_list, filename):
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+
+    cours_list = list(cours_list)
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4, pageCompression=1)
+    pdf.setTitle('Fiches de prestation des enseignements')
+    pdf.setAuthor('ESFORCA')
+    for cours in cours_list:
+        total_sessions = cours.nombre_seances_prestation
+        # Limiter à 20 séances par page pour conserver des lignes hautes.
+        total_pages = (total_sessions + 19) // 20
+        for page_number in range(1, total_pages + 1):
+            _dessiner_fiche_prestation(pdf, cours, page_number, total_pages)
+    pdf.save()
+    buffer.seek(0)
+    return FileResponse(buffer, as_attachment=False, filename=filename,
+                        content_type='application/pdf')
+
+
+@login_required
+def cours_fiche_prestation_pdf(request, pk):
+    cours = get_object_or_404(
+        Cours.objects.select_related('promotion', 'enseignant'), pk=pk)
+    nom_fichier = (f'fiche-prestation-{cours.pk}-'
+                   f'{slugify(cours.nom) or "cours"}.pdf')
+    return _generer_fiches_prestation([cours], nom_fichier)
+
+
+@login_required
+def cours_fiches_prestation_pdf(request):
+    cours = Cours.objects.select_related('promotion', 'enseignant')
+    promotion = request.GET.get('promotion', '').strip()
+    if promotion.isdigit():
+        cours = cours.filter(promotion_id=int(promotion))
+    cours = cours.order_by('promotion__nom', 'nom')
+    nom_fichier = ('fiches-prestation-cours.pdf' if not promotion.isdigit()
+                   else f'fiches-prestation-promotion-{promotion}.pdf')
+    return _generer_fiches_prestation(cours, nom_fichier)
+
+
+@login_required
+def cours_fiches_prestation_selection_pdf(request):
+    """Aperçu PDF des fiches correspondant aux cours cochés dans la liste."""
+    pks = request.GET.getlist('cours_ids') or request.POST.getlist('cours_ids')
+    ids = [int(pk) for pk in pks if pk.isdigit()]
+    if not ids:
+        return redirect('cours_list')
+    cours = (Cours.objects.select_related('promotion', 'enseignant')
+             .filter(pk__in=ids).order_by('promotion__nom', 'nom'))
+    return _generer_fiches_prestation(cours, 'fiches-prestation-selection.pdf')
+
+
 @login_required
 def cours_bulk_delete(request):
     """Suppression en groupe de cours sélectionnés."""
@@ -1945,7 +2161,7 @@ def etudiant_attestation_pdf(request, pk):
         textColor=colors.black)
 
     mentions = [
-        Paragraph("République Démocratique du Congo", style_institution),
+        Paragraph("RÉPUBLIQUE DÉMOCRATIQUE DU CONGO", style_institution),
         Spacer(1, 1 * mm),
         Paragraph(
             "<b>Ministère de l'Enseignement Supérieur, Universitaire, "
@@ -1981,42 +2197,35 @@ def etudiant_attestation_pdf(request, pk):
 
     # --- Titre du document ---
     elements.append(Paragraph("<u>ATTESTATION D'AUTHENTIFICATION</u>", style_titre))
-    elements.append(Paragraph(f"<b>N° {attestation.numero}</b>", style_numero))
+    if attestation.numero:
+        elements.append(Paragraph(f"<b>N° {attestation.numero}</b>", style_numero))
     elements.append(Spacer(1, 3 * mm))
 
-    # --- Corps du texte (modèle officiel) ---
+    # --- Corps du texte ---
     elements.append(Paragraph(
-        f"Je soussigné <b>Phd Emmanuel MUSUYI MUKADI</b>, Secrétaire Général "
-        f"Académique de l'Ecole Supérieure de Formation des Cadres, l'E.S.FOR.CA, "
-        f"atteste que par la présente que le (la) nommé(e) <b>{etudiant.noms}</b>, "
-        f"né(e) à <b>{lieu_naissance}</b>, le <b>{date_naissance}</b> a suivi "
-        f"régulièrement et terminé avec <b>{decision}</b> son cycle de Licence en "
-        f"<b><i>{filiere}</i></b>, mention : "
-        f"<b>{mention}</b>, au cours de l'année académique "
-        f"<b>{annee_academique}</b>.",
+        f"Nous certifions que <b>{etudiant.noms}</b>, né(e) le "
+        f"<b>{date_naissance}</b> à <b>{lieu_naissance}</b>, "
+        f"matricule n° <b>{matricule}</b>, est régulièrement inscrit(e) "
+        f"à l'AES FORCA pour l'année académique <b>{annee_academique}</b>.",
+        style_corps))
+
+    mention_filiere = (
+        etudiant.promotion.mention.nom
+        if etudiant.promotion and etudiant.promotion.mention
+        else 'Licence Informatique'
+    )
+    elements.append(Paragraph(
+        f"Il/Elle suit les cours de la promotion <b>{etudiant.promotion.nom}</b> "
+        f"({mention_filiere}) et est titulaire d'une mention "
+        f"<b>{mention}</b>.",
         style_corps))
 
     elements.append(Paragraph(
-        f"La présente lui est délivrée pour servir et faire valoir ce que de "
-        f"droit en attendant l'homologation de son diplôme par les autorités de "
-        f"l'Enseignement Supérieur et Universitaire.",
+        "La présente attestation lui est délivrée à sa demande pour servir "
+        "et valoir ce que de droit.",
         style_corps))
 
     elements.append(Spacer(1, 12 * mm))
-
-    # --- Date et lieu de délivrance ---
-    from django.utils import timezone
-    date_du_jour = timezone.localdate()
-    elements.append(Paragraph(
-        f"Fait à Kinshasa, le {date_du_jour:%d %B %Y}.",
-        style_corps_centre))
-
-    elements.append(Spacer(1, 12 * mm))
-
-    # --- Signature ---
-    elements.append(Paragraph(
-        f"Phd Emmanuel MUSUYI MUKADI",
-        style_signature))
 
     # --- Date et lieu de délivrance ---
     from django.utils import timezone

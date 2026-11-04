@@ -8,12 +8,20 @@
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h2>Liste des Cours</h2>
             <div class="d-flex gap-2">
+                <button type="submit" id="btn-bulk-print" class="btn btn-primary" form="bulk-print-form" disabled>
+                    <i class="bi bi-printer me-1"></i>Imprimer les fiches de prestations (<span id="print-selected-count">0</span>)
+                </button>
                 <button type="submit" id="btn-bulk-delete" class="btn btn-danger" disabled
                         onclick="return confirm('Êtes-vous sûr de vouloir supprimer la/les cours sélectionné(s) ? Cette action est irréversible.');">
                     <i class="bi bi-trash me-1"></i>Supprimer la sélection (<span id="selected-count">0</span>)
                 </button>
                 <a href="{% url 'import_excel' %}?type=cours" class="btn btn-outline-success">
                     <i class="bi bi-file-earmark-excel me-1"></i>Importer (Excel)
+                </a>
+                <a href="{% url 'cours_fiches_prestation_pdf' %}{% if filters.promotion %}?promotion={{ filters.promotion }}{% endif %}"
+                   class="btn btn-outline-primary" target="_blank" rel="noopener"
+                   title="Prévisualiser une fiche par cours">
+                    <i class="bi bi-eye me-1"></i>Aperçu des fiches
                 </a>
                 <a href="{% url 'cours_create' %}" class="btn btn-primary">
                     <i class="bi bi-plus-lg me-1"></i>Ajouter un Cours
@@ -78,6 +86,7 @@
                                 </th>
                                 <th>Nom du Cours</th>
                                 <th>Coefficient</th>
+                                <th>Séances prévues</th>
                                 <th>Enseignant</th>
                                 <th>Promotion</th>
                                 <th class="text-end">Actions</th>
@@ -91,6 +100,7 @@
                                 </td>
                                 <td class="fw-semibold"><a href="{% url 'cours_detail' c.pk %}">{{ c.nom }}</a></td>
                                 <td>{{ c.coefficient }}</td>
+                                <td><span class="badge text-bg-light">{{ c.nombre_seances_prestation }}</span></td>
                                 <td>{{ c.enseignant|default:"—" }}</td>
                                 <td>{{ c.promotion }}</td>
                                 <td class="text-end">
@@ -101,7 +111,7 @@
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="6" class="text-center text-muted py-4">
+                                <td colspan="7" class="text-center text-muted py-4">
                                     {% if filters %}Aucun cours ne correspond aux filtres.{% else %}Aucun cours enregistré.{% endif %}
                                 </td>
                             </tr>
@@ -112,6 +122,8 @@
             </div>
         </div>
     </form>
+
+    <form method="get" action="{% url 'cours_fiches_prestation_selection_pdf' %}" id="bulk-print-form" target="_blank" rel="noopener"></form>
 
     <!-- Formulaire GET séparé pour les filtres et recherches -->
     <form method="get" id="search-form" action="{% url 'cours_list' %}"></form>
@@ -125,13 +137,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const selectAll = document.getElementById('select-all');
     const checkboxes = document.querySelectorAll('.cours-checkbox');
     const btnDelete = document.getElementById('btn-bulk-delete');
+    const btnPrint = document.getElementById('btn-bulk-print');
+    const printForm = document.getElementById('bulk-print-form');
     const countSpan = document.getElementById('selected-count');
+    const printCountSpan = document.getElementById('print-selected-count');
 
     function updateState() {
         const checked = document.querySelectorAll('.cours-checkbox:checked');
         const count = checked.length;
         countSpan.textContent = count;
         btnDelete.disabled = count === 0;
+        btnPrint.disabled = count === 0;
+        printCountSpan.textContent = count;
         if (selectAll) {
             selectAll.checked = checkboxes.length > 0 && count === checkboxes.length;
             selectAll.indeterminate = count > 0 && count < checkboxes.length;
@@ -147,6 +164,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
     checkboxes.forEach(cb => {
         cb.addEventListener('change', updateState);
+    });
+    printForm.addEventListener('submit', function(event) {
+        printForm.querySelectorAll('input[name="cours_ids"]').forEach(input => input.remove());
+        checkboxes.forEach(cb => {
+            if (cb.checked) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'cours_ids';
+                input.value = cb.value;
+                printForm.appendChild(input);
+            }
+        });
+        if (!printForm.querySelector('input[name="cours_ids"]')) event.preventDefault();
     });
 });
 </script>

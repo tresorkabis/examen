@@ -1,332 +1,174 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Gestion des Examens{% endblock %}</title>
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>{% block title %}ExamManager{% endblock %} — ExamManager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css">
-<!-- CSS variables and components are loaded from /static/css/style.css -->
-            flex-direction: column;
-            min-height: 100vh;
-            min-height: 100svh;
-        }
-
-        /* Fil d'Ariane */
-        .breadcrumb { font-size: .9rem; }
-
-        /* Cartes statistiques du tableau de bord */
-        .stat-card {
-            display: block;
-            position: relative;
-            overflow: hidden;
-            text-decoration: none;
-            border-radius: 1rem;
-            color: #fff;
-            box-shadow: 0 .5rem 1rem rgba(0, 0, 0, .15);
-            transition: transform .15s ease-in-out, box-shadow .15s ease-in-out;
-        }
-        .stat-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 .75rem 1.5rem rgba(0, 0, 0, .25);
-            color: #fff;
-        }
-        .stat-card::after {
-            content: '';
-            position: absolute;
-            right: -2.2rem;
-            top: -2.2rem;
-            width: 7rem;
-            height: 7rem;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, .14);
-        }
-        .stat-icon { font-size: 1.6rem; opacity: .9; }
-        .stat-foot { font-size: .82rem; opacity: .85; margin-top: .35rem; }
-        .bg-students { background: linear-gradient(135deg, #0d6efd, #0a58ca); }
-        .bg-courses  { background: linear-gradient(135deg, #198754, #146c43); }
-        .bg-sessions { background: linear-gradient(135deg, #6f42c1, #59359d); }
-        .bg-teachers { background: linear-gradient(135deg, #fd7e14, #e8590c); }
-        .stat-value { font-size: 2.4rem; font-weight: 700; line-height: 1; }
-        .stat-label { font-size: 1rem; font-weight: 500; opacity: .92; }
-        .stat-icon  { font-size: 1.4rem; }
-
-        /* ===== Tableau de bord enrichi ===== */
-        .hero-header {
-            border-radius: 1.25rem;
-            color: #fff;
-            background: linear-gradient(120deg, #0b3d91 0%, #0d6efd 55%, #20c997 130%);
-            box-shadow: 0 .75rem 1.5rem rgba(13, 110, 253, .25);
-        }
-        .hero-kicker { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; opacity: .85; }
-        .hero-sub { opacity: .9; }
-        .btn-hero {
-            background: #fff; color: #0b3d91; font-weight: 600; border: none;
-            box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .2);
-        }
-        .btn-hero:hover { background: #f1f5ff; color: #0b3d91; }
-        .btn-hero-outline {
-            border: 1px solid rgba(255, 255, 255, .7); color: #fff; font-weight: 600;
-        }
-        .btn-hero-outline:hover { background: rgba(255, 255, 255, .15); color: #fff; }
-        .mini-stat {
-            position: relative;
-            display: flex; align-items: center; gap: 1rem;
-            background: #fff; border-radius: 1rem; padding: 1rem 1.25rem;
-            box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .07);
-            transition: transform .15s ease-in-out, box-shadow .15s ease-in-out;
-        }
-        .mini-stat:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1.25rem rgba(0, 0, 0, .12); }
-        .mini-stat-icon {
-            width: 2.75rem; height: 2.75rem; border-radius: .9rem;
-            display: inline-flex; align-items: center; justify-content: center; font-size: 1.35rem;
-        }
-        .mini-stat-value { font-size: 1.5rem; font-weight: 700; line-height: 1; }
-        .mini-stat-label { color: #6c757d; font-size: .9rem; }
-        .date-chip {
-            display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
-            width: 3rem; height: 3rem; border-radius: .75rem; flex-shrink: 0;
-            background: #eef4ff; border: 1px solid #d7e3ff; color: #0b3d91;
-        }
-        .date-chip-day { font-size: 1.1rem; font-weight: 700; line-height: 1; }
-        .date-chip-month { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; }
-
-        /* ===== Cartes promotions (page Étudiants) ===== */
-        .promo-card { transition: transform .15s ease-in-out, box-shadow .15s ease-in-out; }
-        .promo-card:hover { transform: translateY(-4px); box-shadow: 0 .75rem 1.5rem rgba(0, 0, 0, .15); }
-        .promo-card.active-card { outline: 2px solid var(--bs-primary); }
-        .promo-card-icon {
-            display: inline-flex; align-items: center; justify-content: center;
-            width: 3.25rem; height: 3.25rem; border-radius: 50%;
-            background: #eef4ff; color: #0d6efd; font-size: 1.5rem;
-        }
-    </style>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20261104-premium2">
+    {% block extra_head %}{% endblock %}
     {% block extra_style %}{% endblock %}
 </head>
-<body class="bg-light">
-    <!-- Barre supérieure (mobile uniquement) : bouton menu + logo -->
-	    <nav class="navbar navbar-dark bg-dark d-lg-none sticky-top py-2 shadow-sm">
-	        <div class="container-fluid px-3">
-	            <div class="d-flex align-items-center gap-3">
-                {% if user.is_authenticated %}
-                <button class="navbar-toggler me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar"
-                        aria-controls="sidebar" aria-expanded="false" aria-label="Ouvrir le menu">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                {% endif %}
-                <a class="navbar-brand mb-0 d-flex align-items-center" href="{% url 'dashboard' %}">
-                    <i class="bi bi-mortarboard-fill me-2"></i>ExamManager
-	                </a>
-	            </div>
-	            {% if user.is_authenticated %}
-	            <div class="dropdown">
-	                <button class="btn btn-sm mobile-user-toggle dropdown-toggle" type="button"
-	                        data-bs-toggle="dropdown" aria-expanded="false" aria-label="Menu utilisateur">
-	                    <i class="bi bi-person-circle"></i>
-	                </button>
-	                <ul class="dropdown-menu dropdown-menu-end shadow">
-	                    <li class="dropdown-header">
-	                        <div class="fw-semibold">{{ user.get_full_name|default:user.username }}</div>
-	                        <div class="small text-muted">{{ user.email|default:user.username }}</div>
-	                    </li>
-	                    {% if user.enseignant %}
-	                    <li>
-	                        <a class="dropdown-item" href="{% url 'enseignant_detail' user.enseignant.pk %}">
-	                            <i class="bi bi-person-vcard me-2"></i>Mon profil enseignant
-	                        </a>
-	                    </li>
-	                    {% endif %}
-	                    {% if user.is_staff %}
-	                    <li>
-	                        <a class="dropdown-item" href="{% url 'admin:index' %}">
-	                            <i class="bi bi-shield-lock me-2"></i>Administration
-	                        </a>
-	                    </li>
-	                    {% endif %}
-	                    <li><hr class="dropdown-divider"></li>
-	                    <li>
-	                        <form method="post" action="{% url 'logout' %}">
-	                            {% csrf_token %}
-	                            <button type="submit" class="dropdown-item">
-	                                <i class="bi bi-box-arrow-right me-2"></i>Déconnexion
-	                            </button>
-	                        </form>
-	                    </li>
-	                </ul>
-	            </div>
-	            {% endif %}
-	        </div>
-	    </nav>
+<body class="app-body">
 
-{% if user.is_authenticated %}
-    <!-- Sidebar (fixe à gauche sur desktop, drawer sur mobile) -->
-    <aside id="sidebar" class="offcanvas offcanvas-start bg-dark text-white" tabindex="-1" aria-labelledby="sidebarTitle">
-        <div class="offcanvas-header d-flex align-items-center">
-            <a class="h5 mb-0 text-white text-decoration-none d-flex align-items-center" id="sidebarTitle" href="{% url 'dashboard' %}">
-                <i class="bi bi-mortarboard-fill me-2"></i>ExamManager
-            </a>
-            <button type="button" class="btn-close btn-close-white d-lg-none" data-bs-dismiss="offcanvas" aria-label="Fermer"></button>
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-logo">
+            <span class="sidebar-logo-mark"><i class="bi bi-mortarboard-fill"></i></span>
+            <span class="sidebar-logo-text">ExamManager</span>
         </div>
-        {% if user.enseignant %}
-        <div class="d-flex align-items-center gap-2 bg-teachers bg-opacity-10 border border-teachers border-opacity-25 rounded-3 p-3 mb-3">
-            <i class="bi bi-person-badge fs-3"></i>
-            <div>
-                <div class="fw-semibold small text-uppercase">Enseignant</div>
-                <div class="small text-white-50">{{ user.get_full_name|default:user.username }}</div>
-                <div class="small text-white-50">{{ user.email|default:'' }}</div>
-            </div>
-        </div>
-        {% endif %}
-        <div class="offcanvas-body">
-            <span class="sidebar-group">Pilotage</span>
-            <a class="nav-link {% if current_url_name == 'dashboard' %}active{% endif %}"
-               href="{% url 'dashboard' %}"
-               {% if current_url_name == 'dashboard' %}aria-current="page"{% endif %}>
-                <i class="bi bi-speedometer2"></i><span>Tableau de Bord</span>
-            </a>
-
-	            <span class="sidebar-group">Personnes</span>
-	            <a class="nav-link {% if 'etudiant' in current_url_name|default:'' %}active{% endif %}" href="{% url 'etudiant_list' %}">
-	                <i class="bi bi-people-fill"></i><span>Étudiants</span>
-	            </a>
-	            <a class="nav-link {% if 'enseignant' in current_url_name|default:'' %}active{% endif %}" href="{% url 'enseignant_list' %}">
-	                <i class="bi bi-person-vcard"></i><span>Enseignants</span>
-	            </a>
-	            {% if user.is_staff %}
-	            <a class="nav-link" href="{% url 'admin:auth_user_changelist' %}">
-	                <i class="bi bi-person-gear"></i><span>Utilisateurs</span>
-	            </a>
-	            {% endif %}
-
-            {% if user_is_admin %}
-            <a class="nav-link {% if current_url_name == 'user_role_manage' %}active{% endif %}"
-               href="{% url 'user_role_manage' %}"
-               {% if current_url_name == 'user_role_manage' %}aria-current="page"{% endif %}>
-                <i class="bi bi-shield-lock"></i><span>Rôles</span>
-            </a>
-            {% endif %}
-
-	            <span class="sidebar-group">Défenses</span>
-            <a class="nav-link {% if 'defense_list' in current_url_name|default:'' %}active{% endif %}"
-               href="{% url 'defense_list' %}">
-                <i class="bi bi-mortarboard"></i><span>Défenses L3</span>
-            </a>
-            <span class="sidebar-group">Académique</span>
-            <a class="nav-link {% if 'cours' in current_url_name|default:'' %}active{% endif %}" href="{% url 'cours_list' %}">
-                <i class="bi bi-book"></i><span>Cours</span>
-            </a>
-            <a class="nav-link {% if 'promotion' in current_url_name|default:'' %}active{% endif %}" href="{% url 'promotion_list' %}">
-                <i class="bi bi-diagram-3"></i><span>Promotions</span>
-            </a>
-            <a class="nav-link {% if 'session' in current_url_name|default:'' %}active{% endif %}" href="{% url 'session_list' %}">
-                <i class="bi bi-calendar-event"></i><span>Sessions</span>
-            </a>
-            <a class="nav-link {% if 'examen' in current_url_name|default:'' %}active{% endif %}" href="{% url 'examen_list' %}">
-                <i class="bi bi-file-earmark-text"></i><span>Examens</span>
-            </a>
-            <a class="nav-link" href="{% url 'palmares' %}">
-                <i class="bi bi-trophy"></i><span>Palmares</span>
-            </a>
-
-            <span class="sidebar-group">Données</span>
-            <a class="nav-link {% if 'import' in current_url_name|default:'' %}active{% endif %}" href="{% url 'import_excel' %}">
-                <i class="bi bi-file-earmark-excel"></i><span>Import Excel</span>
-            </a>
-
-            <span class="sidebar-group">Réglages</span>
-            <a class="nav-link {% if current_url_name == 'reglages' %}active{% endif %}"
-               href="{% url 'reglages' %}">
-                <i class="bi bi-gear"></i><span>Réglages</span>
-            </a>
-
-	            <div class="sidebar-footer mt-auto">
-	                {% if user.is_authenticated %}
-	                <div class="dropdown mb-3">
-	                    <button class="user-menu-toggle dropdown-toggle" type="button"
-	                            data-bs-toggle="dropdown" aria-expanded="false">
-	                        <i class="bi bi-person-circle fs-5"></i>
-	                        <span class="flex-grow-1">
-	                            <span class="user-menu-name d-block fw-semibold">
-	                                {{ user.get_full_name|default:user.username }}
-	                            </span>
-	                            <span class="user-menu-role d-block">
-	                                {% if user.enseignant %}Enseignant{% elif user.is_staff %}Gestionnaire{% else %}Utilisateur{% endif %}
-	                            </span>
-	                        </span>
-	                    </button>
-	                    <ul class="dropdown-menu dropdown-menu-dark shadow">
-	                        <li class="dropdown-header">
-	                            <div>{{ user.email|default:user.username }}</div>
-	                        </li>
-	                        {% if user.enseignant %}
-	                        <li>
-	                            <a class="dropdown-item" href="{% url 'enseignant_detail' user.enseignant.pk %}">
-	                                <i class="bi bi-person-vcard me-2"></i>Mon profil enseignant
-	                            </a>
-	                        </li>
-	                        {% endif %}
-	                        {% if user.is_staff %}
-	                        <li>
-	                            <a class="dropdown-item" href="{% url 'admin:index' %}">
-	                                <i class="bi bi-shield-lock me-2"></i>Administration
-	                            </a>
-	                        </li>
-	                        {% endif %}
-	                        <li><hr class="dropdown-divider"></li>
-	                        <li>
-	                            <form method="post" action="{% url 'logout' %}">
-	                                {% csrf_token %}
-	                                <button type="submit" class="dropdown-item">
-	                                    <i class="bi bi-box-arrow-right me-2"></i>Déconnexion
-	                                </button>
-	                            </form>
-	                        </li>
-	                    </ul>
-	                </div>
-	                {% endif %}
-	                © {% now 'Y' %} ExamManager
-	            </div>
-        </div>
-    </aside>
-{% endif %}
-
-    <main class="main-content{% if user.is_authenticated %} has-sidebar{% endif %}">
-        <div class="container flex-grow-1 mt-3">
-        {% if breadcrumb %}
-        <nav aria-label="Fil d'Ariane">
-            <ol class="breadcrumb mb-3">
-                {% if breadcrumb.current != 'Tableau de Bord' %}
-                <li class="breadcrumb-item">
-                    <a href="{% url 'dashboard' %}"><i class="bi bi-house-door-fill me-1"></i>Tableau de Bord</a>
-                </li>
-                {% endif %}
-                {% for label, url_name in breadcrumb.parents %}
-                    <li class="breadcrumb-item"><a href="{% url url_name %}">{{ label }}</a></li>
-                {% endfor %}
-                <li class="breadcrumb-item active" aria-current="page">{{ breadcrumb.current }}</li>
-            </ol>
-        </nav>
-        {% endif %}
-
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
-                </div>
-            {% endfor %}
-        {% endif %}
-
-        {% block content %}
-        {% endblock %}
     </div>
-    </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    {% block extra_script %}{% endblock %}
+    {% if user.is_authenticated %}
+    <div class="sidebar-profile">
+        <div class="sidebar-avatar">{{ user.get_short_name|first|upper|default:user.username|first|upper }}</div>
+        <div class="sidebar-profile-info">
+            <div class="sidebar-profile-name">{{ user.get_full_name|default:user.username|truncatechars:22 }}</div>
+            <div class="sidebar-profile-role">{% if is_teacher %}<i class="bi bi-circle-fill text-success" style="font-size:.45rem;vertical-align:middle"></i> Enseignant{% else %}<i class="bi bi-circle-fill text-success" style="font-size:.45rem;vertical-align:middle"></i> Administrateur{% endif %}</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <nav class="sidebar-nav" aria-label="Navigation principale">
+        <span class="sidebar-nav-label">Tableau de bord</span>
+        <a href="{% url 'dashboard' %}" class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' %}is-active{% endif %}">
+            <i class="bi bi-grid-fill"></i><span>Vue d'ensemble</span>
+        </a>
+
+        <span class="sidebar-nav-label">Académique</span>
+        <a href="{% url 'promotion_list' %}" class="sidebar-link {% if 'promotion' in request.resolver_match.url_name %}is-active{% endif %}">
+            <i class="bi bi-diagram-3-fill"></i><span>Promotions</span>
+        </a>
+        <a href="{% url 'etudiant_list' %}" class="sidebar-link {% if 'etudiant' in request.resolver_match.url_name %}is-active{% endif %}">
+            <i class="bi bi-people-fill"></i><span>Étudiants</span>
+        </a>
+        <a href="{% url 'cours_list' %}" class="sidebar-link {% if 'cours' in request.resolver_match.url_name %}is-active{% endif %}">
+            <i class="bi bi-journal-bookmark-fill"></i><span>Cours</span>
+        </a>
+        <a href="{% url 'palmares' %}" class="sidebar-link {% if 'palmares' in request.resolver_match.url_name %}is-active{% endif %}">
+            <i class="bi bi-trophy-fill"></i><span>Palmarès</span>
+        </a>
+
+        <span class="sidebar-nav-label">Examens</span>
+        <a href="{% url 'examen_list' %}" class="sidebar-link {% if 'examen' in request.resolver_match.url_name %}is-active{% endif %}">
+            <i class="bi bi-file-earmark-text-fill"></i><span>Examens</span>
+        </a>
+        <a href="{% url 'session_list' %}" class="sidebar-link {% if 'session' in request.resolver_match.url_name %}is-active{% endif %}">
+            <i class="bi bi-calendar2-week-fill"></i><span>Sessions</span>
+        </a>
+        {% if not is_teacher %}
+        <a href="{% url 'defense_list' %}" class="sidebar-link {% if 'defense' in request.resolver_match.url_name %}is-active{% endif %}">
+            <i class="bi bi-patch-check-fill"></i><span>Défenses</span>
+        </a>
+        {% endif %}
+
+        {% if not is_teacher %}
+        <span class="sidebar-nav-label">Personnel</span>
+        <a href="{% url 'enseignant_list' %}" class="sidebar-link {% if 'enseignant' in request.resolver_match.url_name %}is-active{% endif %}">
+            <i class="bi bi-person-badge-fill"></i><span>Enseignants</span>
+        </a>
+
+        <span class="sidebar-nav-label">Outils</span>
+        <a href="{% url 'import_excel' %}" class="sidebar-link {% if request.resolver_match.url_name == 'import_excel' %}is-active{% endif %}">
+            <i class="bi bi-file-earmark-arrow-up-fill"></i><span>Importer</span>
+        </a>
+        <a href="{% url 'reglages' %}" class="sidebar-link {% if request.resolver_match.url_name == 'reglages' %}is-active{% endif %}">
+            <i class="bi bi-sliders"></i><span>Réglages</span>
+        </a>
+        {% if user_is_admin %}
+        <a href="{% url 'user_role_manage' %}" class="sidebar-link {% if request.resolver_match.url_name == 'user_role_manage' %}is-active{% endif %}">
+            <i class="bi bi-shield-lock-fill"></i><span>Rôles</span>
+        </a>
+        {% endif %}
+        {% endif %}
+    </nav>
+
+    <div class="sidebar-bottom">
+        <a href="{% url 'logout' %}" class="sidebar-link sidebar-link--danger">
+            <i class="bi bi-door-open-fill"></i><span>Déconnexion</span>
+        </a>
+    </div>
+</aside>
+
+<!-- TOP BAR mobile -->
+<header class="topbar d-lg-none">
+    <button class="topbar-burger" id="sidebarOpen" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="sidebar">
+        <span></span><span></span><span></span>
+    </button>
+    <span class="topbar-brand">ExamManager</span>
+</header>
+
+<!-- Overlay mobile -->
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<!-- MAIN -->
+<main class="app-main" id="appMain">
+    <div class="app-main-inner">
+        {% if messages %}
+        <div class="messages-wrapper">
+            {% for message in messages %}
+            <div class="app-alert app-alert--{{ message.tags|default:'info' }}" role="alert">
+                <i class="bi bi-{% if message.tags == 'success' %}check-circle-fill{% elif message.tags == 'error' or message.tags == 'danger' %}x-octagon-fill{% elif message.tags == 'warning' %}exclamation-triangle-fill{% else %}info-circle-fill{% endif %}"></i>
+                <span>{{ message }}</span>
+                <button type="button" class="app-alert-close" onclick="this.closest('.app-alert').remove()" aria-label="Fermer">&times;</button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    var sidebar  = document.getElementById('sidebar');
+    var overlay  = document.getElementById('sidebarOverlay');
+    var btnOpen  = document.getElementById('sidebarOpen');
+    function open()  {
+        sidebar.classList.add('is-open');
+        overlay.classList.add('is-visible');
+        btnOpen.setAttribute('aria-expanded', 'true');
+        sidebar.setAttribute('aria-hidden', 'false');
+        sidebar.inert = false;
+        document.body.style.overflow = 'hidden';
+        var firstLink = sidebar.querySelector('.sidebar-link');
+        if (firstLink) firstLink.focus();
+    }
+    function close(restoreFocus) {
+        sidebar.classList.remove('is-open');
+        overlay.classList.remove('is-visible');
+        btnOpen.setAttribute('aria-expanded', 'false');
+        sidebar.setAttribute('aria-hidden', 'true');
+        sidebar.inert = true;
+        document.body.style.overflow = '';
+        if (restoreFocus && btnOpen) btnOpen.focus();
+    }
+    if (btnOpen)  btnOpen.addEventListener('click', open);
+    if (overlay)  overlay.addEventListener('click', close);
+    if (sidebar && btnOpen && window.matchMedia('(max-width: 991.98px)').matches) {
+        sidebar.setAttribute('aria-hidden', 'true');
+        sidebar.inert = true;
+        sidebar.querySelectorAll('.sidebar-link').forEach(function(link) {
+            link.addEventListener('click', function() { close(false); });
+        });
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape' && sidebar.classList.contains('is-open')) close(true);
+        });
+    }
+    // Auto-dismiss alerts
+    document.querySelectorAll('.app-alert').forEach(function(el) {
+        setTimeout(function() { el.style.opacity = '0'; setTimeout(function(){ el.remove(); }, 400); }, 6000);
+    });
+})();
+</script>
+{% block extra_js %}{% endblock %}
+{% block extra_script %}{% endblock %}
 </body>
 </html>

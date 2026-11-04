@@ -340,6 +340,11 @@ class Cours(models.Model):
     enseignant = models.ForeignKey(Enseignant, on_delete=models.SET_NULL, null=True, related_name='cours')
     promotion = models.ForeignKey(Promotion, on_delete=models.CASCADE, related_name='cours')
 
+    @property
+    def nombre_seances_prestation(self):
+        """Nombre de lignes de séance à prévoir sur sa fiche de prestation."""
+        return self.coefficient * 5
+
     def __str__(self):
         return self.nom
 
@@ -1062,6 +1067,17 @@ class CotationProjetTutore(models.Model):
         """Les trois rôles du jury sont-ils affectés ?"""
         return all(self.membres_jury())
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['etudiant'],
+                name='unique_cotation_tutore_etudiant',
+                violation_error_message=(
+                    'Cet étudiant possède déjà une fiche de cotation du projet tutoré.'
+                ),
+            ),
+        ]
+
 
 def generate_numero_attestation():
     """Génère un numéro d'attestation unique (ex: ATT-20261031-0001).
@@ -1103,80 +1119,6 @@ class Attestation(models.Model):
 
     def __str__(self):
         return f'{self.numero} — {self.etudiant.noms}'
-        """Pourcentage de réussite sur 200 (None si fiche vide)."""
-        total = self.total_general
-        if total is None:
-            return None
-        return (total * 100 / self.TOTAL_GENERAL).quantize(
-            Decimal('0.01'), rounding=ROUND_HALF_UP)
-
-    @property
-    def mention(self):
-        """Mention calculée sur le pourcentage (vide si vide ou < 50 %).
-
-        Seuils arrondis au point entier (le pourcentage porte deux
-        décimales) : ``90`` → Excellent, ``89,99`` → Très Bien, etc.
-        """
-        pct = self.pourcentage
-        if pct is None:
-            return ''
-        entier = int(pct.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
-        for seuil, libelle in self.SEUILS_MENTION:
-            if entier >= seuil:
-                return libelle
-        return ''
-
-    @property
-    def cases_renseignees(self):
-        """Nombre de notes saisies (sur 18) — signale une fiche incomplète."""
-        return sum(len(self.notes_renseignees(membre))
-                   for membre, _ in self.MEMBRES)
-
-    @property
-    def est_complete(self):
-        """Les 18 cases de la fiche sont-elles cotées ?"""
-        return self.cases_renseignees == len(self.RUBRIQUES) * len(self.MEMBRES)
-
-    def __str__(self):
-        return f'Cotation projet tutoré — {self.etudiant}'
-
-    def clean(self):
-        """Un même enseignant ne peut pas cumuler deux rôles dans le jury."""
-        super().clean()
-        roles = [('directeur', self.directeur_id),
-                 ('1er lecteur', self.lecteur1_id),
-                 ('2ème lecteur', self.lecteur2_id)]
-        renseignes = [(libelle, eid) for libelle, eid in roles if eid]
-        vus = {}
-        for libelle, eid in renseignes:
-            if eid in vus:
-                raise ValidationError(
-                    f'Un enseignant ne peut pas cumuler deux rôles dans le '
-                    f'jury ({vus[eid]} et {libelle}).')
-            vus[eid] = libelle
-
-    def membres_jury(self):
-        """Enseignants affectés au jury, dans l'ordre (None = rôle vacant)."""
-        return [self.directeur, self.lecteur1, self.lecteur2]
-
-    @property
-    def jury_complet(self):
-        """Les trois rôles du jury sont-ils affectés ?"""
-        return all(self.membres_jury())
-
-    class Meta:
-        # Volontairement aucun `ordering` : trier par une FK jointe ajouterait
-        # une jointure à *toutes* les requêtes (cf. Inscription).
-        constraints = [
-            models.UniqueConstraint(
-                fields=['etudiant'],
-                name='unique_cotation_tutore_etudiant',
-                violation_error_message=(
-                    'Cet étudiant possède déjà une fiche de cotation du '
-                    'projet tutoré.'
-                ),
-            ),
-        ]
 
 
 class UserRole:

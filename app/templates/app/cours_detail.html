@@ -6,6 +6,10 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>{{ cours.nom }}</h2>
         <div class="d-flex gap-2">
+            <a href="{% url 'cours_fiche_prestation_pdf' cours.pk %}" class="btn btn-outline-primary"
+               target="_blank" rel="noopener">
+                <i class="bi bi-eye me-1"></i>Aperçu &amp; imprimer
+            </a>
             <a href="{% url 'cours_update' cours.pk %}" class="btn btn-outline-secondary">
                 <i class="bi bi-pencil me-1"></i>Modifier
             </a>
@@ -21,6 +25,7 @@
                 <i class="bi bi-diagram-3 me-1"></i>{{ cours.promotion.nom }}
             </a>
             <span class="badge text-bg-light border fs-6"><i class="bi bi-123 me-1"></i>Coefficient {{ cours.coefficient }}</span>
+            <span class="badge text-bg-light border fs-6"><i class="bi bi-journal-check me-1"></i>{{ cours.nombre_seances_prestation }} séances prévues</span>
             {% if cours.enseignant %}
                 <a href="{% url 'enseignant_detail' cours.enseignant.pk %}" class="badge text-bg-light border fs-6 text-decoration-none">
                     <i class="bi bi-person-vcard me-1"></i>{{ cours.enseignant.noms }}

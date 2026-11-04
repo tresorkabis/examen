@@ -1,30 +1,33 @@
 {% extends 'app/base.html' %}
-{% block title %}Tableau de Bord — Gestion des Examens{% endblock %}
+{% block title %}Tableau de bord{% endblock %}
 {% block content %}
-<div class="dashboard-hero mb-4">
+<div class="dashboard-page">
+<section class="dashboard-hero mb-4" aria-labelledby="dashboard-title">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
             <p class="dash-kicker mb-1">
                 {% if is_teacher %}
-                    <i class="bi bi-person-badge me-1"></i>Espace Enseignant
+                    <i class="bi bi-person-badge me-1"></i>PORTAIL ENSEIGNANT
                 {% else %}
-                    <i class="bi bi-mortarboard-fill me-1"></i>Gestion des examens
+                    <i class="bi bi-mortarboard-fill me-1"></i>PORTAIL ACADÉMIQUE
                 {% endif %}
             </p>
-            <h1 class="mb-1 fw-bold">Tableau de Bord</h1>
-            <p class="mb-0 dash-sub">Vue d'ensemble — {% now 'l j F Y' %}.
-            {% if session_active %}<span class="badge text-bg-light text-dark mt-1 px-3 py-1 rounded-pill shadow-sm">Session en cours : {{ session_active.nom|truncatechars:40 }}</span>{% endif %}</p>
+            <h1 id="dashboard-title" class="mb-2">Tableau de bord</h1>
+            <div class="dashboard-meta">
+                <span><i class="bi bi-calendar3 me-2"></i>{% now 'l j F Y' %}</span>
+                {% if session_active %}<span class="dashboard-session"><i class="bi bi-circle-fill me-2"></i>{{ session_active.nom|truncatechars:40 }}</span>{% endif %}
+            </div>
         </div>
-        <div class="d-flex flex-wrap gap-2">
+        <div class="dashboard-hero-actions d-flex flex-wrap gap-2">
             {% if not is_teacher %}
-            <a href="{% url 'examen_create' %}" class="btn btn-dash-primary"><i class="bi bi-plus-circle me-1"></i>Programmer un examen</a>
+            <a href="{% url 'examen_create' %}" class="btn btn-dash-primary"><i class="bi bi-plus-lg"></i>Programmer un examen</a>
             {% endif %}
             {% if not is_teacher %}
-            <a href="{% url 'session_create' %}" class="btn btn-dash-outline"><i class="bi bi-calendar-plus me-1"></i>Nouvelle session</a>
+            <a href="{% url 'session_create' %}" class="btn btn-dash-outline"><i class="bi bi-calendar-plus"></i>Nouvelle session</a>
             {% endif %}
         </div>
     </div>
-</div>
+</section>
 
 {% if not session_active %}
 <div class="alert alert-warning py-2 small mb-3 border-0 shadow-sm">
@@ -34,9 +37,9 @@
 </div>
 {% endif %}
 {% if is_teacher %}
-<div class="row g-4 mb-4">
+<div class="row dashboard-stats g-3 mb-4">
     <div class="col-md-6 col-lg-3">
-        <div class="stat-card-primary h-100">
+        <div class="premium-stat-card stat-tone-blue h-100">
             <div class="stat-body">
                 <span class="stat-icon"><i class="bi bi-book-half"></i></span>
                 <div class="stat-num">{{ total_cours }}</div>
@@ -46,7 +49,7 @@
         </div>
     </div>
     <div class="col-md-6 col-lg-3">
-        <div class="stat-card-accent h-100">
+        <div class="premium-stat-card stat-tone-plum h-100">
             <div class="stat-body">
                 <span class="stat-icon"><i class="bi bi-file-earmark-text"></i></span>
                 <div class="stat-num">{{ total_examens }}</div>
@@ -56,7 +59,7 @@
         </div>
     </div>
     <div class="col-md-6 col-lg-3">
-        <div class="stat-card-info h-100">
+        <div class="premium-stat-card stat-tone-slate h-100">
             <div class="stat-body">
                 <span class="stat-icon"><i class="bi bi-people-fill"></i></span>
                 <div class="stat-num">{{ total_etudiants }}</div>
@@ -66,7 +69,7 @@
         </div>
     </div>
     <div class="col-md-6 col-lg-3">
-        <div class="stat-card-success h-100">
+        <div class="premium-stat-card stat-tone-forest h-100">
             <div class="stat-body">
                 <span class="stat-icon"><i class="bi bi-calendar-check"></i></span>
                 <div class="stat-num">{{ total_sessions }}</div>
@@ -77,9 +80,9 @@
     </div>
 </div>
 {% else %}
-<div class="row g-4 mb-4">
+<div class="row dashboard-stats g-3 mb-4">
     <div class="col-md-6 col-lg-3">
-        <div class="stat-card-primary h-100">
+        <div class="premium-stat-card stat-tone-blue h-100">
             <div class="stat-body">
                 <span class="stat-icon"><i class="bi bi-people-fill"></i></span>
                 <div class="stat-num">{{ total_etudiants }}</div>
@@ -89,7 +92,7 @@
         </div>
     </div>
     <div class="col-md-6 col-lg-3">
-        <div class="stat-card-accent h-100">
+        <div class="premium-stat-card stat-tone-plum h-100">
             <div class="stat-body">
                 <span class="stat-icon"><i class="bi bi-file-earmark-text"></i></span>
                 <div class="stat-num">{{ total_examens }}</div>
@@ -99,7 +102,7 @@
         </div>
     </div>
     <div class="col-md-6 col-lg-3">
-        <div class="stat-card-info h-100">
+        <div class="premium-stat-card stat-tone-slate h-100">
             <div class="stat-body">
                 <span class="stat-icon"><i class="bi bi-calendar-event"></i></span>
                 <div class="stat-num">{{ total_sessions }}</div>
@@ -109,7 +112,7 @@
         </div>
     </div>
     <div class="col-md-6 col-lg-3">
-        <div class="stat-card-success h-100">
+        <div class="premium-stat-card stat-tone-forest h-100">
             <div class="stat-body">
                 <span class="stat-icon"><i class="bi bi-diagram-3"></i></span>
                 <div class="stat-num">{{ total_promotions }}</div>
@@ -120,9 +123,9 @@
     </div>
 </div>
 {% endif %}
-<div class="row g-4">
+<div class="row dashboard-content g-3">
     <div class="col-lg-8">
-        <div class="card shadow-sm border-0 h-100">
+        <div class="card dashboard-panel shadow-sm border-0">
             <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center py-3">
                 <h5 class="mb-0"><i class="bi bi-calendar-event me-2 text-primary"></i>Examens à venir</h5>
                 <a href="{% url 'examen_list' %}" class="btn btn-sm btn-outline-primary">Tous les examens</a>
@@ -160,7 +163,7 @@
     </div>
 <div class="col-lg-4">
         {% if is_teacher %}
-        <div class="card shadow-sm border-0 mb-4">
+        <div class="card dashboard-panel dashboard-actions mb-4">
             <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center py-3">
                 <h5 class="mb-0"><i class="bi bi-lightning-charge me-2 text-warning"></i>Actions rapides</h5>
             </div>
@@ -173,7 +176,7 @@
             </div>
         </div>
 
-        <div class="card shadow-sm border-0">
+        <div class="card dashboard-panel">
             <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center py-3">
                 <h5 class="mb-0"><i class="bi bi-journals me-2 text-info"></i>Mes cours récents</h5>
                 <a href="{% url 'cours_list' %}" class="btn btn-sm btn-outline-primary">Voir tous</a>
@@ -199,7 +202,7 @@
             </div>
         </div>
         {% else %}
-        <div class="card shadow-sm border-0 mb-4">
+        <div class="card dashboard-panel dashboard-actions mb-4">
             <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center py-3">
                 <h5 class="mb-0"><i class="bi bi-lightning-charge me-2 text-warning"></i>Actions rapides</h5>
             </div>
@@ -212,7 +215,7 @@
             </div>
         </div>
 
-        <div class="card shadow-sm border-0">
+        <div class="card dashboard-panel">
             <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center py-3">
                 <h5 class="mb-0"><i class="bi bi-calendar-event me-2 text-info"></i>Sessions récentes</h5>
                 <a href="{% url 'session_list' %}" class="btn btn-sm btn-outline-primary">Toutes</a>
@@ -238,7 +241,6 @@
         </div>
         {% endif %}
     </div>
+    </div>
 {% endblock %}
 
-{% block extra_style %}
-{% endblock %}
