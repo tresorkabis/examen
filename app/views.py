@@ -2043,7 +2043,7 @@ def etudiant_attestation_pdf(request, pk):
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
     from reportlab.platypus import (Paragraph, SimpleDocTemplate, Spacer,
-                                    HRFlowable)
+                                    HRFlowable, KeepTogether)
 
     etudiant = get_object_or_404(
         Etudiant.objects.select_related('promotion'), pk=pk)
@@ -2080,40 +2080,41 @@ def etudiant_attestation_pdf(request, pk):
     tampon = BytesIO()
     doc = SimpleDocTemplate(
         tampon, pagesize=A4,
-        leftMargin=20 * mm, rightMargin=20 * mm,
-        topMargin=20 * mm, bottomMargin=20 * mm,
+        leftMargin=24 * mm, rightMargin=24 * mm,
+        topMargin=17 * mm, bottomMargin=18 * mm,
         title=f"Attestation d'authentification - {etudiant.noms}")
 
     styles = getSampleStyleSheet()
 
     style_institution = ParagraphStyle(
         'Institution', parent=styles['Normal'],
-        fontName='Times-Roman', fontSize=10.5, alignment=1,
-        textColor=colors.black)
+        fontName='Times-Roman', fontSize=9, alignment=1,
+        textColor=colors.HexColor('#526174'), leading=11)
     style_service = ParagraphStyle(
         'Service', parent=styles['Normal'],
-        fontName='Helvetica', fontSize=10, alignment=1,
-        textColor=colors.black)
+        fontName='Times-Bold', fontSize=9.5, alignment=1,
+        textColor=colors.HexColor('#243b5a'), leading=12)
     style_titre = ParagraphStyle(
         'Titre', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=13, alignment=1,
-        textColor=colors.black, spaceAfter=2)
+        fontName='Helvetica-Bold', fontSize=17, alignment=1,
+        textColor=colors.HexColor('#17365d'), spaceAfter=3,
+        leading=20, tracking=0.5)
     style_numero = ParagraphStyle(
         'Numero', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=12, alignment=1,
-        textColor=colors.black)
+        fontName='Helvetica-Bold', fontSize=10, alignment=1,
+        textColor=colors.HexColor('#526174'), leading=13)
     style_corps = ParagraphStyle(
         'Corps', parent=styles['Normal'],
-        fontName='Helvetica', fontSize=11, alignment=0,
-        leading=17, spaceAfter=7)
+        fontName='Times-Roman', fontSize=13, alignment=0,
+        leading=21, spaceAfter=11, textColor=colors.HexColor('#202a36'))
     style_corps_centre = ParagraphStyle(
         'CorpsCentre', parent=styles['Normal'],
-        fontName='Helvetica', fontSize=11, alignment=1,
-        leading=17, spaceAfter=7)
+        fontName='Times-Roman', fontSize=11, alignment=1,
+        leading=15, spaceAfter=5, textColor=colors.HexColor('#35465c'))
     style_signature = ParagraphStyle(
         'Signature', parent=styles['Normal'],
-        fontName='Helvetica', fontSize=10, alignment=1,
-        textColor=colors.HexColor('#4a4a4a'))
+        fontName='Helvetica', fontSize=9, alignment=1,
+        leading=12, textColor=colors.HexColor('#35465c'))
 
     date_naissance = (etudiant.date_naissance.strftime('%d/%m/%Y')
                       if etudiant.date_naissance else '——————————')
@@ -2141,28 +2142,27 @@ def etudiant_attestation_pdf(request, pk):
     if _m:
         # Même taille que le relevé (partial _entete_officiel.html) :
         # hauteur fixée (68 px à l'impression ≈ 18 mm), largeur au ratio.
-        _logo_h = 18 * mm
+        _logo_h = 20 * mm
         _logo_w = _logo_h * 0.943  # ratio source 149/158
         logo_img = Image(BytesIO(base64.b64decode(_m.group(1))),
                          width=_logo_w, height=_logo_h)
 
     style_ecole = ParagraphStyle(
         'Ecole', parent=styles['Normal'],
-        fontName='Times-Roman', fontSize=12.5, alignment=1,
-        textColor=colors.black)
+        fontName='Times-Bold', fontSize=12, alignment=1,
+        leading=14, textColor=colors.HexColor('#17365d'))
     # « Ministère… » est en gras dans le partial HTML (.entete-ligne entete-gras)
     style_mention = ParagraphStyle(
         'Mention', parent=styles['Normal'],
-        fontName='Times-Roman', fontSize=10.5, alignment=1,
-        textColor=colors.black)
+        fontName='Times-Roman', fontSize=8.5, alignment=1,
+        leading=10.5, textColor=colors.HexColor('#344256'))
     style_sga = ParagraphStyle(
         'SGA', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=12, alignment=1,
-        textColor=colors.black)
+        fontName='Helvetica-Bold', fontSize=10, alignment=1,
+        textColor=colors.HexColor('#17365d'))
 
     mentions = [
         Paragraph("RÉPUBLIQUE DÉMOCRATIQUE DU CONGO", style_institution),
-        Spacer(1, 1 * mm),
         Paragraph(
             "<b>Ministère de l'Enseignement Supérieur, Universitaire, "
             "Recherche Scientifique et Innovations</b>", style_mention),
@@ -2186,46 +2186,63 @@ def etudiant_attestation_pdf(request, pk):
         ('RIGHTPADDING', (0, 0), (-1, -1), 0),
         ('TOPPADDING', (0, 0), (-1, -1), 1),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
-        ('LINEBELOW', (0, 0), (-1, -1), 1.2, colors.HexColor('#0b3d91')),
+        ('LINEBELOW', (0, 0), (-1, -1), 1.4, colors.HexColor('#17365d')),
+        ('LINEABOVE', (0, 0), (-1, 0), 0.5, colors.HexColor('#c9d3df')),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
     ]))
     # La table est centrée sur la page (width: 100% dans le partial HTML).
     entete.hAlign = 'CENTER'
     elements.append(entete)
-    elements.append(Spacer(1, 3 * mm))
+    elements.append(Spacer(1, 2 * mm))
     elements.append(Paragraph("Secrétariat Général Académique", style_sga))
     elements.append(Spacer(1, 5 * mm))
 
     # --- Titre du document ---
-    elements.append(Paragraph("<u>ATTESTATION D'AUTHENTIFICATION</u>", style_titre))
+    elements.append(Spacer(1, 1 * mm))
+    elements.append(Paragraph("ATTESTATION D'AUTHENTIFICATION", style_titre))
     if attestation.numero:
         elements.append(Paragraph(f"<b>N° {attestation.numero}</b>", style_numero))
-    elements.append(Spacer(1, 3 * mm))
+    elements.append(Spacer(1, 10 * mm))
 
     # --- Corps du texte ---
-    elements.append(Paragraph(
-        f"Nous certifions que <b>{etudiant.noms}</b>, né(e) le "
-        f"<b>{date_naissance}</b> à <b>{lieu_naissance}</b>, "
-        f"matricule n° <b>{matricule}</b>, est régulièrement inscrit(e) "
-        f"à l'AES FORCA pour l'année académique <b>{annee_academique}</b>.",
-        style_corps))
+    details_etudiant = [
+        Paragraph(
+            f"Nous certifions que <b>{etudiant.noms}</b>, né(e) le "
+            f"<b>{date_naissance}</b> à <b>{lieu_naissance}</b>, "
+            f"matricule n° <b>{matricule}</b>, est régulièrement inscrit(e) "
+            f"à l'AES FORCA pour l'année académique <b>{annee_academique}</b>.",
+            style_corps)]
 
     mention_filiere = (
         etudiant.promotion.mention.nom
         if etudiant.promotion and etudiant.promotion.mention
         else 'Licence Informatique'
     )
-    elements.append(Paragraph(
+    details_etudiant.append(Paragraph(
         f"Il/Elle suit les cours de la promotion <b>{etudiant.promotion.nom}</b> "
         f"({mention_filiere}) et est titulaire d'une mention "
         f"<b>{mention}</b>.",
         style_corps))
 
-    elements.append(Paragraph(
+    details_etudiant.append(Paragraph(
         "La présente attestation lui est délivrée à sa demande pour servir "
         "et valoir ce que de droit.",
         style_corps))
 
-    elements.append(Spacer(1, 12 * mm))
+    details = Table([[details_etudiant]], colWidths=[162 * mm])
+    details.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f8fc')),
+        ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#c8d4e2')),
+        ('LINEBEFORE', (0, 0), (0, 0), 3, colors.HexColor('#17365d')),
+        ('LEFTPADDING', (0, 0), (-1, -1), 9 * mm),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8 * mm),
+        ('TOPPADDING', (0, 0), (-1, -1), 7 * mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4 * mm),
+    ]))
+    elements.append(details)
+
+    elements.append(Spacer(1, 9 * mm))
 
     # --- Date et lieu de délivrance ---
     from django.utils import timezone
@@ -2234,10 +2251,11 @@ def etudiant_attestation_pdf(request, pk):
         f"Fait à Kinshasa, le {date_du_jour:%d %B %Y}.",
         style_corps_centre))
 
-    elements.append(Spacer(1, 18 * mm))
+    elements.append(Spacer(1, 14 * mm))
 
     # --- Signature ---
-    elements.append(HRFlowable(width="45%", thickness=0.8, color=colors.black))
+    elements.append(HRFlowable(width="38%", thickness=0.8,
+                               color=colors.HexColor('#17365d')))
     elements.append(Spacer(1, 2 * mm))
     elements.append(Paragraph("Le Directeur des Études", style_signature))
     elements.append(Spacer(1, 1 * mm))
