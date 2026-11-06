@@ -61,12 +61,13 @@
             </div>
         </div>
         {# Formulaire de changement de promotion en lot #}
-        <form method="post" action="{% url 'etudiant_list' %}?promotion={{ promotion_active.pk }}"
+        <form id="change-promotion-form" method="post" action="{% url 'etudiant_list' %}?promotion={{ promotion_active.pk }}"
               onsubmit="return confirm('Confirmez-vous le changement de promotion des étudiants sélectionnés ?');"
-              class="card shadow-sm p-3 mb-3">
+              class="mb-3">
             {% csrf_token %}
             <input type="hidden" name="promotion_source" value="{{ promotion_active.pk }}">
-            <div class="d-flex flex-column flex-sm-row gap-3 align-items-sm-start">
+            <div class="card shadow-sm p-3 mb-3">
+              <div class="d-flex flex-column flex-sm-row gap-3 align-items-sm-start">
                 <div class="d-flex align-items-center">
                     <label class="form-label mb-0 me-2">Passer les sélectionnés vers :</label>
                 </div>
@@ -86,8 +87,8 @@
                         <i class="bi bi-check-all me-1"></i>Tout sélectionner
                     </a>
                 </div>
+              </div>
             </div>
-        </form>
         <div class="card shadow-sm">
             <div class="list-group list-group-flush">
                 {% for e in promotion_active.filtered_etudiants %}
@@ -150,6 +151,7 @@
             {% include 'app/_pagination.html' with is_paginated=True %}
         </div>
         {% endif %}
+        </form>
     {% else %}
     {# Grille de cartes des promotions : un clic affiche la liste #}
     <div class="row g-3 g-md-4">

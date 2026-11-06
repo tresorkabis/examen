@@ -37,18 +37,30 @@
         }
 
         body {
+            display: block !important;
             background: #fff !important;
             color: #000 !important;
             font-size: 8.5pt !important;
             line-height: 1.25 !important;
+            height: auto !important;
+            min-height: 0 !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
         }
 
-        .main-content {
+        .app-main {
             margin-left: 0 !important;
             padding: 0 !important;
+            height: auto !important;
             min-height: 0 !important;
+            flex: none !important;
+        }
+
+        .app-main-inner {
+            max-width: none !important;
+            height: auto !important;
+            min-height: 0 !important;
+            padding: 0 !important;
         }
 
         .container, .container-fluid {
@@ -128,6 +140,7 @@
         .semester-card {
             border: 1px solid #444 !important;
             border-radius: 0 !important;
+            overflow: visible !important;
         }
         .semester-card .card-header {
             padding: 3px 6px !important;
@@ -141,6 +154,8 @@
         .table-ue {
             width: 100% !important;
             border-collapse: collapse !important;
+            border: 1px solid #444 !important;
+            box-sizing: border-box !important;
             font-size: 7.6pt !important;
             margin-bottom: 0 !important;
         }
@@ -149,11 +164,23 @@
             border: 1px solid #bbb !important;
             line-height: 1.15 !important;
         }
+        /* La version écran est placée dans .table-responsive, dont
+           overflow-x:auto peut couper l'impression au bord des colonnes. */
+        .table-responsive { overflow: visible !important; }
+        .table-ue td:nth-child(2) {
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+        }
         /* Colonnes techniques resserrées (mêmes valeurs que le relevé
            global) : l'intitulé de l'UE est la colonne dominante. Les ~16 px
            récupérés évitent le retour à la ligne des intitulés longs
            (« Méthode de recherche informatique » tenait à ~3 pt près). */
-        .table-ue td:last-child .badge { padding: .2em .4em !important; }
+        .table-ue td:last-child { white-space: nowrap !important; }
+        .table-ue td:last-child .badge {
+            padding: .1em .25em !important;
+            font-size: 6.2pt !important;
+            white-space: nowrap !important;
+        }
         .table-ue th {
             background-color: #f8f9fa !important;
             font-weight: 700 !important;

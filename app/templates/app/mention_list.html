@@ -1,0 +1,41 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Mentions{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <h2 class="mb-0">Mentions</h2>
+    <a href="{% url 'mention_create' %}" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i>Ajouter une mention
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr><th>Nom</th><th>Filière</th><th>Description</th><th class="text-center">Promotions</th><th class="text-end">Actions</th></tr>
+                </thead>
+                <tbody>
+                    {% for mention in mentions %}
+                    <tr>
+                        <td class="fw-semibold">{{ mention.nom }}</td>
+                        <td>{{ mention.filiere.nom }}</td>
+                        <td>{{ mention.description|default:"—"|truncatechars:100 }}</td>
+                        <td class="text-center"><span class="badge text-bg-secondary">{{ mention.nb_promotions }}</span></td>
+                        <td class="text-end text-nowrap">
+                            <a href="{% url 'mention_update' mention.pk %}" class="btn btn-sm btn-outline-secondary">Modifier</a>
+                            <a href="{% url 'mention_delete' mention.pk %}" class="btn btn-sm btn-outline-danger">Supprimer</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center text-muted py-4">Aucune mention enregistrée.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% include 'app/_pagination.html' %}
+{% endblock %}

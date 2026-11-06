@@ -1,0 +1,40 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Filières{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <h2 class="mb-0">Filières</h2>
+    <a href="{% url 'filiere_create' %}" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i>Ajouter une filière
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr><th>Nom</th><th>Description</th><th class="text-center">Mentions</th><th class="text-end">Actions</th></tr>
+                </thead>
+                <tbody>
+                    {% for filiere in filieres %}
+                    <tr>
+                        <td class="fw-semibold">{{ filiere.nom }}</td>
+                        <td>{{ filiere.description|default:"—"|truncatechars:100 }}</td>
+                        <td class="text-center"><span class="badge text-bg-secondary">{{ filiere.nb_mentions }}</span></td>
+                        <td class="text-end text-nowrap">
+                            <a href="{% url 'filiere_update' filiere.pk %}" class="btn btn-sm btn-outline-secondary">Modifier</a>
+                            <a href="{% url 'filiere_delete' filiere.pk %}" class="btn btn-sm btn-outline-danger">Supprimer</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-center text-muted py-4">Aucune filière enregistrée.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% include 'app/_pagination.html' %}
+{% endblock %}
