@@ -45,6 +45,12 @@
         <a href="{% url 'promotion_list' %}" class="sidebar-link {% if 'promotion' in request.resolver_match.url_name %}is-active{% endif %}">
             <i class="bi bi-diagram-3-fill"></i><span>Promotions</span>
         </a>
+        <a href="{% url 'filiere_list' %}" class="sidebar-link {% if 'filiere' in request.resolver_match.url_name %}is-active{% endif %}">
+            <i class="bi bi-building"></i><span>Filières</span>
+        </a>
+        <a href="{% url 'mention_list' %}" class="sidebar-link {% if 'mention' in request.resolver_match.url_name %}is-active{% endif %}">
+            <i class="bi bi-tags"></i><span>Mentions</span>
+        </a>
         <a href="{% url 'etudiant_list' %}" class="sidebar-link {% if 'etudiant' in request.resolver_match.url_name %}is-active{% endif %}">
             <i class="bi bi-people-fill"></i><span>Étudiants</span>
         </a>

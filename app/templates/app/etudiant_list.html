@@ -73,10 +73,8 @@
                 <div class="d-flex align-items-center flex-sm-grow-1">
                     <select name="nouvelle_promotion" class="form-select w-auto" required>
                         <option value="">— Promotion de destination —</option>
-                        {% for p in groups %}
-                            {% if p.pk != promotion_active.pk %}
-                                <option value="{{ p.pk }}">{{ p.nom }}</option>
-                            {% endif %}
+                        {% for p in promotions_destination %}
+                            <option value="{{ p.pk }}">{{ p.nom }}</option>
                         {% endfor %}
                     </select>
                 </div>

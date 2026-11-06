@@ -53,12 +53,13 @@ from django.db import models
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse_lazy
 
-from .forms import (PromotionForm, EnseignantForm, EtudiantForm, CoursForm,
+from .forms import (PromotionForm, FiliereForm, MentionForm, EnseignantForm, EtudiantForm, CoursForm,
                     SessionForm, ExamenForm, ExcelImportForm,
                     EnseignantUserForm,
                     CotationProjetTutoreForm)
 from django.contrib.auth.models import User
-from .models import (Etudiant, Cours, Session, Enseignant, Promotion, Examen,
+from .models import (Etudiant, Cours, Session, Enseignant, Promotion, Filiere,
+                     Mention, Examen,
                      Inscription, Grille, GrilleUE, GrilleEtudiant, GrilleNote,
                      HistoriquePromotion, CotationProjetTutore, Attestation,
                      UserProfile, UserRole, get_user_role)
@@ -547,6 +548,11 @@ class EtudiantListView(ListView):
                 if q:
                     context['nb_etudiants_trouves'] = paginator.count
         context['promotion_active'] = promotion_active
+        context['promotions_destination'] = (
+            Promotion.objects
+            .exclude(pk=promotion_active.pk if promotion_active else None)
+            .order_by('nom')
+        )
         context['page_obj'] = page_obj
         # Conserve les paramètres GET (filtres…) dans les liens de pagination.
         params = self.request.GET.copy()
@@ -1158,6 +1164,77 @@ class PromotionDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     template_name = "app/promotion_confirm_delete.html"
     success_url = reverse_lazy("promotion_list")
     success_message = "La promotion « %(object)s » a été supprimée."
+
+
+# --- CRUD FILIÈRE ET MENTION ---
+class FiliereListView(LoginRequiredMixin, SafePaginationMixin, ListView):
+    model = Filiere
+    template_name = "app/filiere_list.html"
+    context_object_name = "filieres"
+    paginate_by = 25
+
+    def get_queryset(self):
+        return Filiere.objects.annotate(
+            nb_mentions=Count('mentions', distinct=True)
+        ).order_by('nom')
+
+
+class FiliereCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
+    model = Filiere
+    form_class = FiliereForm
+    template_name = "app/filiere_form.html"
+    success_url = reverse_lazy("filiere_list")
+    success_message = "La filière « %(nom)s » a été créée."
+
+
+class FiliereUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
+    model = Filiere
+    form_class = FiliereForm
+    template_name = "app/filiere_form.html"
+    success_url = reverse_lazy("filiere_list")
+    success_message = "La filière « %(nom)s » a été modifiée."
+
+
+class FiliereDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
+    model = Filiere
+    template_name = "app/filiere_confirm_delete.html"
+    success_url = reverse_lazy("filiere_list")
+    success_message = "La filière « %(object)s » a été supprimée."
+
+
+class MentionListView(LoginRequiredMixin, SafePaginationMixin, ListView):
+    model = Mention
+    template_name = "app/mention_list.html"
+    context_object_name = "mentions"
+    paginate_by = 25
+
+    def get_queryset(self):
+        return (Mention.objects.select_related('filiere')
+                .annotate(nb_promotions=Count('promotions', distinct=True))
+                .order_by('filiere__nom', 'nom'))
+
+
+class MentionCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
+    model = Mention
+    form_class = MentionForm
+    template_name = "app/mention_form.html"
+    success_url = reverse_lazy("mention_list")
+    success_message = "La mention « %(nom)s » a été créée."
+
+
+class MentionUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
+    model = Mention
+    form_class = MentionForm
+    template_name = "app/mention_form.html"
+    success_url = reverse_lazy("mention_list")
+    success_message = "La mention « %(nom)s » a été modifiée."
+
+
+class MentionDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
+    model = Mention
+    template_name = "app/mention_confirm_delete.html"
+    success_url = reverse_lazy("mention_list")
+    success_message = "La mention « %(object)s » a été supprimée."
 
 
 @login_required

@@ -9,6 +9,8 @@ from app.views import (
     etudiant_ues_reprendre_pdf,
     etudiant_attestation_pdf,
     PromotionListView, PromotionCreateView, PromotionDetailView, PromotionUpdateView, PromotionDeleteView, promotion_bulk_delete,
+    FiliereListView, FiliereCreateView, FiliereUpdateView, FiliereDeleteView,
+    MentionListView, MentionCreateView, MentionUpdateView, MentionDeleteView,
     promotion_grille_apercu, promotion_grille_retirer,
     promotion_generer_cours, promotion_generer_etudiants,
     EnseignantListView, EnseignantDetailView, EnseignantCreateView,
@@ -68,6 +70,16 @@ urlpatterns = [
     path('promotions/<int:pk>/generer-etudiants/', promotion_generer_etudiants, name='promotion_generer_etudiants'),
     path('promotions/<int:pk>/edit/', PromotionUpdateView.as_view(), name='promotion_update'),
     path('promotions/<int:pk>/delete/', PromotionDeleteView.as_view(), name='promotion_delete'),
+
+    # URLs Filière et Mention
+    path('filieres/', FiliereListView.as_view(), name='filiere_list'),
+    path('filieres/add/', FiliereCreateView.as_view(), name='filiere_create'),
+    path('filieres/<int:pk>/edit/', FiliereUpdateView.as_view(), name='filiere_update'),
+    path('filieres/<int:pk>/delete/', FiliereDeleteView.as_view(), name='filiere_delete'),
+    path('mentions/', MentionListView.as_view(), name='mention_list'),
+    path('mentions/add/', MentionCreateView.as_view(), name='mention_create'),
+    path('mentions/<int:pk>/edit/', MentionUpdateView.as_view(), name='mention_update'),
+    path('mentions/<int:pk>/delete/', MentionDeleteView.as_view(), name='mention_delete'),
 
 
     # URLs Enseignant

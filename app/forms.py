@@ -4,8 +4,8 @@ from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from .models import (Promotion, Enseignant, Etudiant, Cours, Session, Examen,
-                     CotationProjetTutore)
+from .models import (Promotion, Filiere, Mention, Enseignant, Etudiant, Cours,
+                     Session, Examen, CotationProjetTutore)
 
 
 class LoginForm(AuthenticationForm):
@@ -37,6 +37,18 @@ class PromotionForm(BootstrapModelForm):
     class Meta:
         model = Promotion
         fields = '__all__'
+
+
+class FiliereForm(BootstrapModelForm):
+    class Meta:
+        model = Filiere
+        fields = ['nom', 'description']
+
+
+class MentionForm(BootstrapModelForm):
+    class Meta:
+        model = Mention
+        fields = ['nom', 'filiere', 'description']
 
 
 class EnseignantForm(BootstrapModelForm):
