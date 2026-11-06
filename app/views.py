@@ -2103,243 +2103,249 @@ def etudiant_ues_reprendre_pdf(request, pk):
 
 @login_required
 def etudiant_attestation_pdf(request, pk):
-    """Génère une attestation d'authentification pour un étudiant.
+    """Génère l'attestation selon le modèle officiel ESFORCA fourni."""
+    import base64
+    import re
+    from xml.sax.saxutils import escape
 
-    Modèle inspiré de l'attestation officielle (AES FORCA, RDC) :
-    en-tête institution, titre ATTESTATION D'AUTHENTIFICATION, état civil
-    de l'étudiant (noms, matricule, date/lieu de naissance), filière,
-    année académique, mention, date et lieu de délivrance, et emplacement
-    de signature du Directeur des Études.
-
-    Le PDF s'ouvre dans l'onglet (`as_attachment=False`) pour être
-    immédiatement imprimable.
-    """
+    from django.template.loader import get_template
+    from django.utils import timezone
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import (Paragraph, SimpleDocTemplate, Spacer,
-                                    HRFlowable, KeepTogether)
+    from reportlab.platypus import (Image, Paragraph, SimpleDocTemplate,
+                                    Spacer, Table, TableStyle)
 
     etudiant = get_object_or_404(
-        Etudiant.objects.select_related('promotion'), pk=pk)
+        Etudiant.objects.select_related(
+            'promotion__mention__filiere'), pk=pk)
+    derniere_ligne = (GrilleEtudiant.objects
+                      .filter(etudiant=etudiant)
+                      .select_related(
+                          'grille',
+                          'grille__promotion__mention__filiere')
+                      .order_by('-grille__annee_academique',
+                                '-grille__id', '-pk')
+                      .first())
 
-    # Dernière délibération de l'étudiant (GrilleEtudiant) pour la décision
-    # et la mention — ces champs sont sur GrilleEtudiant, pas sur
-    # HistoriquePromotion.
-    derniere_grille_etudiant = (GrilleEtudiant.objects
-                                 .filter(etudiant=etudiant)
-                                 .select_related('grille', 'grille__promotion')
-                                 .order_by('-grille__annee_academique', '-grille__id', '-pk')
-                                 .first())
-    if derniere_grille_etudiant:
-        annee_academique = (derniere_grille_etudiant.grille.annee_academique
-                            if derniere_grille_etudiant.grille.annee_academique
-                            else '——————————')
-        # X : décision de l'étudiant dans la grille
-        decision = (derniere_grille_etudiant.decision or '—')
-                           # Y : Mention de la grille (telle quelle, depuis la délibération)
-        mention = (derniere_grille_etudiant.mention or '—')
-        # X : décision de l'étudiant dans la grille
-        decision = (derniere_grille_etudiant.decision or '—')
-        # Y : Mention de la grille (telle quelle, depuis la délibération)
-        mention = (derniere_grille_etudiant.mention or '—')
-        filiere = (derniere_grille_etudiant.grille.promotion.nom
-                   if derniere_grille_etudiant.grille.promotion_id
-                   else (etudiant.promotion.nom if etudiant.promotion_id else '—'))
-    else:
-        annee_academique = '——————————'
-        mention = '—'
-        mention_filiere = '—'
-        filiere = etudiant.promotion.nom if etudiant.promotion_id else '—'
+    promotion_certifiee = (
+        derniere_ligne.grille.promotion
+        if derniere_ligne and derniere_ligne.grille.promotion_id
+        else etudiant.promotion)
+    mention_obj = promotion_certifiee.mention if promotion_certifiee else None
+    filiere_obj = mention_obj.filiere if mention_obj else None
+    filiere = filiere_obj.nom if filiere_obj else '—'
+    # Le modèle de données stocke souvent « Licence en X », alors que
+    # l'attestation emploie « cycle de Licence en X ».
+    for prefixe in ('Licence en ', 'Licence de ', 'Licence '):
+        if filiere.lower().startswith(prefixe.lower()):
+            filiere = filiere[len(prefixe):]
+            break
+    option = mention_obj.nom if mention_obj else (promotion_certifiee.nom
+                                                   if promotion_certifiee
+                                                   else '—')
+    nom_promotion = promotion_certifiee.nom if promotion_certifiee else ''
+    cycle = 'Licence'
+    annee_academique = (
+        derniere_ligne.grille.annee_academique
+        if derniere_ligne and derniere_ligne.grille.annee_academique
+        else '——————————')
+    decision = derniere_ligne.decision if derniere_ligne else ''
 
-    tampon = BytesIO()
-    doc = SimpleDocTemplate(
-        tampon, pagesize=A4,
-        leftMargin=24 * mm, rightMargin=24 * mm,
-        topMargin=17 * mm, bottomMargin=18 * mm,
-        title=f"Attestation d'authentification - {etudiant.noms}")
-
-    styles = getSampleStyleSheet()
-
-    style_institution = ParagraphStyle(
-        'Institution', parent=styles['Normal'],
-        fontName='Times-Roman', fontSize=9, alignment=1,
-        textColor=colors.HexColor('#526174'), leading=11)
-    style_service = ParagraphStyle(
-        'Service', parent=styles['Normal'],
-        fontName='Times-Bold', fontSize=9.5, alignment=1,
-        textColor=colors.HexColor('#243b5a'), leading=12)
-    style_titre = ParagraphStyle(
-        'Titre', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=17, alignment=1,
-        textColor=colors.HexColor('#17365d'), spaceAfter=3,
-        leading=20, tracking=0.5)
-    style_numero = ParagraphStyle(
-        'Numero', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=10, alignment=1,
-        textColor=colors.HexColor('#526174'), leading=13)
-    style_corps = ParagraphStyle(
-        'Corps', parent=styles['Normal'],
-        fontName='Times-Roman', fontSize=13, alignment=0,
-        leading=21, spaceAfter=11, textColor=colors.HexColor('#202a36'))
-    style_corps_centre = ParagraphStyle(
-        'CorpsCentre', parent=styles['Normal'],
-        fontName='Times-Roman', fontSize=11, alignment=1,
-        leading=15, spaceAfter=5, textColor=colors.HexColor('#35465c'))
-    style_signature = ParagraphStyle(
-        'Signature', parent=styles['Normal'],
-        fontName='Helvetica', fontSize=9, alignment=1,
-        leading=12, textColor=colors.HexColor('#35465c'))
-
-    date_naissance = (etudiant.date_naissance.strftime('%d/%m/%Y')
-                      if etudiant.date_naissance else '——————————')
-    lieu_naissance = etudiant.lieu_naissance or '——————————'
-    matricule = etudiant.numero_etudiant or '——————————'
-
-    # --- Enregistrement de l'attestation avec son numéro unique ---
-    # Un étudiant ne peut avoir qu'une seule attestation : on récupère
-    # l'existante si elle existe déjà, sinon on en crée une nouvelle.
     try:
         attestation = Attestation.objects.get(etudiant=etudiant)
     except Attestation.DoesNotExist:
         attestation = Attestation.objects.create(etudiant=etudiant)
 
-    elements = []
+    tampon = BytesIO()
+    doc = SimpleDocTemplate(
+        tampon, pagesize=A4,
+        leftMargin=24 * mm, rightMargin=24 * mm,
+        topMargin=27 * mm, bottomMargin=27 * mm,
+        title=f"Attestation d'authentification - {etudiant.noms}")
 
-    # --- En-tête officiel (logo RDC + mentions institutionnelles, cf. partial _entete_officiel.html) ---
-    import base64, re
-    from django.template.loader import get_template
-    from reportlab.platypus import Image, Table, TableStyle
+    def dessiner_cadre(canvas, document):
+        """Cadre géométrique inspiré de la bordure du document de référence."""
+        del document
+        largeur, hauteur = A4
+        canvas.saveState()
+        canvas.setStrokeColor(colors.black)
+        for retrait, epaisseur in ((7 * mm, 1.1), (9 * mm, 0.7),
+                                   (11 * mm, 1.1), (13 * mm, 0.5)):
+            canvas.setLineWidth(epaisseur)
+            canvas.rect(retrait, retrait, largeur - 2 * retrait,
+                        hauteur - 2 * retrait)
 
-    partial_src = get_template('app/partials/_entete_officiel.html').template.source
-    _m = re.search(r'data:image/png;base64,([A-Za-z0-9+/=]+)', partial_src)
-    logo_img = None
-    if _m:
-        # Même taille que le relevé (partial _entete_officiel.html) :
-        # hauteur fixée (68 px à l'impression ≈ 18 mm), largeur au ratio.
-        _logo_h = 20 * mm
-        _logo_w = _logo_h * 0.943  # ratio source 149/158
-        logo_img = Image(BytesIO(base64.b64decode(_m.group(1))),
-                         width=_logo_w, height=_logo_h)
+        def losange(x, y, rayon=3 * mm):
+            chemin = canvas.beginPath()
+            chemin.moveTo(x, y + rayon)
+            chemin.lineTo(x + rayon, y)
+            chemin.lineTo(x, y - rayon)
+            chemin.lineTo(x - rayon, y)
+            chemin.close()
+            canvas.drawPath(chemin, stroke=1, fill=0)
 
+        canvas.setLineWidth(0.8)
+        pas = 11 * mm
+        x = 18 * mm
+        while x < largeur - 18 * mm:
+            losange(x, 10 * mm)
+            losange(x, hauteur - 10 * mm)
+            x += pas
+        y = 20 * mm
+        while y < hauteur - 20 * mm:
+            losange(10 * mm, y)
+            losange(largeur - 10 * mm, y)
+            y += pas
+        canvas.restoreState()
+
+    styles = getSampleStyleSheet()
+    noir = colors.black
     style_ecole = ParagraphStyle(
-        'Ecole', parent=styles['Normal'],
-        fontName='Times-Bold', fontSize=12, alignment=1,
-        leading=14, textColor=colors.HexColor('#17365d'))
-    # « Ministère… » est en gras dans le partial HTML (.entete-ligne entete-gras)
-    style_mention = ParagraphStyle(
-        'Mention', parent=styles['Normal'],
-        fontName='Times-Roman', fontSize=8.5, alignment=1,
-        leading=10.5, textColor=colors.HexColor('#344256'))
+        'AttestationEcole', parent=styles['Normal'],
+        fontName='Times-Roman', fontSize=14, leading=17, alignment=1,
+        textColor=noir)
+    style_sous_titre = ParagraphStyle(
+        'AttestationSousTitre', parent=styles['Normal'],
+        fontName='Helvetica-Bold', fontSize=13, leading=16, alignment=1,
+        textColor=noir)
+    style_entete = ParagraphStyle(
+        'AttestationEntete', parent=styles['Normal'],
+        fontName='Helvetica', fontSize=10, leading=13, alignment=1,
+        textColor=noir)
     style_sga = ParagraphStyle(
-        'SGA', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=10, alignment=1,
-        textColor=colors.HexColor('#17365d'))
+        'AttestationSGA', parent=styles['Normal'],
+        fontName='Times-BoldItalic', fontSize=13, leading=16, alignment=1,
+        textColor=noir)
+    style_titre = ParagraphStyle(
+        'AttestationTitre', parent=styles['Normal'],
+        fontName='Times-Bold', fontSize=12, leading=15, alignment=1,
+        textColor=noir)
+    style_corps = ParagraphStyle(
+        'AttestationCorps', parent=styles['Normal'],
+        fontName='Times-Roman', fontSize=14, leading=21, alignment=4,
+        leftIndent=0, firstLineIndent=17 * mm,
+        spaceAfter=13, textColor=noir)
+    style_fin = ParagraphStyle(
+        'AttestationFin', parent=styles['Normal'],
+        fontName='Times-Roman', fontSize=14, leading=21, alignment=4,
+        leftIndent=0, firstLineIndent=17 * mm,
+        spaceAfter=0, textColor=noir)
+    style_date = ParagraphStyle(
+        'AttestationDate', parent=styles['Normal'],
+        fontName='Helvetica', fontSize=11, leading=15, alignment=2,
+        textColor=noir)
+    style_signature = ParagraphStyle(
+        'AttestationSignature', parent=styles['Normal'],
+        fontName='Helvetica-Bold', fontSize=11, leading=16, alignment=2,
+        textColor=noir)
 
-    mentions = [
-        Paragraph("RÉPUBLIQUE DÉMOCRATIQUE DU CONGO", style_institution),
-        Paragraph(
-            "<b>Ministère de l'Enseignement Supérieur, Universitaire, "
-            "Recherche Scientifique et Innovations</b>", style_mention),
-        Paragraph("<b>École Supérieure de Formation des Cadres</b>", style_ecole),
-        Paragraph("E.S.FOR.CA.", style_mention),
-        Paragraph("Décret d'agrément N° 06/0106 du 12 juin 2006.", style_mention),
-        Paragraph("03, avenue Comité urbain · Commune de Gombe", style_mention),
+    # Logo embarqué dans le même en-tête officiel que les relevés.
+    source_entete = get_template(
+        'app/partials/_entete_officiel.html').template.source
+    match_logo = re.search(r'data:image/png;base64,([A-Za-z0-9+/=]+)',
+                           source_entete)
+    logo = None
+    if match_logo:
+        donnees_logo = base64.b64decode(match_logo.group(1))
+        hauteur_logo = 17 * mm
+        largeur_logo = hauteur_logo * 0.943
+        logo = Image(BytesIO(donnees_logo), width=largeur_logo,
+                     height=hauteur_logo)
+
+    mentions_entete = [
+        Paragraph('Ecole Supérieure de Formation des Cadres', style_ecole),
+        Paragraph('<b>E.S.FOR.CA / (ex. Pigier)</b>', style_sous_titre),
+        Spacer(1, 8 * mm),
+        Paragraph('Décret d’agrément N° 06/0106 du 12 juin 2006.',
+                  style_entete),
+        Paragraph('03, avenue Comité urbain&nbsp;&nbsp; C/ Gombe',
+                  style_entete),
     ]
-
-    if logo_img:
-        # Même répartition que le relévé (partial _entete_officiel.html) :
-        # colonne logo ≈ 24 mm (92 px à l'impression) et le reste pour le texte,
-        # afin que le titre du Ministère tienne sur une seule ligne.
-        entete = Table([[logo_img, mentions]], colWidths=[24 * mm, 146 * mm])
+    if logo:
+        entete = Table([[logo, mentions_entete], ['', '']],
+                       colWidths=[26 * mm, 136 * mm],
+                       rowHeights=[29 * mm, 2 * mm])
     else:
-        entete = Table([[mentions]], colWidths=[160 * mm])
-
+        entete = Table([[mentions_entete]], colWidths=[162 * mm])
     entete.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
         ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ('TOPPADDING', (0, 0), (-1, -1), 1),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
-        ('LINEBELOW', (0, 0), (-1, -1), 1.4, colors.HexColor('#17365d')),
-        ('LINEABOVE', (0, 0), (-1, 0), 0.5, colors.HexColor('#c9d3df')),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LINEBELOW', (0, 0), (-1, 0), 1.2, noir),
+        ('LINEBELOW', (0, -1), (-1, -1), 0.6, noir),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
-    # La table est centrée sur la page (width: 100% dans le partial HTML).
-    entete.hAlign = 'CENTER'
-    elements.append(entete)
-    elements.append(Spacer(1, 2 * mm))
-    elements.append(Paragraph("Secrétariat Général Académique", style_sga))
-    elements.append(Spacer(1, 5 * mm))
 
-    # --- Titre du document ---
-    elements.append(Spacer(1, 1 * mm))
-    elements.append(Paragraph("ATTESTATION D'AUTHENTIFICATION", style_titre))
-    if attestation.numero:
-        elements.append(Paragraph(f"<b>N° {attestation.numero}</b>", style_numero))
-    elements.append(Spacer(1, 10 * mm))
-
-    # --- Corps du texte ---
-    details_etudiant = [
+    elements = [entete, Spacer(1, 7 * mm),
+                Paragraph('Secrétariat Général Académique', style_sga),
+                Spacer(1, 7 * mm)]
+    date_delivrance = timezone.localdate()
+    annee_delivrance = date_delivrance.year
+    numero = escape(attestation.numero or '…….')
+    elements.extend([
         Paragraph(
-            f"Nous certifions que <b>{etudiant.noms}</b>, né(e) le "
-            f"<b>{date_naissance}</b> à <b>{lieu_naissance}</b>, "
-            f"matricule n° <b>{matricule}</b>, est régulièrement inscrit(e) "
-            f"à l'AES FORCA pour l'année académique <b>{annee_academique}</b>.",
-            style_corps)]
+            f'<u>ATTESTATION D’AUTHENTIFICATION N° {numero} / '
+            f'{annee_delivrance}</u>', style_titre),
+        Spacer(1, 8 * mm),
+    ])
 
-    mention_filiere = (
-        etudiant.promotion.mention.nom
-        if etudiant.promotion and etudiant.promotion.mention
-        else 'Licence Informatique'
-    )
-    details_etudiant.append(Paragraph(
-        f"Il/Elle suit les cours de la promotion <b>{etudiant.promotion.nom}</b> "
-        f"({mention_filiere}) et est titulaire d'une mention "
-        f"<b>{mention}</b>.",
-        style_corps))
+    mois_fr = ('janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+               'juillet', 'août', 'septembre', 'octobre', 'novembre',
+               'décembre')
+    naissance = (
+        f'{etudiant.date_naissance.day} '
+        f'{mois_fr[etudiant.date_naissance.month - 1]} '
+        f'{etudiant.date_naissance.year}'
+        if etudiant.date_naissance else '——————————')
+    lieu_naissance = escape(etudiant.lieu_naissance or '——————————')
+    nom = escape(etudiant.noms)
+    annee = escape(annee_academique)
+    filiere = escape(filiere)
+    option = escape(option)
+    if decision == 'V':
+        suite_certification = (
+            f'a suivi régulièrement et terminé avec <b>SATISFACTION</b> '
+            f'son cycle de <b>{escape(cycle)}</b> en '
+            f'<b>{filiere}</b> option : <b>{option}</b> au cours de '
+            f'l’année académique <b>{annee}</b>.')
+    else:
+        suite_certification = (
+            f'a suivi régulièrement les enseignements du cycle de '
+            f'<b>{escape(cycle)}</b> en <b>{filiere}</b> option : '
+            f'<b>{option}</b> au cours de l’année académique '
+            f'<b>{annee}</b>.')
 
-    details_etudiant.append(Paragraph(
-        "La présente attestation lui est délivrée à sa demande pour servir "
-        "et valoir ce que de droit.",
-        style_corps))
+    elements.extend([
+        Paragraph(
+            'Je soussigné Emmanuel MUSUYI MUKADI, Secrétaire Général '
+            'Académique de l’Ecole supérieure de formation des '
+            'cadres, l’E.S.FOR.CA (Ex Pigier), atteste par la présente que '
+            f'le (la) nommé(e) <b>{nom}</b>, né(e) à '
+            f'<b>{lieu_naissance}</b>, le <b>{naissance}</b> '
+            f'{suite_certification}', style_corps),
+        Paragraph(
+            'La présente lui est délivrée pour servir et faire valoir ce '
+            'que de droit en attendant l’homologation de son diplôme par '
+            'les autorités de l’Enseignement Supérieur et Universitaire.',
+            style_fin),
+        Spacer(1, 20 * mm),
+        Paragraph(
+            f'Fait à Kinshasa, le {date_delivrance.day} '
+            f'{mois_fr[date_delivrance.month - 1].capitalize()} '
+            f'{date_delivrance.year}.', style_date),
+        Spacer(1, 7 * mm),
+        Paragraph('Le Secrétaire Général Académique', style_signature),
+        Spacer(1, 4 * mm),
+        Paragraph('Prof. EMMANUEL MUSUYI MUKADI.', style_signature),
+    ])
 
-    details = Table([[details_etudiant]], colWidths=[162 * mm])
-    details.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f8fc')),
-        ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#c8d4e2')),
-        ('LINEBEFORE', (0, 0), (0, 0), 3, colors.HexColor('#17365d')),
-        ('LEFTPADDING', (0, 0), (-1, -1), 9 * mm),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 8 * mm),
-        ('TOPPADDING', (0, 0), (-1, -1), 7 * mm),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4 * mm),
-    ]))
-    elements.append(details)
-
-    elements.append(Spacer(1, 9 * mm))
-
-    # --- Date et lieu de délivrance ---
-    from django.utils import timezone
-    date_du_jour = timezone.localdate()
-    elements.append(Paragraph(
-        f"Fait à Kinshasa, le {date_du_jour:%d %B %Y}.",
-        style_corps_centre))
-
-    elements.append(Spacer(1, 14 * mm))
-
-    # --- Signature ---
-    elements.append(HRFlowable(width="38%", thickness=0.8,
-                               color=colors.HexColor('#17365d')))
-    elements.append(Spacer(1, 2 * mm))
-    elements.append(Paragraph("Le Directeur des Études", style_signature))
-    elements.append(Spacer(1, 1 * mm))
-    elements.append(Paragraph("AES FORCA", style_signature))
-
-    doc.build(elements)
+    doc.build(elements, onFirstPage=dessiner_cadre,
+              onLaterPages=dessiner_cadre)
     tampon.seek(0)
-
     nom_fichier = (f"attestation-{slugify(etudiant.noms)}"
                    f"-{etudiant.numero_etudiant or 'sans-matricule'}.pdf")
     return FileResponse(
