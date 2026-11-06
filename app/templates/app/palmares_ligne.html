@@ -16,6 +16,11 @@
     .print-only-footer {
         display: none;
     }
+    .print-only-summary,
+    .print-header-meta,
+    .print-titre-toggle {
+        display: none;
+    }
 
     /* ===== Optimisation de la disposition d'impression (A4 portrait) ===== */
     @media print {
@@ -33,6 +38,9 @@
             color: #000 !important;
             font-size: 8.5pt !important;
             line-height: 1.25 !important;
+            display: block !important;
+            height: auto !important;
+            min-height: 0 !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
         }
@@ -41,6 +49,13 @@
             margin-left: 0 !important;
             padding: 0 !important;
             min-height: 0 !important;
+            height: auto !important;
+        }
+
+        .app-main,
+        .app-main-inner {
+            min-height: 0 !important;
+            height: auto !important;
         }
 
         .container, .container-fluid {
@@ -70,9 +85,42 @@
         }
 
         .print-header-meta {
+            display: block !important;
             font-size: 8.5pt;
             margin-top: 3px;
             color: #111;
+        }
+
+        .print-titre-toggle {
+            display: block !important;
+            text-align: center;
+        }
+        .print-titre-toggle .titre-releve {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 13pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-top: 9px;
+            text-decoration: underline;
+        }
+
+        .print-only-summary {
+            display: block !important;
+            margin-bottom: 8px;
+        }
+        .print-table-summary {
+            width: 100% !important;
+            border: 1px solid #333 !important;
+            border-collapse: collapse !important;
+            font-size: 8pt !important;
+        }
+        .print-table-summary td {
+            padding: 3px 6px !important;
+            border: 1px solid #777 !important;
+        }
+        .print-table-summary .bg-light {
+            background-color: #f1f3f5 !important;
+            font-weight: 600;
         }
 
         /* Synthèse délibérée compacte, sans fonds teintés */
@@ -106,10 +154,26 @@
         .ue-row-validee, .ue-row-echec { background: transparent !important; }
         .table-responsive { overflow: visible !important; }
 
-        /* Disposition des 2 semestres côte à côte (gérée par Bootstrap row-cols) */
+        /* Même disposition en deux colonnes que le relevé de la fiche
+           étudiant, avec largeurs de colonnes prévues pour l'impression A4. */
+        .print-semester-row {
+            display: flex !important;
+            flex-direction: row !important;
+            gap: 8px !important;
+            width: 100% !important;
+            margin: 0 !important;
+        }
+        .print-semester-col {
+            width: calc(50% - 4px) !important;
+            flex: 0 0 calc(50% - 4px) !important;
+            max-width: calc(50% - 4px) !important;
+            padding: 0 !important;
+        }
         .semester-card {
             border: 1px solid #444 !important;
             border-radius: 0 !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
         }
         .semester-card .card-header {
             padding: 3px 6px !important;
@@ -119,8 +183,27 @@
             font-weight: 700;
         }
         .table-ue {
+            width: 100% !important;
+            border-collapse: collapse !important;
             font-size: 7.6pt !important;
             margin-bottom: 0 !important;
+        }
+        .table-ue th, .table-ue td {
+            padding: 2px 3px !important;
+            border: 1px solid #bbb !important;
+            line-height: 1.15 !important;
+        }
+        .table-ue td:last-child .badge { padding: .2em .4em !important; }
+        .table-ue th {
+            background-color: #f8f9fa !important;
+            font-weight: 700 !important;
+            border-bottom: 1px solid #444 !important;
+        }
+        .table-ue tfoot td {
+            padding: 2px 4px !important;
+            background-color: #f1f3f5 !important;
+            border-top: 1px solid #444 !important;
+            font-weight: 700;
         }
         .ue-status-valide {
             font-weight: 700;
@@ -145,13 +228,16 @@
 {% block content %}
 <!-- En-tête officiel imprimable (visible uniquement à l'impression) :
      même cadre que le relevé de la fiche étudiant. -->
-{% include "app/partials/_entete_officiel.html" with titre_document="RELEVÉ DE NOTES" %}
+{% include "app/partials/_entete_officiel.html" %}
+<div class="print-titre-toggle">
+    <div class="titre-releve">RELEVÉ DE NOTES</div>
+</div>
 <div class="print-header-meta">
-        Étudiant(e) : <strong>{{ ligne.nom_affiche }}</strong> &nbsp;|&nbsp;
-        Promotion : <strong>{{ selection.grille.promotion.nom }}</strong> &nbsp;|&nbsp;
-        Année académique : <strong>{{ selection.grille.annee_academique|default:"—" }}</strong>
-        &nbsp;|&nbsp; <em>(relevé établi d'après la grille archivée)</em>
-    </div>
+    Étudiant(e) : <strong>{{ ligne.nom_affiche }}</strong> &nbsp;|&nbsp;
+    Promotion : <strong>{{ selection.grille.promotion.nom }}</strong> &nbsp;|&nbsp;
+    Année académique : <strong>{{ selection.grille.annee_academique|default:"—" }}</strong>
+    &nbsp;|&nbsp; <em>(relevé établi d'après la grille archivée)</em>
+</div>
 
 <!-- Barre d'action supérieure (écran uniquement) -->
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3 no-print">
@@ -190,11 +276,31 @@
 
 {# --- Synthèse délibérée : recopie des colonnes de délibération du #}
 {# fichier — aucun recalcul (cf. GrilleEtudiant). #}
-<div class="card deliberation-card mb-4">
-    <div class="card-header bg-white">
+<div class="card deliberation-card card-releve mb-4">
+    <div class="card-header bg-white no-print">
         <h5 class="mb-0"><i class="bi bi-trophy me-2 text-warning"></i>Résultats de délibération</h5>
     </div>
-    <div class="card-body">
+    <div class="print-only-summary">
+        <table class="table table-bordered table-sm print-table-summary">
+            <tbody>
+                <tr>
+                    <td class="bg-light" style="width: 22%;">Décision du Jury :</td>
+                    <td style="width: 28%;" class="fw-bold">
+                        {{ selection.get_decision_display|default:selection.decision|default:"—" }}{% if selection.mention %} — <em>{{ selection.mention }}</em>{% endif %}
+                    </td>
+                    <td class="bg-light" style="width: 20%;">Moyenne :</td>
+                    <td style="width: 30%;" class="fw-bold">{{ selection.moyenne_affichee|default:selection.moyenne|default:"—" }}/20</td>
+                </tr>
+                <tr>
+                    <td class="bg-light">Crédits validés :</td>
+                    <td><strong>{{ selection.credits_total }}</strong> / {{ selection.grille.total_credits }} cr. (S1: {{ selection.credits_s1 }} · S2: {{ selection.credits_s2 }})</td>
+                    <td class="bg-light">Unités d'Enseignement :</td>
+                    <td><strong>{{ nb_ues_validees }}</strong> / {{ releve|length }} validées{% if selection.nb_ue_reprendre %} ({{ selection.nb_ue_reprendre }} à reprendre){% endif %}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="card-body no-print">
         <div class="row text-center">
             <div class="col-12 col-sm-6 col-md-4 col-lg-3">
                 <div class="text-muted small">Rang</div>
@@ -246,10 +352,10 @@
         <h5 class="mb-0"><i class="bi bi-journal-text me-2 text-primary"></i>Relevé par unité d'enseignement</h5>
     </div>
     <div class="card-body p-3">
-        <div class="row g-4 row-cols-1 row-cols-sm-2 row-cols-lg-2">
+        <div class="row g-4 print-semester-row">
             {% for semestre in semestres %}
             <!-- SEMESTRE {{ semestre.numero }} -->
-            <div class="col mb-4">
+            <div class="col mb-4 print-semester-col">
                 <div class="card h-100 border semester-card">
                     <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
                         <span class="fw-bold text-primary">
@@ -263,11 +369,11 @@
                         <table class="table table-sm table-hover align-middle mb-0 table-ue">
                             <thead class="table-light small">
                                 <tr>
-                                    <th style="width: 24px;" class="text-center">#</th>
+                                    <th style="width: 20px;" class="text-center">#</th>
                                     <th>Unité d'Enseignement (UE)</th>
-                                    <th class="text-center" style="width: 32px;" title="Crédits">Cr.</th>
-                                    <th class="text-center" style="width: 48px;">Note</th>
-                                    <th class="text-center" style="width: 68px;">Statut</th>
+                                    <th class="text-center" style="width: 28px;" title="Crédits">Cr.</th>
+                                    <th class="text-center" style="width: 44px;">Note</th>
+                                    <th class="text-center" style="width: 64px;">Statut</th>
                                 </tr>
                             </thead>
                             <tbody>
