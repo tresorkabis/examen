@@ -2306,7 +2306,7 @@ def etudiant_ues_reprendre_pdf(request, pk):
 
 
 @login_required
-def etudiant_attestation_pdf(request, pk):
+def etudiant_attestation_pdf(request, pk, from_palmares=False):
     """Génère l'attestation selon le modèle officiel ESFORCA fourni."""
     import base64
     import re
@@ -2321,17 +2321,34 @@ def etudiant_attestation_pdf(request, pk):
     from reportlab.platypus import (Image, Paragraph, SimpleDocTemplate,
                                     Spacer, Table, TableStyle)
 
-    etudiant = get_object_or_404(
-        Etudiant.objects.select_related(
-            'promotion__mention__filiere'), pk=pk)
-    derniere_ligne = (GrilleEtudiant.objects
-                      .filter(etudiant=etudiant)
-                      .select_related(
-                          'grille',
-                          'grille__promotion__mention__filiere')
-                      .order_by('-grille__annee_academique',
-                                '-grille__id', '-pk')
-                      .first())
+    if from_palmares:
+        derniere_ligne = get_object_or_404(
+            GrilleEtudiant.objects.select_related(
+                'etudiant__promotion__mention__filiere',
+                'grille__promotion__mention__filiere'),
+            pk=pk)
+        if derniere_ligne.etudiant_id:
+            etudiant = derniere_ligne.etudiant
+        else:
+            # Une ligne archivée conserve le nom et les résultats, mais
+            # n'a pas forcément de fiche avec matricule ou état civil.
+            # On utilise un objet temporaire pour produire l'attestation
+            # sans créer de fiche étudiant artificielle en base.
+            etudiant = Etudiant(
+                noms=derniere_ligne.nom_affiche,
+                promotion=derniere_ligne.grille.promotion)
+    else:
+        etudiant = get_object_or_404(
+            Etudiant.objects.select_related(
+                'promotion__mention__filiere'), pk=pk)
+        derniere_ligne = (GrilleEtudiant.objects
+                          .filter(etudiant=etudiant)
+                          .select_related(
+                              'grille',
+                              'grille__promotion__mention__filiere')
+                          .order_by('-grille__annee_academique',
+                                    '-grille__id', '-pk')
+                          .first())
 
     promotion_certifiee = (
         derniere_ligne.grille.promotion
@@ -2357,10 +2374,12 @@ def etudiant_attestation_pdf(request, pk):
         else '——————————')
     decision = derniere_ligne.decision if derniere_ligne else ''
 
-    try:
-        attestation = Attestation.objects.get(etudiant=etudiant)
-    except Attestation.DoesNotExist:
-        attestation = Attestation.objects.create(etudiant=etudiant)
+    attestation = None
+    if etudiant.pk:
+        try:
+            attestation = Attestation.objects.get(etudiant=etudiant)
+        except Attestation.DoesNotExist:
+            attestation = Attestation.objects.create(etudiant=etudiant)
 
     tampon = BytesIO()
     doc = SimpleDocTemplate(
@@ -2489,7 +2508,7 @@ def etudiant_attestation_pdf(request, pk):
                 Spacer(1, 7 * mm)]
     date_delivrance = timezone.localdate()
     annee_delivrance = date_delivrance.year
-    numero = escape(attestation.numero or '…….')
+    numero = escape(attestation.numero or '…….') if attestation else '…….'
     elements.extend([
         Paragraph(
             f'<u>ATTESTATION D’AUTHENTIFICATION N° {numero} / '

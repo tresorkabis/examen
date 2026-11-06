@@ -49,6 +49,8 @@ urlpatterns = [
     path('etudiants/<int:pk>/releve-global/', etudiant_releve_global, name='etudiant_releve_global'),
     path('etudiants/<int:pk>/ues-a-reprendre.pdf', etudiant_ues_reprendre_pdf, name='etudiant_ues_reprendre_pdf'),
     path('etudiants/<int:pk>/attestation.pdf', etudiant_attestation_pdf, name='etudiant_attestation_pdf'),
+    path('palmares/lignes/<int:pk>/attestation.pdf', etudiant_attestation_pdf,
+         {'from_palmares': True}, name='palmares_ligne_attestation_pdf'),
     path('etudiants/<int:pk>/edit/', EtudiantUpdateView.as_view(), name='etudiant_update'),
     path('etudiants/<int:pk>/delete/', EtudiantDeleteView.as_view(), name='etudiant_delete'),
 
