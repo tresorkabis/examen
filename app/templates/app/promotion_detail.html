@@ -202,6 +202,13 @@
                 <i class="bi bi-printer me-1"></i>Imprimer les cours
             </button>
             {% endif %}
+            {% if etudiants %}
+            <a href="{% url 'promotion_ues_a_reprendre_pdf' promotion.pk %}"
+               class="btn btn-outline-warning"
+               title="Générer un seul PDF des UE à reprendre par les étudiants de cette promotion">
+                <i class="bi bi-printer me-1"></i>Imprimer les UE à reprendre
+            </a>
+            {% endif %}
             <a href="{% url 'promotion_update' promotion.pk %}" class="btn btn-outline-secondary">
                 <i class="bi bi-pencil me-1"></i>Modifier
             </a>

@@ -1963,6 +1963,209 @@ def _donnees_ues_a_reprendre(etudiant):
 
 
 @login_required
+def promotion_ues_a_reprendre_pdf(request, pk):
+    """Imprime dans un seul PDF les UE à reprendre par les étudiants d'une promotion.
+
+    Pour chaque étudiant de la promotion actuelle, la recherche couvre toutes
+    ses grilles (y compris les années antérieures), comme le relevé individuel.
+    """
+    from xml.sax.saxutils import escape
+
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (Paragraph, SimpleDocTemplate, Spacer,
+                                    Table, TableStyle)
+
+    promotion = get_object_or_404(Promotion, pk=pk)
+    etudiants = list(Etudiant.objects.filter(promotion=promotion)
+                     .order_by('noms', 'pk'))
+    ids_etudiants = [e.pk for e in etudiants]
+
+    lignes = list(
+        GrilleEtudiant.objects
+        .filter(etudiant_id__in=ids_etudiants)
+        .select_related('etudiant', 'grille', 'grille__promotion')
+        .order_by('etudiant__noms', '-grille__annee_academique',
+                  '-grille__id', '-pk'))
+    lignes_par_etudiant = defaultdict(list)
+    for ligne in lignes:
+        lignes_par_etudiant[ligne.etudiant_id].append(ligne)
+
+    notes_par_ligne = defaultdict(list)
+    for note in (GrilleNote.objects
+                 .filter(ligne_id__in=[ligne.pk for ligne in lignes])
+                 .select_related('ue')):
+        if not note.est_validee:
+            notes_par_ligne[note.ligne_id].append(note)
+
+    for notes in notes_par_ligne.values():
+        notes.sort(key=lambda n: (n.ue.semestre or 0, n.ue.ordre or 0,
+                                  n.ue.intitule))
+
+    styles = getSampleStyleSheet()
+    style_titre = ParagraphStyle(
+        'TitreReprisesPromotion', parent=styles['Title'],
+        fontSize=17, leading=21, textColor=colors.HexColor('#17365d'),
+        spaceAfter=4 * mm)
+    style_meta = ParagraphStyle(
+        'MetaReprisesPromotion', parent=styles['Normal'],
+        fontSize=9, leading=12, textColor=colors.HexColor('#495057'))
+    style_cellule = ParagraphStyle(
+        'CelluleReprisesPromotion', parent=styles['Normal'],
+        fontSize=8, leading=10)
+    style_nom = ParagraphStyle(
+        'NomReprisesPromotion', parent=style_cellule,
+        fontName='Helvetica-Bold')
+    style_promotion = ParagraphStyle(
+        'PromotionReprisesPromotion', parent=style_cellule,
+        fontName='Helvetica-Bold', textColor=colors.HexColor('#17365d'))
+    style_deliberation = ParagraphStyle(
+        'DeliberationReprisesPromotion', parent=style_cellule,
+        fontName='Helvetica-Oblique', textColor=colors.HexColor('#495057'))
+
+    donnees = [['N° UE', 'Unité d’enseignement', 'Semestre', 'Crédits',
+                'Note /20']]
+    total_ues = total_credits = nb_etudiants_concernes = 0
+    lignes_entetes_etudiants = []
+    lignes_entetes_promotions = []
+    lignes_entetes_deliberations = []
+    for etudiant in etudiants:
+        lignes_etu = lignes_par_etudiant.get(etudiant.pk, [])
+        notes_etu = [note for ligne in lignes_etu
+                     for note in notes_par_ligne.get(ligne.pk, [])]
+        if not notes_etu:
+            continue
+        nb_etudiants_concernes += 1
+        total_ues += len(notes_etu)
+        credits_etu = sum(note.ue.credits for note in notes_etu)
+        total_credits += credits_etu
+        lignes_entetes_etudiants.append(len(donnees))
+        matricule = escape(etudiant.numero_etudiant or '—')
+        donnees.append([Paragraph(
+            f'Étudiant {nb_etudiants_concernes} — '
+            f'{escape(etudiant.noms)} · {matricule} · '
+            f'{len(notes_etu)} UE à reprendre · {credits_etu} crédit(s)',
+            style_nom), '', '', '', ''])
+
+        lignes_par_promotion = OrderedDict()
+        for ligne in lignes_etu:
+            notes_ligne = notes_par_ligne.get(ligne.pk, [])
+            if notes_ligne:
+                promotion_ligne = ligne.grille.promotion
+                lignes_par_promotion.setdefault(
+                    promotion_ligne.pk, (promotion_ligne, []))[1].append(ligne)
+
+        for promotion_ligne, lignes_promotion in lignes_par_promotion.values():
+            nb_ues_promotion = sum(
+                len(notes_par_ligne.get(ligne.pk, []))
+                for ligne in lignes_promotion)
+            lignes_entetes_promotions.append(len(donnees))
+            donnees.append([Paragraph(
+                f'{escape(promotion_ligne.nom)} · '
+                f'{nb_ues_promotion} UE à reprendre',
+                style_promotion), '', '', ''])
+            for ligne in lignes_promotion:
+                notes_ligne = notes_par_ligne.get(ligne.pk, [])
+                moyenne = (f'{ligne.moyenne_affichee}/20'
+                           if ligne.moyenne_affichee else '—')
+                decision = ligne.get_decision_display() or '—'
+                lignes_entetes_deliberations.append(len(donnees))
+                donnees.append([Paragraph(
+                    f'Année {escape(ligne.grille.annee_academique or "—")} '
+                    f'· Décision de délibération : {escape(decision)} '
+                    f'· Moyenne : {escape(moyenne)}',
+                    style_deliberation), '', '', ''])
+                for numero_ue, note in enumerate(notes_ligne, start=1):
+                    donnees.append([
+                        str(numero_ue),
+                        Paragraph(escape(note.ue.intitule), style_cellule),
+                        str(note.ue.semestre or '—'),
+                        str(note.ue.credits),
+                        note.note_affichee if note.est_notee else 'Non notée',
+                    ])
+
+    if total_ues == 0:
+        donnees.append([
+            Paragraph('Aucune UE à reprendre pour les étudiants de cette promotion.',
+                      style_cellule), '', '', '', '',
+        ])
+
+    tampon = BytesIO()
+    doc = SimpleDocTemplate(
+        tampon, pagesize=landscape(A4),
+        leftMargin=12 * mm, rightMargin=12 * mm,
+        topMargin=12 * mm, bottomMargin=12 * mm,
+        title=f'UE à reprendre - {promotion.nom}')
+    largeurs = [12 * mm, 182 * mm, 22 * mm, 25 * mm, 28 * mm]
+    tableau = Table(donnees, colWidths=largeurs, repeatRows=1,
+                    hAlign='LEFT')
+    styles_tableau = [
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#17365d')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#adb5bd')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('ALIGN', (0, 1), (0, -1), 'CENTER'),
+        ('ALIGN', (2, 1), (-1, -1), 'CENTER'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]
+    if total_ues == 0:
+        styles_tableau.append(('SPAN', (0, 1), (-1, 1)))
+    else:
+        for row_index in lignes_entetes_etudiants:
+            styles_tableau.extend([
+                ('SPAN', (0, row_index), (-1, row_index)),
+                ('BACKGROUND', (0, row_index), (-1, row_index),
+                 colors.HexColor('#e9eff7')),
+                ('LINEABOVE', (0, row_index), (-1, row_index), 0.8,
+                 colors.HexColor('#17365d')),
+                ('LEFTPADDING', (0, row_index), (-1, row_index), 7),
+                ('TOPPADDING', (0, row_index), (-1, row_index), 6),
+                ('BOTTOMPADDING', (0, row_index), (-1, row_index), 6),
+            ])
+        for row_index in lignes_entetes_promotions:
+            styles_tableau.extend([
+                ('SPAN', (0, row_index), (-1, row_index)),
+                ('BACKGROUND', (0, row_index), (-1, row_index),
+                 colors.HexColor('#f1f5f9')),
+                ('LEFTPADDING', (0, row_index), (-1, row_index), 14),
+                ('TOPPADDING', (0, row_index), (-1, row_index), 5),
+                ('BOTTOMPADDING', (0, row_index), (-1, row_index), 4),
+            ])
+        for row_index in lignes_entetes_deliberations:
+            styles_tableau.extend([
+                ('SPAN', (0, row_index), (-1, row_index)),
+                ('BACKGROUND', (0, row_index), (-1, row_index),
+                 colors.HexColor('#fafbfc')),
+                ('LEFTPADDING', (0, row_index), (-1, row_index), 22),
+                ('TOPPADDING', (0, row_index), (-1, row_index), 4),
+                ('BOTTOMPADDING', (0, row_index), (-1, row_index), 4),
+            ])
+    tableau.setStyle(TableStyle(styles_tableau))
+    elements = [
+        Paragraph(
+            f'UE À REPRENDRE — {escape(promotion.nom.upper())}', style_titre),
+        Paragraph(
+            f'<b>{escape(promotion.nom)}</b> · {len(etudiants)} étudiant(s) · '
+            f'{nb_etudiants_concernes} étudiant(s) avec des UE à reprendre · '
+            f'{total_ues} UE · {total_credits} crédit(s)', style_meta),
+        Spacer(1, 5 * mm),
+        tableau,
+    ]
+    doc.build(elements)
+    tampon.seek(0)
+    nom_fichier = f'ues-a-reprendre-{slugify(promotion.nom)}.pdf'
+    return FileResponse(tampon, as_attachment=False,
+                        content_type='application/pdf', filename=nom_fichier)
+
+
+@login_required
 def etudiant_ues_reprendre_pdf(request, pk):
     """PDF dédié : uniquement les UE à reprendre, toutes années confondues.
 
