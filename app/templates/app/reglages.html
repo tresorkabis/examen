@@ -28,6 +28,36 @@
 </div>
 {% endif %}
 
+{% if user_is_admin %}
+<div class="card shadow-sm border-warning mb-3">
+    <div class="card-header bg-white">
+        <h5 class="mb-0 text-warning-emphasis">
+            <i class="bi bi-upc-scan me-2"></i>Régénération des matricules
+        </h5>
+    </div>
+    <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <p class="mb-1">
+                <strong>{{ nb_matricules_a_regenerer }}</strong> matricule(s) ne commencent pas par « ET ».
+            </p>
+            <p class="small text-muted mb-0">
+                L’action leur attribuera un nouveau matricule au format ETU- suivi de 8 chiffres.
+                Les anciens matricules seront remplacés. Les matricules commençant déjà par ET seront conservés.
+            </p>
+        </div>
+        <form method="post" class="m-0">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="regenerer_matricules">
+            <button type="submit" class="btn btn-warning"
+                    {% if not nb_matricules_a_regenerer %}disabled{% endif %}
+                    onclick="return confirm('Régénérer les {{ nb_matricules_a_regenerer }} matricule(s) qui ne commencent pas par ET ? Les anciens matricules seront remplacés.');">
+                <i class="bi bi-arrow-repeat me-1"></i>Régénérer les matricules
+            </button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
 <div class="card shadow-sm mb-3">
     <div class="card-header bg-white">
         <h5 class="mb-0"><i class="bi bi-broom me-2 text-primary"></i>Nettoyage du parcours académique</h5>

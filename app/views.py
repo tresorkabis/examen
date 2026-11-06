@@ -62,7 +62,8 @@ from .models import (Etudiant, Cours, Session, Enseignant, Promotion, Filiere,
                      Mention, Examen,
                      Inscription, Grille, GrilleUE, GrilleEtudiant, GrilleNote,
                      HistoriquePromotion, CotationProjetTutore, Attestation,
-                     UserProfile, UserRole, get_user_role)
+                     UserProfile, UserRole, get_user_role,
+                     generate_numero_etudiant)
 from .excel_import import (import_etudiants_excel, import_enseignants_excel,
                           import_cours_excel, import_grille_excel)
 
@@ -3378,9 +3379,33 @@ def reglages(request):
     conflits_avant = HistoriquePromotion.etapes_conflictuelles()
     nb_avant = len(conflits_avant)
     nb_supprimes = 0
+    nb_matricules_regeneres = 0
 
     if request.method == 'POST':
-        if nb_avant:
+        action = request.POST.get('action', 'nettoyer_parcours')
+        if action == 'regenerer_matricules':
+            if get_user_role(request.user) != UserRole.ADMIN:
+                raise PermissionDenied
+            # Recalcule la sélection au moment de l'action. Les matricules
+            # existants commençant par ET sont conservés; tous les autres
+            # reçoivent le format ETU-######## déjà utilisé à la création.
+            etudiants_a_renumeroter = list(
+                Etudiant.objects
+                .exclude(numero_etudiant__istartswith='ET')
+                .order_by('pk'))
+            with transaction.atomic():
+                for etudiant in etudiants_a_renumeroter:
+                    etudiant.numero_etudiant = generate_numero_etudiant()
+                    etudiant.save(update_fields=['numero_etudiant'])
+            nb_matricules_regeneres = len(etudiants_a_renumeroter)
+            if nb_matricules_regeneres:
+                messages.success(
+                    request,
+                    f'{nb_matricules_regeneres} matricule(s) régénéré(s).')
+            else:
+                messages.info(request,
+                              'Tous les matricules commencent déjà par ET.')
+        elif action == 'nettoyer_parcours' and nb_avant:
             with transaction.atomic():
                 HistoriquePromotion.objects.filter(
                     pk__in=[c['etape'].pk for c in conflits_avant]).delete()
@@ -3389,7 +3414,7 @@ def reglages(request):
                 request,
                 "%d étape(s) de parcours contradictoire(s) supprimée(s)."
                 % nb_supprimes)
-        else:
+        elif action == 'nettoyer_parcours':
             messages.info(request,
                           "Aucun enregistrement à nettoyer : base conforme.")
 
@@ -3397,6 +3422,9 @@ def reglages(request):
         'conflits': HistoriquePromotion.etapes_conflictuelles(),
         'nb_supprimes': nb_supprimes,
         'nb_total_etapes': HistoriquePromotion.objects.count(),
+        'nb_matricules_a_regenerer': Etudiant.objects.exclude(
+            numero_etudiant__istartswith='ET').count(),
+        'nb_matricules_regeneres': nb_matricules_regeneres,
     })
 
 
