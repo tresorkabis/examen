@@ -93,6 +93,13 @@
         </a>
         {% endif %}
         {% endif %}
+        {% if user.is_staff %}
+        <span class="sidebar-nav-label">Administration</span>
+        <a href="{% url 'admin:index' %}"
+           class="sidebar-link {% if request.resolver_match.namespace == 'admin' %}is-active{% endif %}">
+            <i class="bi bi-gear-fill"></i><span>Admin Django</span>
+        </a>
+        {% endif %}
     </nav>
 
     <div class="sidebar-bottom">
