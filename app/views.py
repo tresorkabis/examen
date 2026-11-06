@@ -254,12 +254,11 @@ class PalmaresView(ListView):
         moyenne_min = self.request.GET.get('moyenne_min', '').strip()
         tri = self.request.GET.get('tri', '').strip()
 
-        # Filtre sur la table GrilleEtudiant : toutes les lignes des grilles de
-        # l'historique, y compris celles archivées sans fiche étudiant (nom lu
-        # dans le fichier).
-        queryset = GrilleEtudiant.objects.filter(
-            grille__parcours__isnull=False,
-        )
+        # Chaque grille importée est une pièce de résultats et peut alimenter
+        # le palmarès même si elle provient d'une ancienne cohorte dont aucune
+        # fiche Etudiant n'existe encore. Les lignes archivées conservent leur
+        # nom et leurs résultats dans GrilleEtudiant.
+        queryset = GrilleEtudiant.objects.all()
         if search:
             queryset = queryset.filter(
                 Q(etudiant__noms__icontains=search) |
@@ -269,7 +268,7 @@ class PalmaresView(ListView):
 
         # Filtre par promotion
         if promo_pk.isdigit():
-            queryset = queryset.filter(etudiant__promotion__pk=promo_pk)
+            queryset = queryset.filter(grille__promotion__pk=promo_pk)
 
         # Filtre par année académique de la grille
         if annee:

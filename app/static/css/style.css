@@ -1123,7 +1123,7 @@ h1, h2, h3, h4, h5, h6 { font-weight: 400; letter-spacing: -.025em; }
 .exam-date .month { font-size: .52rem; letter-spacing: .11em; }
 .dashboard-actions .card-body { padding: .65rem .8rem .8rem; }
 .dashboard-actions .card-body .d-grid { gap: .4rem !important; }
-.dashboard-actions .btn-action { min-height: 2.9rem; padding: .65rem .8rem; border-radius: .55rem; background: transparent; border: 1px solid transparent; color: #40505d; font-size: .78rem; }
+.dashboard-actions .btn-action { min-height: 2.9rem; padding: .65rem .8rem; border-radius: .55rem; background: transparent; border: 1px solid transparent; color: #40505d; font-size: .78rem; justify-content: flex-start !important; text-align: left !important; white-space: normal; }
 .dashboard-actions .btn-action.border-0 { border: 1px solid transparent !important; box-shadow: none !important; }
 .dashboard-actions .btn-action:hover { background: #f6f4ed; border-color: #e8e2d6; transform: translateX(2px); }
 .dashboard-actions .btn-action i { color: #9b8355 !important; }
