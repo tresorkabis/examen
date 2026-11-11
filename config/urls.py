@@ -3,15 +3,15 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 from app.forms import LoginForm
 from app.views import (
-    dashboard, import_excel_view,
+    dashboard, import_excel_view, import_excel_template,
     EtudiantListView, EtudiantDetailView, EtudiantCreateView, EtudiantUpdateView, EtudiantDeleteView,
     etudiant_releve_global,
     etudiant_ues_reprendre_pdf,
     promotion_ues_a_reprendre_pdf,
     etudiant_attestation_pdf,
     PromotionListView, PromotionCreateView, PromotionDetailView, PromotionUpdateView, PromotionDeleteView, promotion_bulk_delete,
-    FiliereListView, FiliereCreateView, FiliereUpdateView, FiliereDeleteView,
-    MentionListView, MentionCreateView, MentionUpdateView, MentionDeleteView,
+    FiliereListView, FiliereDetailView, FiliereCreateView, FiliereUpdateView, FiliereDeleteView,
+    MentionListView, MentionDetailView, MentionCreateView, MentionUpdateView, MentionDeleteView,
     promotion_grille_apercu, promotion_grille_retirer,
     promotion_generer_cours, promotion_generer_etudiants,
     EnseignantListView, EnseignantDetailView, EnseignantCreateView,
@@ -41,6 +41,8 @@ urlpatterns = [
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
     path('', dashboard, name='dashboard'),
     path('imports/', import_excel_view, name='import_excel'),
+        path('imports/modele.xlsx', import_excel_template,
+            name='import_excel_template'),
     
     # URLs Etudiant
     path('etudiants/', EtudiantListView.as_view(), name='etudiant_list'),
@@ -78,10 +80,12 @@ urlpatterns = [
     # URLs Filière et Mention
     path('filieres/', FiliereListView.as_view(), name='filiere_list'),
     path('filieres/add/', FiliereCreateView.as_view(), name='filiere_create'),
+    path('filieres/<int:pk>/', FiliereDetailView.as_view(), name='filiere_detail'),
     path('filieres/<int:pk>/edit/', FiliereUpdateView.as_view(), name='filiere_update'),
     path('filieres/<int:pk>/delete/', FiliereDeleteView.as_view(), name='filiere_delete'),
     path('mentions/', MentionListView.as_view(), name='mention_list'),
     path('mentions/add/', MentionCreateView.as_view(), name='mention_create'),
+    path('mentions/<int:pk>/', MentionDetailView.as_view(), name='mention_detail'),
     path('mentions/<int:pk>/edit/', MentionUpdateView.as_view(), name='mention_update'),
     path('mentions/<int:pk>/delete/', MentionDeleteView.as_view(), name='mention_delete'),
 

@@ -23,7 +23,7 @@ from .excel_import import (
 )
 from .views import _note_ue_proche
 
-from .models import (Promotion, Enseignant, Etudiant, Cours, Session,
+from .models import (Promotion, Filiere, Mention, Enseignant, Etudiant, Cours, Session,
                      Examen, Inscription, Grille, GrilleUE, GrilleEtudiant,
                      GrilleNote, HistoriquePromotion, normaliser_annee,
                      CotationProjetTutore, UserProfile, UserRole,
@@ -1925,6 +1925,133 @@ class CoursDetailViewTest(BaseDataMixin, TestCase):
         self.assertContains(reponse, reverse('cours_detail', args=[cours.pk]))
 
 
+class FiliereDetailViewTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            'admin_filiere', 'filiere@example.com', 'pass12345')
+        self.client.force_login(self.user)
+
+    def test_detail_affiche_mentions_et_promotions(self):
+        filiere = Filiere.objects.create(
+            nom='Licence en Sciences Informatiques',
+            description='Formation en informatique.')
+        mention = Mention.objects.create(
+            nom='Génie logiciel', filiere=filiere,
+            description='Conception de logiciels.')
+        promotion = Promotion.objects.create(
+            nom='L1 INFO A', mention=mention)
+        etudiant = Etudiant.objects.create(
+            noms='ÉTUDIANT TEST', email='etudiant@example.com',
+            promotion=promotion)
+        enseignant = Enseignant.objects.create(
+            noms='ENSEIGNANT TEST', email='enseignant@example.com')
+        Cours.objects.create(
+            nom='Programmation', coefficient=2, enseignant=enseignant,
+            promotion=promotion)
+        promotion_bachelier = Promotion.objects.create(
+            nom='Bachelier L1 INFO', mention=mention)
+        Etudiant.objects.create(
+            noms='ÉTUDIANT BACHELIER', email='bachelier@example.com',
+            promotion=promotion_bachelier)
+        Cours.objects.create(
+            nom='Cours Bachelier', coefficient=1, enseignant=enseignant,
+            promotion=promotion_bachelier)
+
+        reponse = self.client.get(reverse('filiere_detail', args=[filiere.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, filiere.description)
+        self.assertContains(reponse, mention.nom)
+        self.assertContains(reponse, promotion.nom)
+        self.assertNotContains(reponse, 'Bachelier L1 INFO')
+        stats = reponse.context['filiere']
+        self.assertEqual(stats.nb_mentions, 1)
+        self.assertEqual(stats.nb_promotions, 1)
+        self.assertEqual(stats.nb_etudiants, 1)
+        self.assertEqual(stats.nb_cours, 1)
+        self.assertEqual(stats.nb_enseignants, 1)
+        mention_stats = reponse.context['mentions'][0]
+        self.assertEqual(mention_stats.nb_promotions, 1)
+        self.assertContains(
+            reponse, reverse('promotion_detail', args=[promotion.pk]))
+
+        liste = self.client.get(reverse('filiere_list'))
+        self.assertContains(
+            liste, reverse('filiere_detail', args=[filiere.pk]))
+
+    def test_detail_inexistant_renvoie_404(self):
+        reponse = self.client.get(reverse('filiere_detail', args=[9999]))
+        self.assertEqual(reponse.status_code, 404)
+
+    def test_detail_anonyme_redirige_vers_login(self):
+        self.client.logout()
+        reponse = self.client.get(reverse('filiere_detail', args=[9999]))
+        self.assertEqual(reponse.status_code, 302)
+        self.assertIn('/login/', reponse.url)
+
+
+class MentionDetailViewTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            'admin_mention', 'mention@example.com', 'pass12345')
+        self.client.force_login(self.user)
+
+    def test_detail_affiche_filiere_promotions_et_statistiques(self):
+        filiere = Filiere.objects.create(nom='Licence Informatique')
+        mention = Mention.objects.create(
+            nom='Génie logiciel', filiere=filiere,
+            description='Conception de logiciels.')
+        promotion = Promotion.objects.create(
+            nom='L1 INFO A', mention=mention)
+        Etudiant.objects.create(
+            noms='ÉTUDIANT TEST', email='etudiant-mention@example.com',
+            promotion=promotion)
+        enseignant = Enseignant.objects.create(
+            noms='ENSEIGNANT TEST', email='enseignant-mention@example.com')
+        Cours.objects.create(
+            nom='Programmation', coefficient=2, enseignant=enseignant,
+            promotion=promotion)
+        promotion_bachelier = Promotion.objects.create(
+            nom='Bachelier L1 INFO', mention=mention)
+        Etudiant.objects.create(
+            noms='ÉTUDIANT BACHELIER',
+            email='etudiant-bachelier-mention@example.com',
+            promotion=promotion_bachelier)
+        Cours.objects.create(
+            nom='Cours Bachelier', coefficient=1, enseignant=enseignant,
+            promotion=promotion_bachelier)
+
+        reponse = self.client.get(reverse('mention_detail', args=[mention.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, mention.description)
+        self.assertContains(reponse, filiere.nom)
+        self.assertContains(reponse, promotion.nom)
+        stats = reponse.context['mention']
+        self.assertEqual(stats.nb_promotions, 1)
+        self.assertEqual(stats.nb_etudiants, 1)
+        self.assertEqual(stats.nb_cours, 1)
+        self.assertEqual(stats.nb_enseignants, 1)
+        self.assertNotContains(reponse, 'Bachelier L1 INFO')
+        self.assertContains(
+            reponse, reverse('promotion_detail', args=[promotion.pk]))
+
+        liste = self.client.get(reverse('mention_list'))
+        self.assertContains(liste, reverse('mention_detail', args=[mention.pk]))
+        nb_promotions = next(
+            ligne.nb_promotions for ligne in liste.context['mentions']
+            if ligne.pk == mention.pk)
+        self.assertEqual(nb_promotions, 1)
+
+    def test_detail_inexistant_renvoie_404(self):
+        reponse = self.client.get(reverse('mention_detail', args=[9999]))
+        self.assertEqual(reponse.status_code, 404)
+
+    def test_detail_anonyme_redirige_vers_login(self):
+        self.client.logout()
+        reponse = self.client.get(reverse('mention_detail', args=[9999]))
+        self.assertEqual(reponse.status_code, 302)
+        self.assertIn('/login/', reponse.url)
+
+
 class ExcelImportTests(TestCase):
     """Tests pour les fonctionnalités d'importation Excel."""
 
@@ -2215,6 +2342,34 @@ class ExcelImportTests(TestCase):
         reponse = self.client.get(url)
         self.assertEqual(reponse.status_code, 200)
         self.assertContains(reponse, 'Importation Excel')
+
+    def test_telechargement_modeles_excel(self):
+        from openpyxl import load_workbook
+
+        self.client.force_login(self.user)
+        modeles = {
+            'etudiants': ['Noms', 'Matricule', 'Email', 'Promotion'],
+            'enseignants': ['Noms', 'Email'],
+            'cours': ['Cours', 'Promotion', 'Enseignant', 'Coefficient'],
+        }
+        for type_import, entetes in modeles.items():
+            with self.subTest(type_import=type_import):
+                reponse = self.client.get(
+                    reverse('import_excel_template'), {'type': type_import})
+                self.assertEqual(reponse.status_code, 200)
+                self.assertEqual(
+                    reponse['Content-Type'],
+                    'application/vnd.openxmlformats-officedocument.'
+                    'spreadsheetml.sheet')
+                contenu = b''.join(reponse.streaming_content)
+                classeur = load_workbook(BytesIO(contenu), read_only=True)
+                self.assertEqual(list(list(classeur.active.values)[0]), entetes)
+
+    def test_modele_grille_non_disponible(self):
+        self.client.force_login(self.user)
+        reponse = self.client.get(
+            reverse('import_excel_template'), {'type': 'grilles'})
+        self.assertEqual(reponse.status_code, 404)
 
     def test_vue_import_post_etudiants(self):
         self.client.force_login(self.user)

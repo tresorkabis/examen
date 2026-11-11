@@ -1,0 +1,91 @@
+{% extends 'app/base.html' %}
+
+{% block title %}{{ mention.nom }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <nav aria-label="Fil d’Ariane" class="small mb-2">
+            <a href="{% url 'mention_list' %}" class="text-decoration-none">Mentions</a>
+            <span class="text-muted"> / </span>
+            <a href="{% url 'filiere_detail' mention.filiere_id %}" class="text-decoration-none">{{ mention.filiere.nom }}</a>
+        </nav>
+        <h2 class="mb-1">{{ mention.nom }}</h2>
+        <p class="text-muted mb-0">{{ mention.description|default:"Aucune description renseignée." }}</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'mention_update' mention.pk %}" class="btn btn-outline-secondary">
+            <i class="bi bi-pencil me-1"></i>Modifier
+        </a>
+        <a href="{% url 'mention_list' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Retour
+        </a>
+    </div>
+</div>
+
+<section class="row g-3 mb-4" aria-label="Statistiques de la mention">
+    <div class="col-6 col-md">
+        <div class="border-start border-3 ps-3">
+            <div class="small text-muted">Promotions</div>
+            <div class="fs-4 fw-semibold">{{ mention.nb_promotions }}</div>
+        </div>
+    </div>
+    <div class="col-6 col-md">
+        <div class="border-start border-3 ps-3">
+            <div class="small text-muted">Étudiants</div>
+            <div class="fs-4 fw-semibold">{{ mention.nb_etudiants }}</div>
+        </div>
+    </div>
+    <div class="col-6 col-md">
+        <div class="border-start border-3 ps-3">
+            <div class="small text-muted">Cours</div>
+            <div class="fs-4 fw-semibold">{{ mention.nb_cours }}</div>
+        </div>
+    </div>
+    <div class="col-6 col-md">
+        <div class="border-start border-3 ps-3">
+            <div class="small text-muted">Enseignants</div>
+            <div class="fs-4 fw-semibold">{{ mention.nb_enseignants }}</div>
+        </div>
+    </div>
+</section>
+<p class="small text-muted mb-4">Les promotions dont le nom commence par « Bachelier » ne sont pas incluses ici.</p>
+
+<section aria-labelledby="promotions-title">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+        <h3 id="promotions-title" class="h5 mb-0">Promotions rattachées</h3>
+    </div>
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">Promotion</th>
+                        <th scope="col" class="text-center">Étudiants</th>
+                        <th scope="col" class="text-center">Cours</th>
+                        <th scope="col" class="text-center">Enseignants</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for promotion in promotions %}
+                    <tr>
+                        <td class="fw-semibold">
+                            <a href="{% url 'promotion_detail' promotion.pk %}" class="text-decoration-none">
+                                {{ promotion.nom }}
+                            </a>
+                        </td>
+                        <td class="text-center">{{ promotion.nb_etudiants }}</td>
+                        <td class="text-center">{{ promotion.nb_cours }}</td>
+                        <td class="text-center">{{ promotion.nb_enseignants }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center text-muted py-4">Aucune promotion rattachée à cette mention.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endblock %}

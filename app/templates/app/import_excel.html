@@ -125,6 +125,12 @@
                 <h5 class="card-title mb-3">
                     <i class="bi bi-info-circle me-2 text-info"></i>Format de fichier attendu
                 </h5>
+                {% if type_active != 'grilles' %}
+                <a class="btn btn-outline-success btn-sm mb-3"
+                   href="{% url 'import_excel_template' %}?type={{ type_active }}">
+                    <i class="bi bi-download me-1"></i>Télécharger le modèle Excel
+                </a>
+                {% endif %}
 
                 {% if type_active == 'etudiants' %}
                 <p class="small text-muted">Vous pouvez importer les étudiants de 2 manières :</p>
@@ -187,6 +193,7 @@
                 </ul>
                 <p class="small text-muted mb-0"><i class="bi bi-info-circle me-1"></i>Les notes, les crédits et la délibération sont recopiés tels quels. Les étudiants sont reconnus par leur matricule généré à partir du N° d'ordre.</p>
                 <p class="small text-muted mb-0 mt-2"><i class="bi bi-clock-history me-1"></i><strong>Grille d'une année antérieure</strong> (ex. L1 2024-2025 des actuels L2) : importez-la avec <strong>Promotion = L1</strong> et saisissez son <strong>année académique</strong>. Les lignes sont alors rattachées par nom aux fiches actuelles (L2/L3), sans les déplacer, et leur historique se remplit — ré-importée, la grille ne purge que les grilles de cette même année.</p>
+                <p class="small text-muted mb-0 mt-2"><i class="bi bi-info-circle me-1"></i>Utilisez le fichier officiel de délibération : un modèle vierge ne contient pas la structure des UE ni les résultats nécessaires à l'import.</p>
                 {% endif %}
 
             </div>

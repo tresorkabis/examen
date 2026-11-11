@@ -20,10 +20,15 @@
                 <tbody>
                     {% for filiere in filieres %}
                     <tr>
-                        <td class="fw-semibold">{{ filiere.nom }}</td>
+                        <td class="fw-semibold">
+                            <a href="{% url 'filiere_detail' filiere.pk %}" class="text-decoration-none">
+                                {{ filiere.nom }}
+                            </a>
+                        </td>
                         <td>{{ filiere.description|default:"—"|truncatechars:100 }}</td>
                         <td class="text-center"><span class="badge text-bg-secondary">{{ filiere.nb_mentions }}</span></td>
                         <td class="text-end text-nowrap">
+                            <a href="{% url 'filiere_detail' filiere.pk %}" class="btn btn-sm btn-outline-primary">Détail</a>
                             <a href="{% url 'filiere_update' filiere.pk %}" class="btn btn-sm btn-outline-secondary">Modifier</a>
                             <a href="{% url 'filiere_delete' filiere.pk %}" class="btn btn-sm btn-outline-danger">Supprimer</a>
                         </td>

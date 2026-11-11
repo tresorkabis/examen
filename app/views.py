@@ -1181,6 +1181,48 @@ class FiliereListView(LoginRequiredMixin, SafePaginationMixin, ListView):
         ).order_by('nom')
 
 
+class FiliereDetailView(LoginRequiredMixin, DetailView):
+    model = Filiere
+    template_name = "app/filiere_detail.html"
+    context_object_name = "filiere"
+
+    def get_queryset(self):
+        return super().get_queryset().annotate(
+            nb_mentions=Count('mentions', distinct=True),
+            nb_promotions=Count(
+                'mentions__promotions',
+                filter=~Q(mentions__promotions__nom__istartswith='Bachelier'),
+                distinct=True),
+            nb_etudiants=Count(
+                'mentions__promotions__etudiants',
+                filter=~Q(mentions__promotions__nom__istartswith='Bachelier'),
+                distinct=True),
+            nb_cours=Count(
+                'mentions__promotions__cours',
+                filter=~Q(mentions__promotions__nom__istartswith='Bachelier'),
+                distinct=True),
+            nb_enseignants=Count(
+                'mentions__promotions__cours__enseignant',
+                filter=~Q(mentions__promotions__nom__istartswith='Bachelier'),
+                distinct=True),
+        )
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['mentions'] = (self.object.mentions
+                           .annotate(nb_promotions=Count(
+                               'promotions',
+                               filter=~Q(promotions__nom__istartswith='Bachelier'),
+                               distinct=True))
+                           .prefetch_related(Prefetch(
+                               'promotions',
+                               queryset=Promotion.objects
+                               .exclude(nom__istartswith='Bachelier')
+                               .order_by('nom')))
+                           .order_by('nom'))
+        return ctx
+
+
 class FiliereCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     model = Filiere
     form_class = FiliereForm
@@ -1212,8 +1254,51 @@ class MentionListView(LoginRequiredMixin, SafePaginationMixin, ListView):
 
     def get_queryset(self):
         return (Mention.objects.select_related('filiere')
-                .annotate(nb_promotions=Count('promotions', distinct=True))
+                .annotate(nb_promotions=Count(
+                    'promotions',
+                    filter=~Q(promotions__nom__istartswith='Bachelier'),
+                    distinct=True))
                 .order_by('filiere__nom', 'nom'))
+
+
+class MentionDetailView(LoginRequiredMixin, DetailView):
+    model = Mention
+    template_name = "app/mention_detail.html"
+    context_object_name = "mention"
+
+    def get_queryset(self):
+        return (super().get_queryset().select_related('filiere')
+                .annotate(
+                    nb_promotions=Count(
+                        'promotions',
+                        filter=~Q(promotions__nom__istartswith='Bachelier'),
+                        distinct=True),
+                    nb_etudiants=Count(
+                        'promotions__etudiants',
+                        filter=~Q(promotions__nom__istartswith='Bachelier'),
+                        distinct=True),
+                    nb_cours=Count(
+                        'promotions__cours',
+                        filter=~Q(promotions__nom__istartswith='Bachelier'),
+                        distinct=True),
+                    nb_enseignants=Count(
+                        'promotions__cours__enseignant',
+                        filter=~Q(promotions__nom__istartswith='Bachelier'),
+                        distinct=True),
+                ))
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['promotions'] = (self.object.promotions
+                             .exclude(nom__istartswith='Bachelier')
+                             .annotate(
+                                 nb_etudiants=Count('etudiants', distinct=True),
+                                 nb_cours=Count('cours', distinct=True),
+                                 nb_enseignants=Count(
+                                     'cours__enseignant', distinct=True),
+                             )
+                             .order_by('nom'))
+        return ctx
 
 
 class MentionCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
@@ -3211,6 +3296,52 @@ def examen_non_notes_impression(request):
                          'cours__nom', 'cours__promotion__nom'))
     return render(request, 'app/examen_non_notes_print.html',
                   {'examens': examens, 'total': examens.count()})
+
+
+@login_required
+def import_excel_template(request):
+    """Télécharge un modèle vierge pour un import tabulaire."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    templates = {
+        'etudiants': ('modele_etudiants.xlsx', 'Étudiants',
+                      ['Noms', 'Matricule', 'Email', 'Promotion'],
+                      [30, 20, 34, 24]),
+        'enseignants': ('modele_enseignants.xlsx', 'Enseignants',
+                        ['Noms', 'Email'], [30, 34]),
+        'cours': ('modele_cours.xlsx', 'Cours',
+                  ['Cours', 'Promotion', 'Enseignant', 'Coefficient'],
+                  [36, 24, 30, 16]),
+    }
+    template = templates.get(request.GET.get('type'))
+    if template is None:
+        raise Http404('Aucun modèle Excel disponible pour ce type d’import.')
+
+    filename, sheet_title, headers, widths = template
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = sheet_title
+    worksheet.append(headers)
+    for cell in worksheet[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = PatternFill('solid', fgColor='24566A')
+        cell.alignment = Alignment(vertical='center')
+    worksheet.row_dimensions[1].height = 24
+    worksheet.freeze_panes = 'A2'
+    worksheet.auto_filter.ref = f'A1:{get_column_letter(len(headers))}1'
+    for index, width in enumerate(widths, start=1):
+        worksheet.column_dimensions[get_column_letter(index)].width = width
+
+    fichier = BytesIO()
+    workbook.save(fichier)
+    fichier.seek(0)
+    return FileResponse(
+        fichier, as_attachment=True, filename=filename,
+        content_type=(
+            'application/vnd.openxmlformats-officedocument.'
+            'spreadsheetml.sheet'))
 
 
 @login_required
