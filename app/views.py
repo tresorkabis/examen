@@ -6,6 +6,7 @@ from io import BytesIO
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.views import LogoutView as DjangoLogoutView
 from django.core.exceptions import PermissionDenied
 from django.contrib.messages.views import SuccessMessageMixin
 from django.core.exceptions import ValidationError
@@ -48,6 +49,15 @@ class RoleRequiredMixin(AccessMixin):
         return super().dispatch(request, *args, **kwargs)
 
 
+class ApplicationLogoutView(DjangoLogoutView):
+    http_method_names = ['get', 'post', 'options']
+
+    def get(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('login')
+        return render(request, 'registration/logout_confirm.html')
+
+
 
 from django.contrib.messages.views import SuccessMessageMixin
 from django.db import models
@@ -69,6 +79,75 @@ from .models import (Etudiant, Cours, Session, Enseignant, Promotion, Filiere,
                      generate_numero_etudiant)
 from .excel_import import (import_etudiants_excel, import_enseignants_excel,
                           import_cours_excel, import_grille_excel)
+
+
+def enseignant_connecte(request):
+    """Fiche enseignant liée au compte, ou None si le compte n'est pas enseignant."""
+    try:
+        return request.user.enseignant
+    except (AttributeError, Enseignant.DoesNotExist):
+        return None
+
+
+def utilisateur_est_enseignant(request):
+    return (request.user.is_authenticated
+            and enseignant_connecte(request) is not None
+            and get_user_role(request.user) not in
+            (UserRole.ADMIN, UserRole.GESTIONNAIRE))
+
+
+
+@login_required
+def enseignant_profile(request):
+    """Page « Mon profil enseignant ».
+
+    Renvoie vers la fiche détaillée de l'enseignant lié au compte connecté.
+    Affiche un message et renvoie au tableau de bord si aucun enseignant n'est
+    lié au compte.
+    """
+    enseignant = enseignant_connecte(request)
+    if enseignant is None:
+        messages.info(
+            request,
+            "Votre compte n'est lié à aucune fiche enseignant. "
+            "Contactez l'administrateur pour créer votre profil.",
+        )
+        return redirect('dashboard')
+    return redirect('enseignant_detail', pk=enseignant.pk)
+
+def refuser_enseignant(request):
+    """Empêche un compte enseignant d'utiliser une route réservée au personnel."""
+    if utilisateur_est_enseignant(request):
+        raise PermissionDenied
+
+
+def cours_accessible_par_enseignant(queryset, request):
+    """Restreint un queryset de cours aux cours du titulaire connecté."""
+    if utilisateur_est_enseignant(request):
+        enseignant = enseignant_connecte(request)
+        return queryset.filter(enseignant=enseignant) if enseignant else queryset.none()
+    return queryset
+
+
+def promotion_accessible_par_enseignant(queryset, request):
+    if utilisateur_est_enseignant(request):
+        enseignant = enseignant_connecte(request)
+        return queryset.filter(cours__enseignant=enseignant).distinct() if enseignant else queryset.none()
+    return queryset
+
+
+def examen_accessible_par_enseignant(queryset, request):
+    if utilisateur_est_enseignant(request):
+        enseignant = enseignant_connecte(request)
+        return queryset.filter(cours__enseignant=enseignant) if enseignant else queryset.none()
+    return queryset
+
+
+def etudiant_accessible_par_enseignant(queryset, request):
+    if utilisateur_est_enseignant(request):
+        enseignant = enseignant_connecte(request)
+        return queryset.filter(promotion__cours__enseignant=enseignant).distinct() if enseignant else queryset.none()
+    return queryset
 
 
 def _calcul_compteurs(session):
@@ -129,8 +208,8 @@ def dashboard(request):
     les dernières sessions, la session en cours y étant signalée.
     """
     session_active = Session.objects.filter(est_active=True).first()
-    enseignant = getattr(request.user, 'enseignant', None)
-    is_teacher = enseignant is not None
+    enseignant = enseignant_connecte(request)
+    is_teacher = utilisateur_est_enseignant(request)
 
     if is_teacher:
         compteurs = {
@@ -168,7 +247,10 @@ def dashboard(request):
             .order_by('date_examen')[:5]
         )
 
-    dernieres_sessions = (Session.objects.order_by('-date_debut')[:3])
+    sessions_qs = Session.objects.order_by('-date_debut')
+    if is_teacher:
+        sessions_qs = sessions_qs.filter(examens__cours__enseignant=enseignant).distinct()
+    dernieres_sessions = sessions_qs[:3]
     context = {
         **compteurs,
         'prochains_examens': prochains,
@@ -462,6 +544,8 @@ class EtudiantListView(ListView):
     ETUDIANTS_PAR_PAGE = 50
 
     def get_queryset(self):
+        enseignant = enseignant_connecte(self.request)
+        is_teacher = utilisateur_est_enseignant(self.request)
         q = self.request.GET.get('q', '').strip()
         promo_pk = self.request.GET.get('promotion', '').strip()
         if q:
@@ -472,6 +556,8 @@ class EtudiantListView(ListView):
                        | Q(etudiants__numero_etudiant__icontains=q)
                        | Q(etudiants__email__icontains=q))
             qs = Promotion.objects.filter(filtres)
+            if is_teacher:
+                qs = promotion_accessible_par_enseignant(qs, self.request)
             if promo_pk.isdigit():
                 qs = qs.filter(pk=int(promo_pk))
             return (qs
@@ -488,17 +574,19 @@ class EtudiantListView(ListView):
                     .order_by('nom'))
         if self.request.GET.get('toutes') == '1':
             # Cartes seules : compteurs annotés, aucun étudiant chargé.
-            return (Promotion.objects
+            qs = (Promotion.objects
                     .annotate(nb_etudiants_total=Count('etudiants', distinct=True),
                               nb_cours=Count('cours', distinct=True))
                     .order_by('nom'))
+            return promotion_accessible_par_enseignant(qs, self.request)
         # Par défaut : seules les promotions non vides (EXISTS, sans tout charger).
-        return (Promotion.objects
+        qs = (Promotion.objects
                 .filter(etudiants__isnull=False)
                 .distinct()
                 .annotate(nb_etudiants_total=Count('etudiants', distinct=True),
                           nb_cours=Count('cours', distinct=True))
                 .order_by('nom'))
+        return promotion_accessible_par_enseignant(qs, self.request)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -530,13 +618,14 @@ class EtudiantListView(ListView):
                 (p for p in groups if p.pk == promo_id), None)
             if promotion_active is None:
                 promotion_active = (
-                    Promotion.objects
-                    .filter(pk=promo_id)
+                    promotion_accessible_par_enseignant(
+                    Promotion.objects.filter(pk=promo_id), self.request)
                     .annotate(nb_etudiants_total=Count('etudiants', distinct=True),
                               nb_cours=Count('cours', distinct=True))
                     .first())
             if promotion_active is not None:
-                qs_etudiants = Etudiant.objects.filter(promotion_id=promo_id)
+                qs_etudiants = etudiant_accessible_par_enseignant(
+                    Etudiant.objects.filter(promotion_id=promo_id), self.request)
                 if q:
                     qs_etudiants = qs_etudiants.filter(
                         Q(noms__icontains=q)
@@ -552,11 +641,10 @@ class EtudiantListView(ListView):
                 if q:
                     context['nb_etudiants_trouves'] = paginator.count
         context['promotion_active'] = promotion_active
-        context['promotions_destination'] = (
+        context['promotions_destination'] = promotion_accessible_par_enseignant(
             Promotion.objects
             .exclude(pk=promotion_active.pk if promotion_active else None)
-            .order_by('nom')
-        )
+            .order_by('nom'), self.request)
         context['page_obj'] = page_obj
         # Conserve les paramètres GET (filtres…) dans les liens de pagination.
         params = self.request.GET.copy()
@@ -566,7 +654,7 @@ class EtudiantListView(ListView):
 
     def post(self, request, *args, **kwargs):
         """Change la promotion des étudiants sélectionnés (staff uniquement)."""
-        if not request.user.is_staff:
+        if not request.user.is_staff or utilisateur_est_enseignant(request):
             raise PermissionDenied
         source_pk = (request.GET.get('promotion')
                      or request.POST.get('promotion_source', '').strip())
@@ -626,6 +714,10 @@ class EtudiantCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     success_url = reverse_lazy("etudiant_list")
     success_message = "L'étudiant « %(noms)s » a été créé avec succès."
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
     def get_initial(self):
         """Pré-sélectionne la promotion via « ?promotion=<pk> » (bouton + d'une carte)."""
         initial = super().get_initial()
@@ -642,12 +734,23 @@ class EtudiantUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     success_url = reverse_lazy("etudiant_list")
     success_message = "L'étudiant « %(noms)s » a été modifié."
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
 
 class EtudiantDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     model = Etudiant
     template_name = "app/etudiant_confirm_delete.html"
     success_url = reverse_lazy("etudiant_list")
     success_message = "L'étudiant « %(object)s » a été supprimé."
+
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        return etudiant_accessible_par_enseignant(super().get_queryset(), self.request)
 
 
 def _ues_a_reprendre(grille_lignes):
@@ -724,6 +827,9 @@ class EtudiantDetailView(DetailView):
     model = Etudiant
     template_name = "app/etudiant_detail.html"
     context_object_name = "etudiant"
+
+    def get_queryset(self):
+        return etudiant_accessible_par_enseignant(super().get_queryset(), self.request)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -1061,13 +1167,14 @@ class PromotionListView(SafePaginationMixin, ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        return (Promotion.objects
+        queryset = (Promotion.objects
                 .annotate(
                     nb_etudiants=Count('etudiants', distinct=True),
                     nb_cours=Count('cours', distinct=True),
                     nb_enseignants=Count('cours__enseignant', distinct=True),
                 )
                 .order_by('nom'))
+        return promotion_accessible_par_enseignant(queryset, self.request)
 
 
 class PromotionDetailView(DetailView):
@@ -1076,12 +1183,16 @@ class PromotionDetailView(DetailView):
     template_name = "app/promotion_detail.html"
     context_object_name = "promotion"
 
+    def get_queryset(self):
+        return promotion_accessible_par_enseignant(super().get_queryset(), self.request)
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         promotion = self.object
         cours = (promotion.cours
                  .select_related('enseignant')
                  .order_by('nom'))
+        cours = cours_accessible_par_enseignant(cours, self.request)
         etudiants = list(promotion.etudiants.order_by('noms'))
 
         # --- Antécédents : étapes de parcours antérieures à cette promotion.
@@ -1129,12 +1240,13 @@ class PromotionDetailView(DetailView):
         # ici qu'on les consulte (aperçu plein écran) et qu'on les importe ou
         # les retire, sans dépendre d'une session (le rattachement à une
         # session est facultatif à l'import).
-        grilles = list(Grille.objects
-                       .filter(promotion=promotion)
-                       .select_related('session')
-                       .annotate(nb_ue=Count('ues', distinct=True),
-                                 nb_etudiants=Count('lignes', distinct=True))
-                       .order_by('-annee_academique', '-importe_le'))
+        grilles_qs = (Grille.objects
+                      .filter(promotion=promotion)
+                      .select_related('session')
+                      .annotate(nb_ue=Count('ues', distinct=True),
+                                nb_etudiants=Count('lignes', distinct=True))
+                      .order_by('-annee_academique', '-importe_le'))
+        grilles = [] if utilisateur_est_enseignant(self.request) else list(grilles_qs)
 
         ctx.update({
             'cours': cours,
@@ -1155,6 +1267,10 @@ class PromotionCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     success_url = reverse_lazy("promotion_list")
     success_message = "La promotion « %(nom)s » a été créée."
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
 
 class PromotionUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     model = Promotion
@@ -1163,12 +1279,20 @@ class PromotionUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     success_url = reverse_lazy("promotion_list")
     success_message = "La promotion « %(nom)s » a été modifiée."
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
 
 class PromotionDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     model = Promotion
     template_name = "app/promotion_confirm_delete.html"
     success_url = reverse_lazy("promotion_list")
     success_message = "La promotion « %(object)s » a été supprimée."
+
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
 
 
 # --- CRUD FILIÈRE ET MENTION ---
@@ -1177,6 +1301,10 @@ class FiliereListView(LoginRequiredMixin, SafePaginationMixin, ListView):
     template_name = "app/filiere_list.html"
     context_object_name = "filieres"
     paginate_by = 25
+
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
         return Filiere.objects.annotate(
@@ -1188,6 +1316,10 @@ class FiliereDetailView(LoginRequiredMixin, DetailView):
     model = Filiere
     template_name = "app/filiere_detail.html"
     context_object_name = "filiere"
+
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
         return super().get_queryset().annotate(
@@ -1233,6 +1365,10 @@ class FiliereCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     success_url = reverse_lazy("filiere_list")
     success_message = "La filière « %(nom)s » a été créée."
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
 
 class FiliereUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     model = Filiere
@@ -1255,6 +1391,10 @@ class MentionListView(LoginRequiredMixin, SafePaginationMixin, ListView):
     context_object_name = "mentions"
     paginate_by = 25
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
     def get_queryset(self):
         return (Mention.objects.select_related('filiere')
                 .annotate(nb_promotions=Count(
@@ -1268,6 +1408,10 @@ class MentionDetailView(LoginRequiredMixin, DetailView):
     model = Mention
     template_name = "app/mention_detail.html"
     context_object_name = "mention"
+
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
         return (super().get_queryset().select_related('filiere')
@@ -1311,6 +1455,10 @@ class MentionCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     success_url = reverse_lazy("mention_list")
     success_message = "La mention « %(nom)s » a été créée."
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
 
 class MentionUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     model = Mention
@@ -1319,17 +1467,26 @@ class MentionUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     success_url = reverse_lazy("mention_list")
     success_message = "La mention « %(nom)s » a été modifiée."
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
 
 class MentionDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     model = Mention
     template_name = "app/mention_confirm_delete.html"
     success_url = reverse_lazy("mention_list")
+
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
     success_message = "La mention « %(object)s » a été supprimée."
 
 
 @login_required
 def promotion_bulk_delete(request):
     """Suppression en groupe de promotions sélectionnées."""
+    refuser_enseignant(request)
     if request.method == 'POST':
         pks = request.POST.getlist('promotion_ids')
         if not pks:
@@ -1352,6 +1509,10 @@ class EnseignantListView(SafePaginationMixin, ListView):
     template_name = "app/enseignant_list.html"
     context_object_name = "enseignants"
     paginate_by = 25
+
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
         q = self.request.GET.get('q', '').strip()
@@ -1382,6 +1543,10 @@ class EnseignantCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     success_url = reverse_lazy("enseignant_list")
     success_message = "L'enseignant « %(noms)s » a été créé."
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
 
 class EnseignantUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     model = Enseignant
@@ -1390,11 +1555,19 @@ class EnseignantUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     success_url = reverse_lazy("enseignant_list")
     success_message = "L'enseignant « %(noms)s » a été modifié."
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
 
 class EnseignantDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     model = Enseignant
     template_name = "app/enseignant_confirm_delete.html"
     success_url = reverse_lazy("enseignant_list")
+
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
 
 class EnseignantUserCreateView(LoginRequiredMixin, CreateView):
     """Crée un compte utilisateur et le lie à un enseignant existant."""
@@ -1402,6 +1575,10 @@ class EnseignantUserCreateView(LoginRequiredMixin, CreateView):
     form_class = EnseignantUserForm
     template_name = "app/enseignant_user_form.html"
     success_url = reverse_lazy("enseignant_detail")
+
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
 
     def get_success_url(self):
         return reverse_lazy("enseignant_detail", kwargs={"pk": self.object.enseignant.pk})
@@ -1446,6 +1623,10 @@ class EnseignantUserCreateView(LoginRequiredMixin, CreateView):
 
 class EnseignantPasswordResetView(LoginRequiredMixin, SuccessMessageMixin, View):
     """Réinitialise le mot de passe de l'utilisateur lié à un enseignant en "demo"."""
+
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
         enseignant = self.get_object()
@@ -1528,6 +1709,9 @@ class CoursDetailView(DetailView):
     model = Cours
     template_name = "app/cours_detail.html"
     context_object_name = "cours"
+
+    def get_queryset(self):
+        return cours_accessible_par_enseignant(super().get_queryset(), self.request)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -1759,8 +1943,8 @@ def _generer_fiches_prestation(cours_list, filename):
 
 @login_required
 def cours_fiche_prestation_pdf(request, pk):
-    cours = get_object_or_404(
-        Cours.objects.select_related('promotion', 'enseignant'), pk=pk)
+    cours = get_object_or_404(cours_accessible_par_enseignant(
+        Cours.objects.select_related('promotion', 'enseignant'), request), pk=pk)
     nom_fichier = (f'fiche-prestation-{cours.pk}-'
                    f'{slugify(cours.nom) or "cours"}.pdf')
     return _generer_fiches_prestation([cours], nom_fichier)
@@ -1768,7 +1952,8 @@ def cours_fiche_prestation_pdf(request, pk):
 
 @login_required
 def cours_fiches_prestation_pdf(request):
-    cours = Cours.objects.select_related('promotion', 'enseignant')
+    cours = cours_accessible_par_enseignant(
+        Cours.objects.select_related('promotion', 'enseignant'), request)
     promotion = request.GET.get('promotion', '').strip()
     if promotion.isdigit():
         cours = cours.filter(promotion_id=int(promotion))
@@ -1785,7 +1970,8 @@ def cours_fiches_prestation_selection_pdf(request):
     ids = [int(pk) for pk in pks if pk.isdigit()]
     if not ids:
         return redirect('cours_list')
-    cours = (Cours.objects.select_related('promotion', 'enseignant')
+    cours = (cours_accessible_par_enseignant(
+        Cours.objects.select_related('promotion', 'enseignant'), request)
              .filter(pk__in=ids).order_by('promotion__nom', 'nom'))
     return _generer_fiches_prestation(cours, 'fiches-prestation-selection.pdf')
 
@@ -1793,6 +1979,7 @@ def cours_fiches_prestation_selection_pdf(request):
 @login_required
 def cours_bulk_delete(request):
     """Suppression en groupe de cours sélectionnés."""
+    refuser_enseignant(request)
     if request.method == 'POST':
         pks = request.POST.getlist('cours_ids')
         if not pks:
@@ -1815,6 +2002,15 @@ class SessionListView(SafePaginationMixin, ListView):
     template_name = "app/session_list.html"
     context_object_name = "sessions"
     paginate_by = 25
+
+    def get_queryset(self):
+        if utilisateur_est_enseignant(self.request):
+            enseignant = enseignant_connecte(self.request)
+            if enseignant is None:
+                return Session.objects.none()
+            return (Session.objects.filter(examens__cours__enseignant=enseignant)
+                    .distinct().order_by('-date_debut'))
+        return super().get_queryset()
 
 
 def _donnees_participants_session(session):
@@ -1912,6 +2108,10 @@ class SessionDetailView(DetailView):
     template_name = "app/session_detail.html"
     context_object_name = "session"
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         session = self.object
@@ -1961,6 +2161,7 @@ def session_participants_pdf(request, pk):
     n°, n° étudiant, nom et nombre d'examens suivis — même contenu que
     l'onglet « Participants » du détail de la session.
     """
+    refuser_enseignant(request)
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet
@@ -2971,6 +3172,10 @@ class SessionCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     success_url = reverse_lazy("session_list")
     success_message = "La session « %(nom)s » a été créée."
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
 
 class SessionUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     model = Session
@@ -2979,12 +3184,27 @@ class SessionUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     success_url = reverse_lazy("session_list")
     success_message = "La session « %(nom)s » a été modifiée."
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
 
 class SessionDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     model = Session
     template_name = "app/session_confirm_delete.html"
     success_url = reverse_lazy("session_list")
     success_message = "La session « %(object)s » a été supprimée."
+
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        if utilisateur_est_enseignant(self.request):
+            enseignant = enseignant_connecte(self.request)
+            return (Session.objects.filter(examens__cours__enseignant=enseignant)
+                    .distinct()) if enseignant else Session.objects.none()
+        return super().get_queryset()
 
 
 @login_required
@@ -2994,6 +3214,7 @@ def session_definir_active(request, pk):
     Simple bascule : le premier POST active la session (et désactive les
     autres via Session.save), le suivant retire la mention.
     """
+    refuser_enseignant(request)
     session = get_object_or_404(Session, pk=pk)
     if request.method == 'POST':
         session.est_active = not session.est_active
@@ -3019,7 +3240,8 @@ class CoursListView(SafePaginationMixin, ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        qs = Cours.objects.select_related('enseignant', 'promotion')
+        qs = cours_accessible_par_enseignant(
+            Cours.objects.select_related('enseignant', 'promotion'), self.request)
         params = self.request.GET
         self.filters = {}
 
@@ -3043,14 +3265,15 @@ class CoursListView(SafePaginationMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         # Options des filtres : uniquement les valeurs réellement utilisées
-        context['filter_promotions'] = (Promotion.objects
+        context['filter_promotions'] = (promotion_accessible_par_enseignant(Promotion.objects
                                         .filter(cours__isnull=False)
-                                        .distinct().order_by('nom'))
+                                        .distinct().order_by('nom'), self.request))
         context['filter_enseignants'] = (Enseignant.objects
                                          .filter(cours__isnull=False)
                                          .distinct().order_by('noms'))
         context['filters'] = self.filters
-        context['total_cours'] = Cours.objects.count()
+        context['total_cours'] = cours_accessible_par_enseignant(
+            Cours.objects.all(), self.request).count()
         return context
 
 
@@ -3061,6 +3284,10 @@ class CoursCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     success_url = reverse_lazy("cours_list")
     success_message = "Le cours « %(nom)s » a été créé."
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
 
 class CoursUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     model = Cours
@@ -3069,12 +3296,20 @@ class CoursUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     success_url = reverse_lazy("cours_list")
     success_message = "Le cours « %(nom)s » a été modifié."
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
 
 class CoursDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     model = Cours
     template_name = "app/cours_confirm_delete.html"
     success_url = reverse_lazy("cours_list")
     success_message = "Le cours « %(object)s » a été supprimé."
+
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
 
 
 # --- CRUD EXAMEN ---
@@ -3089,6 +3324,7 @@ class ExamenListView(SafePaginationMixin, ListView):
         qs = (Examen.objects
               .select_related('cours__promotion', 'cours__enseignant', 'session')
               .annotate(nb_inscriptions=Count('inscriptions', distinct=True)))
+        qs = examen_accessible_par_enseignant(qs, self.request)
         params = self.request.GET
         self.filters = {}
         self.tri = params.get('tri', 'cours').strip() or 'cours'
@@ -3162,19 +3398,24 @@ class ExamenListView(SafePaginationMixin, ListView):
         context = super().get_context_data(**kwargs)
         # Statistiques d'en-tête : total, notés, en attente, à venir
         # (une seule requête d'agrégation, indépendante des filtres).
-        context['stats_examens'] = Examen.objects.aggregate(
+        context['stats_examens'] = examen_accessible_par_enseignant(
+            Examen.objects.all(), self.request).aggregate(
             total=Count('id'),
             notes=Count('id', filter=Q(est_note=True)),
             en_attente=Count('id', filter=Q(est_note=False)),
             a_venir=Count('id', filter=Q(date_examen__gte=timezone.now())),
         )
         # Options des filtres : uniquement les valeurs réellement utilisées
-        context['filter_promotions'] = (Promotion.objects
+        context['filter_promotions'] = (promotion_accessible_par_enseignant(Promotion.objects
                                         .filter(cours__examens__isnull=False)
-                                        .distinct().order_by('nom'))
+                                        .distinct().order_by('nom'), self.request))
         context['filter_enseignants'] = (Enseignant.objects
                                          .filter(cours__examens__isnull=False)
                                          .distinct().order_by('noms'))
+        if utilisateur_est_enseignant(self.request):
+            enseignant = enseignant_connecte(self.request)
+            context['filter_enseignants'] = (Enseignant.objects.filter(pk=enseignant.pk)
+                                             if enseignant else Enseignant.objects.none())
         context['filter_sessions'] = (Session.objects
                                       .filter(examens__isnull=False)
                                       .distinct().order_by('date_debut', 'nom'))
@@ -3186,7 +3427,8 @@ class ExamenListView(SafePaginationMixin, ListView):
         params.pop('page', None)
         context['base_qs'] = params.urlencode()
         context['tri'] = self.tri
-        context['total_examens'] = Examen.objects.count()
+        context['total_examens'] = examen_accessible_par_enseignant(
+            Examen.objects.all(), self.request).count()
         context['session_active'] = getattr(self, 'session_active', None)
         context['session_defaut'] = getattr(self, 'session_defaut', False)
         context['session_choisie'] = getattr(self, 'session_choisie', False)
@@ -3204,6 +3446,10 @@ class ExamenCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     success_url = reverse_lazy("examen_list")
     success_message = "L'examen a été créé."
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx['cours_data'] = list(Cours.objects
@@ -3220,6 +3466,13 @@ class ExamenUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     template_name = "app/examen_form.html"
     success_url = reverse_lazy("examen_list")
     success_message = "L'examen a été modifié."
+
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        return examen_accessible_par_enseignant(super().get_queryset(), self.request)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -3246,6 +3499,13 @@ class ExamenDeleteView(LoginRequiredMixin, DeleteMessageMixin, DeleteView):
     success_url = reverse_lazy("examen_list")
     success_message = "L'examen « %(object)s » a été supprimé."
 
+    def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        return examen_accessible_par_enseignant(super().get_queryset(), self.request)
+
 
 @login_required
 def fiche_cote(request, pk):
@@ -3257,7 +3517,8 @@ def fiche_cote(request, pk):
     étudiants effectivement inscrits.
     """
     examen = get_object_or_404(
-        Examen.objects.select_related('cours__promotion', 'cours__enseignant', 'session'),
+        examen_accessible_par_enseignant(
+        Examen.objects.select_related('cours__promotion', 'cours__enseignant', 'session'), request),
         pk=pk)
     inscriptions = (examen.inscriptions
                     .select_related('etudiant')
@@ -3279,8 +3540,8 @@ def fiche_cote(request, pk):
 @login_required
 def examen_saisie_moyennes(request, pk):
     """Saisie des composantes ou d'une moyenne directe pour un examen."""
-    examen = get_object_or_404(
-        Examen.objects.select_related('cours__promotion', 'session'), pk=pk)
+    examen = get_object_or_404(examen_accessible_par_enseignant(
+        Examen.objects.select_related('cours__promotion', 'session'), request), pk=pk)
     inscriptions = (examen.inscriptions
                     .select_related('etudiant')
                     .order_by('etudiant__noms'))
@@ -3327,7 +3588,8 @@ def examen_inscrire(request, pk):
     « etudiants », multiples) ; le champ « etudiant » unique reste accepté.
     « next » permet de revenir à la page d'édition plutôt qu'à la fiche.
     """
-    examen = get_object_or_404(Examen.objects.select_related('cours'), pk=pk)
+    examen = get_object_or_404(examen_accessible_par_enseignant(
+        Examen.objects.select_related('cours'), request), pk=pk)
     if request.method == 'POST':
         pks = [v for v in request.POST.getlist('etudiants')
                if v.isdigit()]
@@ -3359,7 +3621,8 @@ def examen_inscrire(request, pk):
 def examen_inscrire_tous(request, pk):
     """Inscrit d'un coup tous les étudiants de la promotion du cours
     qui ne sont pas encore sur la fiche de cote."""
-    examen = get_object_or_404(Examen.objects.select_related('cours__promotion'), pk=pk)
+    examen = get_object_or_404(examen_accessible_par_enseignant(
+        Examen.objects.select_related('cours__promotion'), request), pk=pk)
     if request.method == 'POST':
         existants = examen.inscriptions.values_list('etudiant_id', flat=True)
         manquants = (Etudiant.objects
@@ -3380,7 +3643,7 @@ def examen_inscrire_tous(request, pk):
 @login_required
 def examen_desinscrire(request, pk, inscription_pk):
     """Retire un étudiant d'une fiche de cote (supprime aussi ses notes)."""
-    examen = get_object_or_404(Examen, pk=pk)
+    examen = get_object_or_404(examen_accessible_par_enseignant(Examen.objects.all(), request), pk=pk)
     if request.method == 'POST':
         inscription = get_object_or_404(Inscription, pk=inscription_pk,
                                         examen=examen)
@@ -3408,7 +3671,7 @@ def examen_marquer_notee(request, pk):
     sur la même page en conservant filtres, tri et pagination ; toute valeur
     ne commençant pas par « /examens/ » (redirection ouverte) est ignorée.
     """
-    examen = get_object_or_404(Examen, pk=pk)
+    examen = get_object_or_404(examen_accessible_par_enseignant(Examen.objects.all(), request), pk=pk)
     if request.method == 'POST':
         examen.est_note = not examen.est_note
         examen.save(update_fields=['est_note'])
@@ -3443,6 +3706,7 @@ def examen_non_notes_impression(request):
 
 @login_required
 def import_excel_template(request):
+    refuser_enseignant(request)
     """Télécharge un modèle vierge pour un import tabulaire."""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
@@ -3491,6 +3755,7 @@ def import_excel_template(request):
 def import_excel_view(request):
     """Vue pour l'importation de fichiers Excel (Étudiants, Enseignants, Cours,
     Grilles de délibération)."""
+    refuser_enseignant(request)
     type_param = request.GET.get('type', 'etudiants')
     if type_param not in ['etudiants', 'enseignants', 'cours', 'grilles']:
         type_param = 'etudiants'
@@ -3716,6 +3981,7 @@ def cotation_tutore_saisie(request, pk):
     pourcentage et la mention sont recalculés à chaque enregistrement par le
     modèle (aucune valeur dérivée n'est stockée).
     """
+    refuser_enseignant(request)
     etudiant = get_object_or_404(
         Etudiant.objects.select_related('promotion'), pk=pk)
     fiche = (CotationProjetTutore.objects.filter(etudiant=etudiant)
@@ -3803,6 +4069,7 @@ def cotation_tutore_impression(request, pk):
     /200, pourcentage et mention. Une fiche vide n'a rien à imprimer :
     on renvoie vers la saisie.
     """
+    refuser_enseignant(request)
     etudiant = get_object_or_404(
         Etudiant.objects.select_related('promotion'), pk=pk)
     fiche = (CotationProjetTutore.objects.filter(etudiant=etudiant)
@@ -3861,6 +4128,7 @@ def _lignes_valeurs(fiche):
 @login_required
 def cotation_tutore_supprimer(request, pk):
     """Supprime la cotation du projet tutoré d'un étudiant (POST uniquement)."""
+    refuser_enseignant(request)
     if request.method != 'POST':
         return HttpResponseNotAllowed(['POST'])
     etudiant = get_object_or_404(Etudiant, pk=pk)
@@ -3888,6 +4156,7 @@ def reglages(request):
     fournie par le client. La suppression est enveloppée dans une
     transaction : elle est tout ou rien.
     """
+    refuser_enseignant(request)
     conflits_avant = HistoriquePromotion.etapes_conflictuelles()
     nb_avant = len(conflits_avant)
     nb_supprimes = 0

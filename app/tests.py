@@ -374,6 +374,48 @@ class SaisieMoyennesExamenTests(BaseDataMixin, TestCase):
         self.assertIsNone(inscription.moyenne_saisie)
 
 
+class LogoutViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            'admin_logout', 'logout@example.com', 'pass12345')
+
+    def test_get_affiche_confirmation_sans_deconnecter(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('logout'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Confirmer la déconnexion')
+        self.assertContains(response, 'method="post"')
+        self.assertIn('_auth_user_id', self.client.session)
+
+    def test_post_deconnecte_et_redirige_vers_login(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(reverse('logout'))
+
+        self.assertRedirects(response, reverse('login'))
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_get_anonyme_redirige_vers_login(self):
+        response = self.client.get(reverse('logout'))
+
+        self.assertRedirects(response, reverse('login'))
+
+
+class LoginPageTests(TestCase):
+    def test_page_connexion_autonome_sans_sidebar(self):
+        response = self.client.get(reverse('login'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'ExamManager')
+        self.assertContains(response, 'Nom d\'utilisateur')
+        self.assertContains(response, 'Mot de passe')
+        self.assertContains(response, 'Se connecter')
+        self.assertNotContains(response, 'Navigation principale')
+        self.assertNotContains(response, 'Déconnexion')
+
+
 class InscriptionViewTests(BaseDataMixin, TestCase):
     """Flux d'inscription / désinscription des étudiants à un examen."""
 
@@ -1135,11 +1177,73 @@ class DashboardEnseignantTests(TestCase):
         self.assertIn('Mes cours', contenu)
         self.assertIn('Examens programmés', contenu)
         self.assertIn('Mes étudiants', contenu)
+        self.assertNotIn('Actions rapides', contenu)
         # Section « Examens à venir » (nouvel intitulé, pas « Prochains examens »)
         self.assertIn('Examens à venir', contenu)
         self.assertNotIn('Prochains examens', contenu)
         # L'examen de l'enseignant figure dans la liste
         self.assertIn("Cours de l&#x27;enseignant", contenu)
+
+    def test_portail_enseignant_filtre_cours_examens_etudiants_et_promotions(self):
+        autre_promo = Promotion.objects.create(nom='L2 AUTRE')
+        cours_hors_perimetre = Cours.objects.create(
+            nom='Cours confidentiel', coefficient=1,
+            enseignant=self.autre_ens, promotion=autre_promo)
+        examen_hors_perimetre = Examen.objects.create(
+            cours=cours_hors_perimetre, session=self.session,
+            date_examen=timezone.make_aware(datetime(2026, 6, 12, 8, 0)))
+        etudiant_hors_perimetre = Etudiant.objects.create(
+            noms='ETU HORS PERIMETRE', email='hors@example.com',
+            numero_etudiant='L2-001', promotion=autre_promo)
+
+        cours_response = self.client.get(reverse('cours_list'))
+        self.assertEqual(cours_response.status_code, 200)
+        self.assertContains(cours_response, 'Cours de l')
+        self.assertNotContains(cours_response, 'Cours confidentiel')
+
+        examens_response = self.client.get(reverse('examen_list'), {'session': '0'})
+        self.assertEqual(examens_response.status_code, 200)
+        self.assertContains(examens_response, 'Cours de l')
+        self.assertNotContains(examens_response, 'Cours confidentiel')
+
+        etudiants_response = self.client.get(reverse('etudiant_list'), {'toutes': '1'})
+        self.assertEqual(etudiants_response.status_code, 200)
+        self.assertNotContains(etudiants_response, 'L2 AUTRE')
+
+        self.assertEqual(self.client.get(reverse(
+            'cours_detail', args=[cours_hors_perimetre.pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse(
+            'etudiant_detail', args=[etudiant_hors_perimetre.pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse(
+            'examen_fiche', args=[examen_hors_perimetre.pk])).status_code, 404)
+
+    def test_enseignant_peut_consulter_son_cours_et_saisir_ses_notes(self):
+        cours_response = self.client.get(reverse('cours_detail', args=[self.cours.pk]))
+        self.assertEqual(cours_response.status_code, 200)
+        fiche_response = self.client.get(reverse('examen_fiche', args=[self.examen.pk]))
+        self.assertEqual(fiche_response.status_code, 200)
+        saisie_response = self.client.get(reverse(
+            'examen_saisie_moyennes', args=[self.examen.pk]))
+        self.assertEqual(saisie_response.status_code, 200)
+
+    def test_enseignant_ne_peut_pas_gerer_cours_sessions_ou_examens(self):
+        urls = [
+            reverse('cours_create'),
+            reverse('cours_update', args=[self.cours.pk]),
+            reverse('session_create'),
+            reverse('examen_create'),
+            reverse('examen_update', args=[self.examen.pk]),
+        ]
+        for url in urls:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 403)
+
+    def test_enseignant_ne_peut_pas_modifier_les_examens_d_autrui(self):
+        response = self.client.post(reverse(
+            'examen_notee', args=[self.examen_autre.pk]))
+        self.assertEqual(response.status_code, 404)
+        self.examen_autre.refresh_from_db()
+        self.assertFalse(self.examen_autre.est_note)
 
 
 class ExamensSessionEnCoursTests(TestCase):

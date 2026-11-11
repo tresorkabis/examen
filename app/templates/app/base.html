@@ -30,7 +30,7 @@
         <div class="sidebar-avatar">{{ user.get_short_name|first|upper|default:user.username|first|upper }}</div>
         <div class="sidebar-profile-info">
             <div class="sidebar-profile-name">{{ user.get_full_name|default:user.username|truncatechars:22 }}</div>
-            <div class="sidebar-profile-role">{% if is_teacher %}<i class="bi bi-circle-fill text-success" style="font-size:.45rem;vertical-align:middle"></i> Enseignant{% else %}<i class="bi bi-circle-fill text-success" style="font-size:.45rem;vertical-align:middle"></i> Administrateur{% endif %}</div>
+            <div class="sidebar-profile-role"><i class="bi bi-circle-fill text-success" style="font-size:.45rem;vertical-align:middle"></i> {% if user_role == 'enseignant' %}Enseignant{% elif user_role == 'gestionnaire' %}Gestionnaire{% else %}Administrateur{% endif %}</div>
         </div>
     </div>
     {% endif %}
@@ -42,24 +42,24 @@
         </a>
 
         <span class="sidebar-nav-label">Académique</span>
-        <a href="{% url 'promotion_list' %}" class="sidebar-link {% if 'promotion' in request.resolver_match.url_name %}is-active{% endif %}">
+        {% if not is_teacher %}<a href="{% url 'promotion_list' %}" class="sidebar-link {% if 'promotion' in request.resolver_match.url_name %}is-active{% endif %}">
             <i class="bi bi-diagram-3-fill"></i><span>Promotions</span>
-        </a>
-        <a href="{% url 'filiere_list' %}" class="sidebar-link {% if 'filiere' in request.resolver_match.url_name %}is-active{% endif %}">
+        </a>{% endif %}
+        {% if not is_teacher %}<a href="{% url 'filiere_list' %}" class="sidebar-link {% if 'filiere' in request.resolver_match.url_name %}is-active{% endif %}">
             <i class="bi bi-building"></i><span>Filières</span>
         </a>
         <a href="{% url 'mention_list' %}" class="sidebar-link {% if 'mention' in request.resolver_match.url_name %}is-active{% endif %}">
             <i class="bi bi-tags"></i><span>Mentions</span>
-        </a>
+        </a>{% endif %}
         <a href="{% url 'etudiant_list' %}" class="sidebar-link {% if 'etudiant' in request.resolver_match.url_name %}is-active{% endif %}">
             <i class="bi bi-people-fill"></i><span>Étudiants</span>
         </a>
         <a href="{% url 'cours_list' %}" class="sidebar-link {% if 'cours' in request.resolver_match.url_name %}is-active{% endif %}">
             <i class="bi bi-journal-bookmark-fill"></i><span>Cours</span>
         </a>
-        <a href="{% url 'palmares' %}" class="sidebar-link {% if 'palmares' in request.resolver_match.url_name %}is-active{% endif %}">
+        {% if not is_teacher %}<a href="{% url 'palmares' %}" class="sidebar-link {% if 'palmares' in request.resolver_match.url_name %}is-active{% endif %}">
             <i class="bi bi-trophy-fill"></i><span>Palmarès</span>
-        </a>
+        </a>{% endif %}
 
         <span class="sidebar-nav-label">Examens</span>
         <a href="{% url 'examen_list' %}" class="sidebar-link {% if 'examen' in request.resolver_match.url_name %}is-active{% endif %}">
@@ -74,6 +74,11 @@
         </a>
         {% endif %}
 
+        {% if user.enseignant %}
+        <a href="{% url 'enseignant_profile' %}" class="sidebar-link {% if request.resolver_match.url_name == 'enseignant_profile' %}is-active{% endif %}">
+            <i class="bi bi-person-circle"></i><span>Mon profil</span>
+        </a>
+        {% endif %}
         {% if not is_teacher %}
         <span class="sidebar-nav-label">Personnel</span>
         <a href="{% url 'enseignant_list' %}" class="sidebar-link {% if 'enseignant' in request.resolver_match.url_name %}is-active{% endif %}">

@@ -3,7 +3,8 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 from app.forms import LoginForm
 from app.views import (
-    dashboard, import_excel_view, import_excel_template,
+    ApplicationLogoutView, dashboard, import_excel_view, import_excel_template,
+    enseignant_profile,
     EtudiantListView, EtudiantDetailView, EtudiantCreateView, EtudiantUpdateView, EtudiantDeleteView,
     etudiant_releve_global,
     etudiant_ues_reprendre_pdf,
@@ -40,7 +41,7 @@ urlpatterns = [
     path('login/', auth_views.LoginView.as_view(
         authentication_form=LoginForm,
         template_name='registration/login.html'), name='login'),
-    path('logout/', auth_views.LogoutView.as_view(), name='logout'),
+    path('logout/', ApplicationLogoutView.as_view(), name='logout'),
     path('', dashboard, name='dashboard'),
     path('imports/', import_excel_view, name='import_excel'),
         path('imports/modele.xlsx', import_excel_template,
@@ -102,6 +103,7 @@ urlpatterns = [
     path('enseignants/<int:pk>/user/create/', EnseignantUserCreateView.as_view(), name='enseignant_user_create'),
     path('enseignants/<int:pk>/reset-password/', EnseignantPasswordResetView.as_view(), name='enseignant_password_reset'),
     path('enseignants/<int:pk>/delete/', EnseignantDeleteView.as_view(), name='enseignant_delete'),
+    path('enseignant/mon-profil/', enseignant_profile, name='enseignant_profile'),
 
     # URLs Session
     path('sessions/', SessionListView.as_view(), name='session_list'),
