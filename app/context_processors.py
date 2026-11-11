@@ -32,7 +32,6 @@ BREADCRUMB_MAP = {
     "promotion_detail": ("Détail", [("Promotions", "promotion_list")]),
     "enseignant_detail": ("Détail", [("Enseignants", "enseignant_list")]),
     "enseignant_create": ("Nouvel Enseignant", [("Enseignants", "enseignant_list")]),
-    "enseignant_profile": ("Mon profil", [("Enseignants", "enseignant_list")]),
     "session_create": ("Nouvelle Session", [("Sessions", "session_list")]),
     "examen_create": ("Nouvel Examen", [("Examens", "examen_list")]),
 

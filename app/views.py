@@ -96,25 +96,6 @@ def utilisateur_est_enseignant(request):
             (UserRole.ADMIN, UserRole.GESTIONNAIRE))
 
 
-
-@login_required
-def enseignant_profile(request):
-    """Page « Mon profil enseignant ».
-
-    Renvoie vers la fiche détaillée de l'enseignant lié au compte connecté.
-    Affiche un message et renvoie au tableau de bord si aucun enseignant n'est
-    lié au compte.
-    """
-    enseignant = enseignant_connecte(request)
-    if enseignant is None:
-        messages.info(
-            request,
-            "Votre compte n'est lié à aucune fiche enseignant. "
-            "Contactez l'administrateur pour créer votre profil.",
-        )
-        return redirect('dashboard')
-    return redirect('enseignant_detail', pk=enseignant.pk)
-
 def refuser_enseignant(request):
     """Empêche un compte enseignant d'utiliser une route réservée au personnel."""
     if utilisateur_est_enseignant(request):
