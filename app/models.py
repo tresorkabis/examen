@@ -345,6 +345,10 @@ class Cours(models.Model):
         """Nombre de lignes de séance à prévoir sur sa fiche de prestation."""
         return self.coefficient * 5
 
+    @property
+    def volume_horaire(self):
+        return self.coefficient * 15
+
     def __str__(self):
         return self.nom
 

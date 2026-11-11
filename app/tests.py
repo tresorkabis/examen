@@ -153,6 +153,16 @@ class ModelesOptimisationTests(TestCase):
         self.assertRegex(etudiant.numero_etudiant, r'^ETU-\d{8}$')
 
 
+class CoursPrestationTests(TestCase):
+    def test_volume_horaire_et_seances_prevues_sont_distincts(self):
+        promotion = Promotion.objects.create(nom='L1 INFO A')
+        cours = Cours.objects.create(
+            nom='Programmation', coefficient=2, promotion=promotion)
+
+        self.assertEqual(cours.volume_horaire, 30)
+        self.assertEqual(cours.nombre_seances_prestation, 10)
+
+
 class EdgeCaseImportTests(TestCase):
     """Régression sur les valeurs incomplètes ou les formulaires en édition."""
 
@@ -1459,6 +1469,12 @@ class EnseignantDetailViewTest(BaseDataMixin, TestCase):
 class EtudiantDetailViewTest(BaseDataMixin, TestCase):
     """Fiche détaillée d'un étudiant : infos, relevé de grille, moyenne."""
 
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.session.est_active = True
+        cls.session.save(update_fields=['est_active'])
+
     def test_detail_affiche_infos_etudiant(self):
         self._creer_etudiants(2)
         self._inscriptions(2)
@@ -1494,6 +1510,30 @@ class EtudiantDetailViewTest(BaseDataMixin, TestCase):
             reponse, 'Fiches de cotation &amp; Examens enregistrés (0)')
         self.assertContains(reponse, 'Aucun examen pour cet étudiant.')
 
+    def test_examens_limites_a_la_session_active(self):
+        self._creer_etudiants(1)
+        etudiant = Etudiant.objects.get(numero_etudiant='L3INFOA-000')
+        self._inscriptions(1)
+
+        session_future = Session.objects.create(
+            nom='SESSION FUTURE', semestre=2, type_session='normale',
+            date_debut=date(2026, 3, 1), date_fin=date(2026, 4, 1))
+        cours_futur = Cours.objects.create(
+            nom='Cours hors session active', coefficient=1,
+            promotion=self.promotion)
+        examen_futur = Examen.objects.create(
+            cours=cours_futur, session=session_future,
+            date_examen=timezone.make_aware(datetime(2026, 3, 10, 8, 0)))
+        Inscription.objects.create(examen=examen_futur, etudiant=etudiant)
+
+        reponse = self.client.get(reverse('etudiant_detail', args=[etudiant.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        contenu = reponse.content.decode()
+        self.assertIn(
+            'Fiches de cotation &amp; Examens enregistrés (1)', contenu)
+        self.assertIn('Langage de programmation mobile', contenu)
+        self.assertNotIn('Cours hors session active', contenu)
+
     def test_moyennes_par_examen_provenant_des_grilles(self):
         """La section affiche la moyenne de la grille, par examen.
 
@@ -1520,7 +1560,8 @@ class EtudiantDetailViewTest(BaseDataMixin, TestCase):
         Inscription.objects.create(examen=examen_hors, etudiant=etudiant)
 
         grille = Grille.objects.create(
-            promotion=self.promotion, annee_academique='2025-2026',
+            promotion=self.promotion, session=self.session,
+            annee_academique='2025-2026',
             total_credits=60, fichier_source='L3 INFO A_2025_2026.xlsx')
         # Intitulé volontairement différent du nom du cours : le
         # rapprochement se fait par la FK `GrilleUE.cours`, et la ligne du
@@ -1547,6 +1588,23 @@ class EtudiantDetailViewTest(BaseDataMixin, TestCase):
         # Ligne 2 : hors grille, la moyenne reste vide.
         self.assertIn('Cours hors grille —', texte)
         self.assertNotIn('Moyenne fiches', contenu)
+
+    def test_badge_grille_absent_hors_session_active(self):
+        self._creer_etudiants(1)
+        etudiant = Etudiant.objects.get(numero_etudiant='L3INFOA-000')
+        session_ancienne = Session.objects.create(
+            nom='SESSION ANCIENNE', semestre=1, type_session='normale',
+            date_debut=date(2025, 1, 5), date_fin=date(2025, 2, 5))
+        grille = Grille.objects.create(
+            promotion=self.promotion, session=session_ancienne,
+            annee_academique='2024-2025')
+        GrilleEtudiant.objects.create(
+            grille=grille, etudiant=etudiant, noms=etudiant.noms, rang=1,
+            moyenne='12.00', decision='V')
+
+        reponse = self.client.get(reverse('etudiant_detail', args=[etudiant.pk]))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertNotContains(reponse, 'Moyennes : grille 2024-2025')
 
     def test_moyenne_ue_rapprochee_par_intitule_proche(self):
         """Un intitulé d'UE proche du cours est rapproché par similarité.

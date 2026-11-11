@@ -881,11 +881,11 @@
             <h5 class="mb-0 fw-semibold">
                 <i class="bi bi-journal-check me-2 text-secondary"></i>Fiches de cotation &amp; Examens enregistrés ({{ nb_examens }})
             </h5>
-            {% if grille_ligne %}
+            {% if grille_ligne and grille_ligne.grille.session and grille_ligne.grille.session.est_active %}
             <span class="badge text-bg-light border">
                 <i class="bi bi-grid me-1 text-secondary"></i>Moyennes : grille {{ grille_ligne.grille.annee_academique }}
             </span>
-            {% else %}
+            {% elif not grille_ligne %}
             <span class="badge text-bg-light border">Aucune grille de délibération</span>
             {% endif %}
         </div>

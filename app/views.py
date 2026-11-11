@@ -806,6 +806,7 @@ class EtudiantDetailView(DetailView):
         inscriptions = list(
             etudiant.inscriptions
             .select_related('examen__cours', 'examen__session')
+            .filter(examen__session__est_active=True)
             .order_by('examen__date_examen', 'examen_id'))
 
         notes_par_cours = {}     # niveau 1 : lien direct `GrilleUE.cours`
@@ -1480,9 +1481,9 @@ def _dessiner_fiche_prestation(c, cours, numero_page, total_pages):
     margin = 28
     navy = colors.HexColor('#18334A')
     ink = colors.HexColor('#233746')
-    muted = colors.HexColor('#69777C')
-    brass = colors.HexColor('#A58A55')
-    rule = colors.HexColor('#D7D6CF')
+    muted = colors.HexColor('#263741')
+    brass = colors.HexColor('#66502B')
+    rule = colors.HexColor('#737D7F')
     paper = colors.HexColor('#FBFAF6')
 
     def fit_text(value, x, y, max_width, size=9, font='Helvetica-Bold'):
@@ -1554,13 +1555,14 @@ def _dessiner_fiche_prestation(c, cours, numero_page, total_pages):
             c.setStrokeColor(rule)
             c.line(x, box_top - row_height, x, box_top)
 
-    widths_bottom = [box_width * .27, box_width * .27,
-                     box_width * .18, box_width * .28]
+    widths_bottom = [box_width * .22, box_width * .22,
+                     box_width * .14, box_width * .20, box_width * .22]
     bottom_fields = [
         ('Date de début', '__/__/____'),
         ('Date de fin', '__/__/____'),
         ('Coefficient', str(cours.coefficient)),
         ('Séances prévues', str(cours.nombre_seances_prestation)),
+        ('Volume horaire', str(cours.volume_horaire)),
     ]
     x = margin
     for width, (label, value) in zip(widths_bottom, bottom_fields):
@@ -1573,7 +1575,7 @@ def _dessiner_fiche_prestation(c, cours, numero_page, total_pages):
     table_x = margin
     table_top = box_bottom - 14
     header_height = 21
-    columns = [24, 52, 150, 70, 90, 77, 76]
+    columns = [24, 52, 205, 55, 78, 62, 63]
     headings = ['N°', 'DATE', 'CONTENU / ACTIVITÉ PÉDAGOGIQUE',
                 'HEURES PRESTÉES', 'SIGNATURE DU TITULAIRE',
                 'VISA FILIÈRE', 'VISA APPARITAIRE']
@@ -1584,18 +1586,32 @@ def _dessiner_fiche_prestation(c, cours, numero_page, total_pages):
     x = table_x
     for width, heading in zip(columns, headings):
         heading_size = 6.8
-        while (heading_size > 5.5 and
-               stringWidth(heading, 'Helvetica-Bold', heading_size) > width - 6):
-            heading_size -= .2
+        lines = []
+        line = ''
+        for word in heading.split():
+            candidate = f'{line} {word}'.strip()
+            if (line and stringWidth(candidate, 'Helvetica-Bold', heading_size)
+                    > width - 6):
+                lines.append(line)
+                line = word
+            else:
+                line = candidate
+        if line:
+            lines.append(line)
+        line_height = 7
+        first_line_y = (table_top -
+                        (header_height - len(lines) * line_height) / 2 - 5)
         c.setFont('Helvetica-Bold', heading_size)
-        c.drawCentredString(x + width / 2, table_top - 13.7, heading)
+        for index, text in enumerate(lines):
+            c.drawCentredString(x + width / 2,
+                                first_line_y - index * line_height, text)
         x += width
 
     total_sessions = cours.nombre_seances_prestation
     sessions_par_page = (total_sessions + total_pages - 1) // total_pages
     start_num = (numero_page - 1) * sessions_par_page
     rows = min(sessions_par_page, total_sessions - start_num)
-    row_height = min(25, (table_top - header_height - 55) / max(rows, 1))
+    row_height = min(30, (table_top - header_height - 55) / max(rows, 1))
     grid_top = table_top - header_height
     grid_bottom = grid_top - rows * row_height
     for index in range(rows):
