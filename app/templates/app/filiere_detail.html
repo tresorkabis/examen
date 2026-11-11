@@ -78,7 +78,7 @@
                     {% for mention in mentions %}
                     <tr>
                         <td class="fw-semibold">
-                            <a href="{% url 'mention_update' mention.pk %}" class="text-decoration-none">
+                            <a href="{% url 'mention_detail' mention.pk %}" class="text-decoration-none">
                                 {{ mention.nom }}
                             </a>
                         </td>

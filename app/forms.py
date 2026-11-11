@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from .models import (Promotion, Filiere, Mention, Enseignant, Etudiant, Cours,
-                     Session, Examen, CotationProjetTutore)
+                     Session, Examen, Inscription, CotationProjetTutore)
 
 
 class LoginForm(AuthenticationForm):
@@ -155,6 +155,36 @@ class ExamenForm(BootstrapModelForm):
             active = Session.objects.filter(est_active=True).first()
             if active:
                 self.fields['session'].initial = active.pk
+
+
+class InscriptionComposantesForm(BootstrapModelForm):
+    class Meta:
+        model = Inscription
+        fields = ['note_interro', 'note_tp', 'note_examen']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name, maximum in (
+                ('note_interro', '5'), ('note_tp', '5'),
+                ('note_examen', '10')):
+            self.fields[field_name].widget.attrs.update({
+                'class': 'form-control composante-note', 'type': 'number',
+                'min': '0', 'max': maximum, 'step': '0.01',
+            })
+
+
+class InscriptionMoyenneForm(BootstrapModelForm):
+    moyenne_saisie = forms.DecimalField(
+        label='Moyenne /20', max_digits=4, decimal_places=2,
+        min_value=0, max_value=20, required=False,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control text-center',
+            'min': '0', 'max': '20', 'step': '0.01',
+        }))
+
+    class Meta:
+        model = Inscription
+        fields = ['moyenne_saisie']
 
 
 class CotationProjetTutoreForm(BootstrapModelForm):

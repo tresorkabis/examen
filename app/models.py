@@ -434,9 +434,9 @@ class Examen(models.Model):
 class Inscription(models.Model):
     """Inscription d'un étudiant à un examen, avec ses notes.
 
-    Barème de la fiche de cote : INTERRO/5 + TP/5 + EXAMEN/10 = MOYENNE/20.
-    Le champ « note » (moyenne /20) est recalculé automatiquement à chaque
-    enregistrement à partir des trois composantes.
+    Sans moyenne directe, le total des composantes (INTERRO/5 + TP/5 +
+    EXAMEN/10) est arrondi à l'entier le plus proche, demi-point supérieur.
+    Une moyenne saisie directement prend priorité sans effacer les composantes.
     """
     etudiant = models.ForeignKey(Etudiant, on_delete=models.CASCADE, related_name='inscriptions')
     examen = models.ForeignKey(Examen, on_delete=models.CASCADE, related_name='inscriptions')
@@ -452,8 +452,12 @@ class Inscription(models.Model):
         max_digits=4, decimal_places=2, null=True, blank=True,
         validators=[MinValueValidator(0), MaxValueValidator(10)],
         help_text="Note d'examen sur 10")
+    moyenne_saisie = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(20)],
+        help_text="Moyenne saisie directement sur 20, si nécessaire")
     note = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True,
-                               help_text="Moyenne sur 20 (calculée)")
+                               help_text="Moyenne sur 20")
 
     class Meta:
         # Volontairement *aucun* `ordering` : trier par une FK jointe
@@ -471,14 +475,22 @@ class Inscription(models.Model):
 
     @property
     def moyenne(self):
-        """Somme des composantes renseignées (None si tout est vide)."""
+        """Moyenne saisie directement, sinon somme des composantes."""
+        if self.moyenne_saisie is not None:
+            return self.moyenne_saisie
         parts = [self.note_interro, self.note_tp, self.note_examen]
         if all(p is None for p in parts):
             return None
         return sum(p for p in parts if p is not None)
 
     def save(self, *args, **kwargs):
-        self.note = self.moyenne
+        if self.moyenne_saisie is not None:
+            self.note = self.moyenne_saisie
+        elif self.moyenne is None:
+            self.note = None
+        else:
+            self.note = Decimal(str(self.moyenne)).quantize(
+                Decimal('1'), rounding=ROUND_HALF_UP)
         super().save(*args, **kwargs)
 
     def __str__(self):

@@ -107,7 +107,7 @@ class ModelMoyenneTests(TestCase):
             examen=self.examen, etudiant=self.etudiant,
             note_interro=4, note_tp=3.5, note_examen=8)
         self.assertEqual(ins.moyenne, 15.5)
-        self.assertEqual(ins.note, 15.5)
+        self.assertEqual(ins.note, Decimal('16'))
 
     def test_save_recalcule_la_note(self):
         ins = Inscription.objects.create(
@@ -116,6 +116,18 @@ class ModelMoyenneTests(TestCase):
         ins.note_examen = 0
         ins.save()
         self.assertEqual(ins.note, 10)  # 5 + 5 + 0
+
+    def test_moyenne_saisie_directe_prend_le_dessus_sans_perdre_les_composantes(self):
+        ins = Inscription.objects.create(
+            examen=self.examen, etudiant=self.etudiant,
+            note_interro=4, note_tp=3, note_examen=8,
+            moyenne_saisie=Decimal('17.50'))
+
+        self.assertEqual(ins.note, Decimal('17.50'))
+        self.assertEqual(ins.moyenne, Decimal('17.50'))
+        self.assertEqual(ins.note_interro, Decimal('4.00'))
+        self.assertEqual(ins.note_tp, Decimal('3.00'))
+        self.assertEqual(ins.note_examen, Decimal('8.00'))
 
 
 class ModelesOptimisationTests(TestCase):
@@ -214,6 +226,9 @@ class FicheCoteTests(BaseDataMixin, TestCase):
         self.assertIn('L3 INFO A', contenu)
         self.assertIn('Intitul\u00e9 du Cours :', contenu)
         self.assertIn('Langage de programmation mobile', contenu)
+        self.assertIn(
+            reverse('examen_saisie_moyennes', kwargs={'pk': self.examen.pk}),
+            contenu)
         # Salle absente de la fiche
         self.assertNotIn('Salle :', contenu)
         # « Nombre total d'étudiants » affiché après le tableau
@@ -230,6 +245,133 @@ class FicheCoteTests(BaseDataMixin, TestCase):
         # Une seule ligne dans le tableau (les autres étudiants n'apparaissent
         # que dans le sélecteur d'ajout, pas dans la fiche).
         self.assertEqual(contenu.count('<td class="num">'), 1)
+
+
+class SaisieMoyennesExamenTests(BaseDataMixin, TestCase):
+    def test_mode_moyenne_directe_ne_propose_que_le_champ_moyenne(self):
+        self._connexion()
+        self._creer_etudiants(1)
+        self._inscriptions(1)
+        inscription = Inscription.objects.get(examen=self.examen)
+        inscription.note_interro = Decimal('4')
+        inscription.note_tp = Decimal('3')
+        inscription.note_examen = Decimal('6')
+        inscription.save()
+
+        response = self.client.get(reverse(
+            'examen_saisie_moyennes', kwargs={'pk': self.examen.pk}),
+            {'mode': 'moyenne'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Saisie des moyennes')
+        self.assertContains(response, 'Moyenne /20')
+        self.assertContains(response, 'Interro /5')
+        self.assertContains(response, 'TP /5')
+        self.assertContains(response, 'Examen /10')
+        self.assertContains(response, '4,00')
+        self.assertContains(response, '3,00')
+        self.assertContains(response, '6,00')
+        self.assertNotContains(response, 'note_interro')
+        self.assertNotContains(response, 'note_tp')
+        self.assertNotContains(response, 'note_examen')
+        self.assertEqual(
+            [name for name in response.context['formset'].forms[0].fields
+             if name != 'id'],
+            ['moyenne_saisie'])
+        self.assertEqual(
+            response.context['formset'].forms[0]['moyenne_saisie'].value(),
+            Decimal('13'))
+
+    def test_enregistrer_moyenne_conserve_les_composantes_existantes(self):
+        self._connexion()
+        self._creer_etudiants(1)
+        self._inscriptions(1)
+        inscription = Inscription.objects.get(examen=self.examen)
+        inscription.note_interro = Decimal('4')
+        inscription.note_tp = Decimal('3')
+        inscription.note_examen = Decimal('6')
+        inscription.save()
+
+        response = self.client.post(
+            reverse('examen_saisie_moyennes', kwargs={'pk': self.examen.pk}),
+            {
+                'form-TOTAL_FORMS': '1',
+                'form-INITIAL_FORMS': '1',
+                'form-MIN_NUM_FORMS': '0',
+                'form-MAX_NUM_FORMS': '1000',
+                'mode': 'moyenne',
+                'form-0-id': str(inscription.pk),
+                'form-0-moyenne_saisie': '16.25',
+            })
+
+        self.assertRedirects(
+            response, reverse(
+                'examen_saisie_moyennes', kwargs={'pk': self.examen.pk}))
+        inscription.refresh_from_db()
+        self.assertEqual(inscription.note, Decimal('16.25'))
+        self.assertEqual(inscription.moyenne_saisie, Decimal('16.25'))
+        self.assertEqual(inscription.note_interro, Decimal('4.00'))
+        self.assertEqual(inscription.note_tp, Decimal('3.00'))
+        self.assertEqual(inscription.note_examen, Decimal('6.00'))
+
+    def test_moyenne_superieure_a_20_est_refusee(self):
+        self._connexion()
+        self._creer_etudiants(1)
+        self._inscriptions(1)
+        inscription = Inscription.objects.get(examen=self.examen)
+
+        response = self.client.post(
+            reverse('examen_saisie_moyennes', kwargs={'pk': self.examen.pk}),
+            {
+                'form-TOTAL_FORMS': '1',
+                'form-INITIAL_FORMS': '1',
+                'form-MIN_NUM_FORMS': '0',
+                'form-MAX_NUM_FORMS': '1000',
+                'mode': 'moyenne',
+                'form-0-id': str(inscription.pk),
+                'form-0-moyenne_saisie': '20.01',
+            })
+
+        self.assertEqual(response.status_code, 200)
+        inscription.refresh_from_db()
+        self.assertIsNone(inscription.note)
+
+    def test_mode_composantes_arrondit_la_moyenne(self):
+        self._connexion()
+        self._creer_etudiants(1)
+        self._inscriptions(1)
+        inscription = Inscription.objects.get(examen=self.examen)
+
+        response = self.client.get(reverse(
+            'examen_saisie_moyennes', kwargs={'pk': self.examen.pk}),
+            {'mode': 'composantes'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Interro, TP et examen')
+        self.assertContains(response, 'name="form-0-note_interro"')
+        self.assertContains(response, 'name="form-0-note_tp"')
+        self.assertContains(response, 'name="form-0-note_examen"')
+        self.assertNotContains(response, 'name="form-0-moyenne_saisie"')
+
+        response = self.client.post(
+            reverse('examen_saisie_moyennes', kwargs={'pk': self.examen.pk}),
+            {
+                'form-TOTAL_FORMS': '1',
+                'form-INITIAL_FORMS': '1',
+                'form-MIN_NUM_FORMS': '0',
+                'form-MAX_NUM_FORMS': '1000',
+                'mode': 'composantes',
+                'form-0-id': str(inscription.pk),
+                'form-0-note_interro': '4.25',
+                'form-0-note_tp': '3',
+                'form-0-note_examen': '5.25',
+            })
+
+        self.assertRedirects(
+            response, reverse(
+                'examen_saisie_moyennes', kwargs={'pk': self.examen.pk}))
+        inscription.refresh_from_db()
+        self.assertEqual(inscription.note, Decimal('13'))
+        self.assertIsNone(inscription.moyenne_saisie)
 
 
 class InscriptionViewTests(BaseDataMixin, TestCase):
@@ -1903,8 +2045,8 @@ class CoursDetailViewTest(BaseDataMixin, TestCase):
         self.assertIn('Langage de programmation mobile', contenu)
         self.assertIn('NOM0', contenu)
         self.assertIn('SESSION 1, SEMESTRE 1 2025 - 2026', contenu)
-        # Moyenne du cours : 13,50 affichée
-        self.assertIn('13,50', contenu)
+        # La moyenne des composantes (13,5) est arrondie à 14.
+        self.assertIn('14,00', contenu)
 
     def test_detail_sans_examen(self):
         cours = Cours.objects.create(
@@ -1961,6 +2103,8 @@ class FiliereDetailViewTest(TestCase):
         self.assertEqual(reponse.status_code, 200)
         self.assertContains(reponse, filiere.description)
         self.assertContains(reponse, mention.nom)
+        self.assertContains(
+            reponse, reverse('mention_detail', args=[mention.pk]))
         self.assertContains(reponse, promotion.nom)
         self.assertNotContains(reponse, 'Bachelier L1 INFO')
         stats = reponse.context['filiere']
@@ -4982,17 +5126,28 @@ class ImpressionCoursPromotionTests(BaseDataMixin, TestCase):
     sous-titre dédié.
     """
 
-    def test_bouton_impression_cours_sur_la_fiche(self):
-        """Le bouton « Imprimer les cours » appelle `imprimerCours()`."""
+    def test_lien_apercu_cours_ouvre_le_pdf_dans_le_meme_onglet(self):
         self._creer_etudiants(1)
 
         reponse = self.client.get(
             reverse('promotion_detail', args=[self.promotion.pk]))
 
         self.assertEqual(reponse.status_code, 200)
-        self.assertContains(reponse, 'Imprimer les cours')
-        self.assertContains(reponse, 'onclick="imprimerCours()"')
-        self.assertContains(reponse, 'function imprimerCours()')
+        self.assertContains(reponse, 'Aperçu / imprimer les cours')
+        self.assertContains(
+            reponse, reverse('promotion_cours_pdf', args=[self.promotion.pk]))
+        self.assertNotContains(reponse, 'target="_blank"')
+
+    def test_pdf_cours_est_inline_et_valide(self):
+        reponse = self.client.get(
+            reverse('promotion_cours_pdf', args=[self.promotion.pk]))
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse['Content-Type'], 'application/pdf')
+        self.assertTrue(reponse['Content-Disposition'].startswith('inline;'))
+        contenu = b''.join(reponse.streaming_content)
+        self.assertTrue(contenu.startswith(b'%PDF-'))
+        self.assertIn(b'%%EOF', contenu[-32:])
 
     def test_bouton_impression_cours_absent_sans_cours(self):
         """Sans cours : pas de bouton d'impression dédié (rien à imprimer)."""
@@ -5002,9 +5157,24 @@ class ImpressionCoursPromotionTests(BaseDataMixin, TestCase):
             reverse('promotion_detail', args=[self.promotion.pk]))
 
         self.assertEqual(reponse.status_code, 200)
-        self.assertNotContains(reponse, 'onclick="imprimerCours()"')
+        self.assertNotContains(reponse, 'Aperçu / imprimer les cours')
         # La liste des étudiants reste imprimable, elle.
         self.assertContains(reponse, 'Imprimer la liste')
+
+    def test_apercu_cours_disponible_sans_etudiants(self):
+        """L’aperçu des cours ne dépend pas de la présence d’étudiants."""
+        reponse = self.client.get(
+            reverse('promotion_detail', args=[self.promotion.pk]))
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, 'Aperçu / imprimer les cours')
+        self.assertContains(
+            reponse, reverse('promotion_cours_pdf', args=[self.promotion.pk]))
+        self.assertContains(reponse, 'Langage de programmation mobile')
+        self.assertContains(reponse, 'Volume horaire (h)')
+        self.assertContains(reponse, '>15</td>')
+        contenu = reponse.content.decode()
+        self.assertNotIn('courss', contenu)
 
     def test_impression_cours_reutilise_le_cadre_officiel(self):
         """Le mode « Cours » s'appuie sur les blocs de la page.

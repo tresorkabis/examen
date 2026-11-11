@@ -103,9 +103,13 @@
     </nav>
 
     <div class="sidebar-bottom">
-        <a href="{% url 'logout' %}" class="sidebar-link sidebar-link--danger">
-            <i class="bi bi-door-open-fill"></i><span>Déconnexion</span>
-        </a>
+        <form method="post" action="{% url 'logout' %}" class="m-0">
+            {% csrf_token %}
+            <button type="submit"
+                    class="sidebar-link sidebar-link--danger w-100 border-0 bg-transparent text-start">
+                <i class="bi bi-door-open-fill"></i><span>Déconnexion</span>
+            </button>
+        </form>
     </div>
 </aside>
 

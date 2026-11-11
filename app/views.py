@@ -12,6 +12,7 @@ from django.core.exceptions import ValidationError
 from django.core.cache import cache
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
+from django.forms import modelformset_factory
 from django.http import HttpResponseNotAllowed
 from django.db.models import Count, F, Min, Max, Prefetch, Q
 from django.http import FileResponse, Http404, HttpResponseRedirect
@@ -54,7 +55,9 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse_lazy
 
 from .forms import (PromotionForm, FiliereForm, MentionForm, EnseignantForm, EtudiantForm, CoursForm,
-                    SessionForm, ExamenForm, ExcelImportForm,
+                    SessionForm, ExamenForm, InscriptionComposantesForm,
+                    InscriptionMoyenneForm,
+                    ExcelImportForm,
                     EnseignantUserForm,
                     CotationProjetTutoreForm)
 from django.contrib.auth.models import User
@@ -2063,6 +2066,103 @@ def _donnees_ues_a_reprendre(etudiant):
     return elements, sum(element['ue'].credits for element in elements)
 
 
+def promotion_cours_pdf(request, pk):
+    """Prévisualise dans le navigateur les cours d'une promotion en PDF."""
+    from xml.sax.saxutils import escape
+
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (Paragraph, SimpleDocTemplate, Spacer,
+                                    Table, TableStyle)
+
+    promotion = get_object_or_404(Promotion, pk=pk)
+    cours = list(promotion.cours.select_related('enseignant').order_by('nom'))
+    nb_enseignants = len({c.enseignant_id for c in cours if c.enseignant_id})
+
+    styles = getSampleStyleSheet()
+    style_titre = ParagraphStyle(
+        'TitreCoursPromotion', parent=styles['Title'],
+        fontSize=17, leading=21, textColor=colors.HexColor('#18334A'),
+        spaceAfter=2 * mm)
+    style_sous_titre = ParagraphStyle(
+        'SousTitreCoursPromotion', parent=styles['Heading2'],
+        fontSize=11, leading=14, textColor=colors.HexColor('#263741'),
+        spaceAfter=2 * mm)
+    style_meta = ParagraphStyle(
+        'MetaCoursPromotion', parent=styles['Normal'],
+        fontSize=9, leading=12, textColor=colors.HexColor('#46545C'))
+    style_cours = ParagraphStyle(
+        'NomCoursPromotion', parent=styles['Normal'], fontName='Helvetica-Bold',
+        fontSize=8, leading=10)
+    style_cellule = ParagraphStyle(
+        'CelluleCoursPromotion', parent=styles['Normal'],
+        fontSize=8, leading=10)
+
+    donnees = [[
+        'N°', 'Cours', 'Enseignant', 'Coef.', 'Volume horaire (h)']]
+    for numero, cours_item in enumerate(cours, start=1):
+        donnees.append([
+            str(numero),
+            Paragraph(escape(cours_item.nom), style_cours),
+            Paragraph(escape(cours_item.enseignant.noms
+                             if cours_item.enseignant else '—'), style_cellule),
+            str(cours_item.coefficient),
+            str(cours_item.volume_horaire),
+        ])
+    if not cours:
+        donnees.append([
+            Paragraph('Aucun cours rattaché à cette promotion.', style_cellule),
+            '', '', '', '',
+        ])
+
+    tampon = BytesIO()
+    doc = SimpleDocTemplate(
+        tampon, pagesize=A4,
+        leftMargin=12 * mm, rightMargin=12 * mm,
+        topMargin=14 * mm, bottomMargin=14 * mm,
+        title=f'Cours et enseignants - {promotion.nom}')
+    largeurs = [9 * mm, 70 * mm, 66 * mm, 15 * mm, 28 * mm]
+    tableau = Table(donnees, colWidths=largeurs, repeatRows=1,
+                    hAlign='LEFT')
+    styles_tableau = [
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#18334A')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('GRID', (0, 0), (-1, -1), .4, colors.HexColor('#A6AAA5')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1),
+         [colors.white, colors.HexColor('#F2F5F7')]),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('ALIGN', (0, 1), (0, -1), 'CENTER'),
+        ('ALIGN', (3, 1), (-1, -1), 'CENTER'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]
+    if not cours:
+        styles_tableau.append(('SPAN', (0, 1), (-1, 1)))
+    tableau.setStyle(TableStyle(styles_tableau))
+
+    date_impression = timezone.localtime().strftime('%d/%m/%Y %H:%M')
+    elements = [
+        Paragraph(escape(promotion.nom), style_titre),
+        Paragraph('Cours et enseignants affectés', style_sous_titre),
+        Paragraph(
+            f'{len(cours)} cours · {nb_enseignants} enseignant(s) · '
+            f'Imprimé le {date_impression}', style_meta),
+        Spacer(1, 5 * mm),
+        tableau,
+    ]
+    doc.build(elements)
+    tampon.seek(0)
+    filename = f'cours-{slugify(promotion.nom)}.pdf'
+    return FileResponse(tampon, as_attachment=False,
+                        content_type='application/pdf', filename=filename)
+
+
 @login_required
 def promotion_ues_a_reprendre_pdf(request, pk):
     """Imprime dans un seul PDF les UE à reprendre par les étudiants d'une promotion.
@@ -3173,6 +3273,49 @@ def fiche_cote(request, pk):
         'inscriptions': inscriptions,
         'inscriptibles': inscriptibles,
         'titulaire': examen.cours.enseignant,
+    })
+
+
+@login_required
+def examen_saisie_moyennes(request, pk):
+    """Saisie des composantes ou d'une moyenne directe pour un examen."""
+    examen = get_object_or_404(
+        Examen.objects.select_related('cours__promotion', 'session'), pk=pk)
+    inscriptions = (examen.inscriptions
+                    .select_related('etudiant')
+                    .order_by('etudiant__noms'))
+    mode = request.POST.get('mode', request.GET.get('mode', 'composantes'))
+    if mode not in ('composantes', 'moyenne'):
+        mode = 'composantes'
+    form_class = (InscriptionComposantesForm if mode == 'composantes'
+                  else InscriptionMoyenneForm)
+    FormSet = modelformset_factory(
+        Inscription, form=form_class, extra=0)
+    formset = FormSet(request.POST or None, queryset=inscriptions)
+
+    if mode == 'moyenne':
+        for form in formset.forms:
+            if (form.instance.moyenne_saisie is None
+                and form.instance.note is not None):
+                form.initial['moyenne_saisie'] = form.instance.note
+
+    if request.method == 'POST' and formset.is_valid():
+        if mode == 'composantes':
+            for form in formset.forms:
+                if form.has_changed():
+                    inscription = form.save(commit=False)
+                    inscription.moyenne_saisie = None
+                    inscription.save()
+        else:
+            formset.save()
+        messages.success(request, 'Les notes ont été enregistrées.')
+        return redirect('examen_saisie_moyennes', pk=examen.pk)
+
+    return render(request, 'app/examen_saisie_moyennes.html', {
+        'examen': examen,
+        'formset': formset,
+        'inscriptions': inscriptions,
+        'mode': mode,
     })
 
 

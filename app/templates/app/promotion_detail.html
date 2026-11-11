@@ -4,6 +4,59 @@
 
 {% block extra_style %}
 <style>
+    .course-preview-dialog {
+        border: 0;
+        border-radius: .5rem;
+        box-shadow: 0 1rem 3rem rgba(0, 0, 0, .2);
+        padding: 0;
+        width: min(1100px, calc(100vw - 2rem));
+        max-width: none;
+        max-height: calc(100vh - 2rem);
+    }
+    .course-preview-dialog::backdrop { background: rgba(15, 23, 32, .55); }
+    .course-preview-dialog .modal-content { max-height: calc(100vh - 2rem); }
+    .course-preview-dialog .modal-body { overflow: auto; }
+    .course-preview-dialog .card { border: 0; box-shadow: none; }
+    .course-preview-dialog .cours-print-table {
+        display: table;
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+    }
+    .course-preview-dialog .cours-print-table th,
+    .course-preview-dialog .cours-print-table td {
+        padding: .3rem .4rem;
+        border-bottom: 1px solid #dee2e6;
+        text-align: left;
+        vertical-align: top;
+        overflow-wrap: break-word;
+        word-break: break-word;
+    }
+    .course-preview-dialog .cours-print-table thead th {
+        border-bottom: 2px solid #212529;
+        font-size: 10pt;
+        text-transform: uppercase;
+    }
+    .course-preview-dialog .cours-print-table th.num,
+    .course-preview-dialog .cours-print-table td.num {
+        width: 6%;
+        text-align: center;
+    }
+    .course-preview-dialog .cours-print-table th:nth-child(2),
+    .course-preview-dialog .cours-print-table td:nth-child(2) { width: 38%; }
+    .course-preview-dialog .cours-print-table th:nth-child(3),
+    .course-preview-dialog .cours-print-table td:nth-child(3) { width: 32%; }
+    .course-preview-dialog .cours-print-table th:nth-child(4),
+    .course-preview-dialog .cours-print-table td:nth-child(4) {
+        width: 10%;
+        text-align: center;
+    }
+    .course-preview-dialog .cours-print-table th:nth-child(5),
+    .course-preview-dialog .cours-print-table td:nth-child(5) {
+        width: 14%;
+        text-align: center;
+    }
+
     /* En-têtes imprimés (liste des étudiants / cours) : masqués à l'écran */
     .print-only { display: none; }
     .titre-cours { display: none; }
@@ -132,20 +185,25 @@
         body.impression-cours .cours-print-table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
         body.impression-cours .cours-print-table th.num,
         body.impression-cours .cours-print-table td.num {
-            width: 8% !important;
+            width: 6% !important;
             text-align: center !important;
         }
         body.impression-cours .cours-print-table th:nth-child(2),
         body.impression-cours .cours-print-table td:nth-child(2) {
-            width: 44% !important;
+            width: 38% !important;
         }
         body.impression-cours .cours-print-table th:nth-child(3),
         body.impression-cours .cours-print-table td:nth-child(3) {
-            width: 38% !important;
+            width: 32% !important;
         }
         body.impression-cours .cours-print-table th:nth-child(4),
         body.impression-cours .cours-print-table td:nth-child(4) {
             width: 10% !important;
+            text-align: center !important;
+        }
+        body.impression-cours .cours-print-table th:nth-child(5),
+        body.impression-cours .cours-print-table td:nth-child(5) {
+            width: 14% !important;
             text-align: center !important;
         }
 
@@ -187,7 +245,7 @@
                 · imprimé le {% now 'd/m/Y à H:i' %}
             </div>
             <div class="print-only small text-muted mt-1 titre-cours">
-                Cours et enseignants affectés — {{ cours|length }} cours{{ cours|length|pluralize }}
+                Cours et enseignants affectés — {{ cours|length }} cours
                 dispensé{{ cours|length|pluralize }} par {{ enseignants|length }} enseignant{{ enseignants|length|pluralize }}
                 · imprimé le {% now 'd/m/Y à H:i' %}
             </div>
@@ -197,10 +255,10 @@
                 <i class="bi bi-printer me-1"></i>Imprimer la liste
             </button>
             {% if cours %}
-            <button type="button" class="btn btn-outline-primary" onclick="imprimerCours()"
-                    title="Imprimer les cours de la promotion avec les enseignants affectés">
-                <i class="bi bi-printer me-1"></i>Imprimer les cours
-            </button>
+            <a href="{% url 'promotion_cours_pdf' promotion.pk %}"
+               class="btn btn-outline-secondary">
+                <i class="bi bi-printer me-1"></i>Aperçu / imprimer les cours
+            </a>
             {% endif %}
             {% if etudiants %}
             <a href="{% url 'promotion_ues_a_reprendre_pdf' promotion.pk %}"
@@ -350,6 +408,7 @@
                                     <th>Cours</th>
                                     <th>Enseignant</th>
                                     <th class="text-center">Coef.</th>
+                                    <th class="text-center">Volume horaire (h)</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -358,10 +417,11 @@
                                     <td><a href="{% url 'cours_detail' c.pk %}">{{ c.nom }}</a></td>
                                     <td>{{ c.enseignant|default:"—" }}</td>
                                     <td class="text-center">{{ c.coefficient }}</td>
+                                    <td class="text-center">{{ c.volume_horaire }}</td>
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="3" class="text-center text-muted py-4">
+                                    <td colspan="4" class="text-center text-muted py-4">
                                         Aucun cours rattaché à cette promotion.
                                     </td>
                                 </tr>
@@ -388,6 +448,7 @@
                                 <th>Cours</th>
                                 <th>Enseignant</th>
                                 <th class="text-center">Coef.</th>
+                                <th class="text-center">Volume horaire (h)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -397,10 +458,11 @@
                                 <td class="fw-semibold">{{ c.nom }}</td>
                                 <td>{{ c.enseignant|default:"—" }}</td>
                                 <td class="text-center">{{ c.coefficient }}</td>
+                                <td class="text-center">{{ c.volume_horaire }}</td>
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="4" class="text-center text-muted py-4">
+                                <td colspan="5" class="text-center text-muted py-4">
                                     Aucun cours rattaché à cette promotion.
                                 </td>
                             </tr>
