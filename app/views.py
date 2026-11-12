@@ -3345,7 +3345,7 @@ class ExamenListView(SafePaginationMixin, ListView):
         elif session.isdigit():
             qs = qs.filter(session__pk=session)
             self.filters['session'] = int(session)
-        elif self.session_active:
+        elif self.session_active and not ens:
             qs = qs.filter(session=self.session_active)
             self.session_defaut = True
 
