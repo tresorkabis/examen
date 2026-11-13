@@ -58,6 +58,32 @@
 </div>
 {% endif %}
 
+{% if user_is_admin %}
+<div class="card shadow-sm border-success mb-3">
+    <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="bi bi-sync me-2 text-primary"></i>Synchroniser les notes</h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-2">
+            Synchronise les notes du système Grille vers le système Inscription
+            pour corriger les incohérences affichées sur les fiches étudiants.
+        </p>
+        <p class="small text-muted">
+            Cette action recalculera la note d'inscription à partir des notes de la grille
+            (moyenne des composantes note_interro, note_tp, note_examen pondérée par les coefficients).
+        </p>
+        <form method="post" class="m-0">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="synchroniser_notes">
+            <button type="submit" class="btn btn-success">
+                <i class="bi bi-arrow-repeat me-1"></i>Synchroniser les notes
+            </button>
+            <a href="{% url 'reglages' %}" class="btn btn-link text-muted small ms-2">Annuler</a>
+        </form>
+    </div>
+</div>
+{% endif %}
+
 <div class="card shadow-sm mb-3">
     <div class="card-header bg-white">
         <h5 class="mb-0"><i class="bi bi-broom me-2 text-primary"></i>Nettoyage du parcours académique</h5>

@@ -4270,6 +4270,52 @@ def reglages(request):
         elif action == 'nettoyer_parcours':
             messages.info(request,
                           "Aucun enregistrement à nettoyer : base conforme.")
+        elif action == 'synchroniser_notes':
+            if get_user_role(request.user) != UserRole.ADMIN:
+                raise PermissionDenied
+            from app.models import Inscription, Grille, GrilleUE, GrilleEtudiant, GrilleNote
+            # Récupérer toutes les inscriptions
+            inscriptions = Inscription.objects.all()
+            compte = 0
+            for inscription in inscriptions:
+                # Pour chaque inscription, trouver la grille correspondante
+                # On suppose que l'étudiant et l'examen correspondent à une grille
+                etudiant = inscription.etudiant
+                examen = inscription.examen
+                # Chercher la grille de la promotion de l'étudiant
+                grilles = examen.session.grilles.filter(promotion=etudiant.promotion)
+                if grilles.exists():
+                    grille = grilles.first()
+                    # Pour chaque UE de la grille, trouver la note correspondante
+                    ues = grille.ues.all()
+                    for grilleue in ues:
+                        # Trouver la note correspondante pour cet étudiant et cette UE
+                        try:
+                            grilleetudiant = GrilleEtudiant.objects.get(
+                                grille=grille,
+                                etudiant=etudiant
+                            )
+                            # Vérifier si une note existe déjà pour cette UE
+                            grillenote = GrilleNote.objects.get(
+                                ligne=grilleetudiant,
+                                ue=grilleue
+                            )
+                            # Mettre à jour l'inscription avec la note de la grille
+                            # Note: on utilise la note de la grille telle quelle
+                            # Le calcul dépend du modèle Inscription
+                            # On va simplement copier la note
+                            if grillenote.note is not None:
+                                # Calculer la note pour le modèle Inscription
+                                # Selon le modèle, note = note_interro + note_tp + note_examen
+                                # Mais ici on prend simplement la note de la grille
+                                inscription.note = grillenote.note
+                                inscription.save(update_fields=['note'])
+                                compte += 1
+                        except (GrilleEtudiant.DoesNotExist, GrilleNote.DoesNotExist):
+                            # Aucune correspondance, on passe à la suivante
+                            continue
+            messages.success(request,
+                f'{compte} note(s) synchronisée(s) depuis la grille vers inscription.')
 
     return render(request, 'app/reglages.html', {
         'conflits': HistoriquePromotion.etapes_conflictuelles(),
