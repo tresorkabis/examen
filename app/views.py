@@ -216,18 +216,23 @@ def dashboard(request):
             'total_etudiants': (
                 Etudiant.objects
                 .filter(inscriptions__examen__cours__enseignant=enseignant)
+                .filter(inscriptions__examen__session=session_active)
                 .distinct().count()
-            ),
-            'total_sessions': (
-                1 if enseignant_a_examen_session_active else 0
-            ),
+            ) if session_active else 0,
+            'examens_a_noter': (
+                Examen.objects.filter(
+                    cours__enseignant=enseignant, session=session_active, est_note=False
+                ).count()
+            ) if session_active else 0,
             'total_enseignants': 1,
             'total_promotions': (
                 Promotion.objects.filter(cours__enseignant=enseignant).distinct().count()
             ),
             'total_examens': (
-                Examen.objects.filter(cours__enseignant=enseignant).count()
-            ),
+                Examen.objects.filter(
+                    cours__enseignant=enseignant, session=session_active
+                ).count()
+            ) if session_active else 0,
         }
         prochains = (
             Examen.objects

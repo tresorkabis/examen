@@ -29,7 +29,7 @@
     </div>
 </section>
 
-{% if not session_active %}
+{% if not session_active and not is_teacher %}
 <div class="alert alert-warning py-2 small mb-3 border-0 shadow-sm">
     <i class="bi bi-exclamation-triangle me-2"></i>
     Aucune session en cours n'est définie : les statistiques sont globales.
@@ -83,12 +83,18 @@
     <div class="col-md-6 col-lg-3">
         <div class="premium-stat-card stat-tone-forest h-100">
             <div class="stat-body">
-                <span class="stat-icon"><i class="bi bi-calendar-check"></i></span>
-                <div class="stat-num">{{ total_sessions }}</div>
-                <div class="stat-txt">Sessions</div>
+                <span class="stat-icon">
+                    {% if is_teacher %}<i class="bi bi-pencil-square"></i>{% else %}<i class="bi bi-calendar-check"></i>{% endif %}
+                </span>
+                <div class="stat-num">
+                    {% if is_teacher %}{{ examens_a_noter }}{% else %}{{ total_sessions }}{% endif %}
+                </div>
+                <div class="stat-txt">
+                    {% if is_teacher %}Examens à noter{% else %}Sessions{% endif %}
+                </div>
             </div>
             {% if is_teacher %}
-            <a href="{% url 'session_list' %}" class="stat-link">Voir mes sessions <i class="bi bi-arrow-right-short"></i></a>
+            <a href="{% url 'examen_list' %}?enseignant={{ enseignant.pk }}" class="stat-link">Voir mes examens <i class="bi bi-arrow-right-short"></i></a>
             {% else %}
             <a href="{% url 'session_list' %}" class="stat-link">Voir la liste <i class="bi bi-arrow-right-short"></i></a>
             {% endif %}
@@ -144,7 +150,7 @@
         <div class="card dashboard-panel shadow-sm border-0">
             <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center py-3">
                 <h5 class="mb-0"><i class="bi bi-calendar-event me-2 text-primary"></i>Examens à venir</h5>
-                <a href="{% url 'examen_list' %}" class="btn btn-sm btn-outline-primary">Tous les examens</a>
+                <a href="{% url 'examen_list' %}?enseignant={{ enseignant.pk }}" class="btn btn-sm btn-outline-primary">Tous mes examens</a>
             </div>
             {% if prochains_examens %}
             <div class="list-group list-group-flush border-0">
@@ -168,9 +174,17 @@
             {% else %}
             <div class="card-body text-center text-muted py-5">
                 <i class="bi bi-calendar-check fs-1 d-block mb-3 opacity-50"></i>
+                {% if is_teacher and session_active %}
+                <div class="fw-semibold">Aucun examen programmé dans la session en cours</div>
+                <p class="small mb-0">Vous n'avez aucun examen dans « {{ session_active.nom }} ».</p>
+                <a href="{% url 'examen_create' %}" class="d-block mt-2 text-primary text-decoration-none">Programmer un examen <i class="bi bi-arrow-right-short"></i></a>
+                {% elif is_teacher %}
+                <div class="fw-semibold">Aucune session en cours définie</div>
+                <p class="small mb-0">Aucune session active n'affecte vos examens pour le moment.</p>
+                <a href="{% url 'session_list' %}" class="d-block mt-2 text-primary text-decoration-none">Voir les sessions <i class="bi bi-arrow-right-short"></i></a>
+                {% else %}
                 <div class="fw-semibold">Aucun examen programmé</div>
                 <p class="small mb-0">Aucun examen à venir pour le moment.</p>
-                {% if not is_teacher %}
                 <a href="{% url 'examen_create' %}" class="d-block mt-2 text-primary text-decoration-none">Programmer un examen <i class="bi bi-arrow-right-short"></i></a>
                 {% endif %}
             </div>
@@ -241,8 +255,12 @@
             </div>
             {% else %}
             <div class="card-body text-center text-muted py-4">
+                {% if is_teacher %}
+                Aucune session en cours pour vos examens.
+                {% else %}
                 Aucune session.
                 <a href="{% url 'session_create' %}" class="d-block mt-2 text-decoration-none text-primary">Organiser une session</a>
+                {% endif %}
             </div>
             {% endif %}
         </div>
