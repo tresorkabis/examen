@@ -59,6 +59,9 @@ BREADCRUMB_MAP = {
     # Réglages / maintenance des données
     "reglages": ("Réglages", []),
 
+    # Profil personnel
+    "profil": ("Mon profil", []),
+
     # Gestion des rôles
     "user_role_manage": ("Gestion des rôles", [("Réglages", "reglages")]),
 }
@@ -89,9 +92,8 @@ def breadcrumbs(request):
 def current_user_role(request):
     """Expose le rôle de l'utilisateur connecté (``UserProfile.role``).
 
-    Permet aux templates d'afficher le rôle et d'afficher conditionnellement
-    les entrées de menu réservées aux administrateurs, sans dupliquer la
-    logique de résolution du rôle.
+    Reutilise le cache par requete de ``get_user_role()`` pour eviter toute
+    requete base de donnees supplementaire dans le rendering des templates.
     """
     user = getattr(request, "user", None)
     role = None

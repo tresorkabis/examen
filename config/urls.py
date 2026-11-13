@@ -33,6 +33,7 @@ from app.views import (
     DefenseListView,
     reglages,
     UserRoleManageView,
+    ProfilView,
 )
 
 urlpatterns = [
@@ -148,4 +149,5 @@ urlpatterns = [
 
     # Gestion des rôles (réservée au rôle administrateur)
     path('utilisateurs/roles/', UserRoleManageView.as_view(), name='user_role_manage'),
+    path('profil/', ProfilView.as_view(), name='profil'),
 ]

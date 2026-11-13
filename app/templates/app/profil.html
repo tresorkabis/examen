@@ -1,0 +1,108 @@
+{% extends 'app/base.html' %}
+
+{% block title %}Mon profil{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div>
+        <h2 class="mb-0 fw-bold"><i class="bi bi-person me-2 text-primary"></i>Mon profil</h2>
+        <div class="text-muted small">
+            Gérez vos informations personnelles et consultez votre rôle d'accès.
+        </div>
+    </div>
+    <a href="{% url 'dashboard' %}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Tableau de bord
+    </a>
+</div>
+
+<div class="row">
+    <!-- Cartes d'information (lecture seule) -->
+    <div class="col-md-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2 text-primary"></i>Informations du compte</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-3 py-2">
+                        <span class="text-muted">Identifiant</span>
+                        <span class="fw-semibold">{{ user.username }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-3 py-2">
+                        <span class="text-muted">Email</span>
+                        <span class="fw-semibold">{{ user.email|default:"—" }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-3 py-2">
+                        <span class="text-muted">Nom complet</span>
+                        <span class="fw-semibold">
+                            {{ user.first_name }} {{ user.last_name|default:"—" }}
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-3 py-2">
+                        <span class="text-muted">Rôle</span>
+                        <span class="badge
+                            {% if user_role == 'admin' %}text-bg-danger
+                            {% elif user_role == 'gestionnaire' %}text-bg-warning text-dark
+                            {% else %}text-bg-info{% endif %}">
+                            {{ user_role|default:"Enseignant"|title }}
+                        </span>
+                    </li>
+                    {% if profil and profil.enseignant %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-3 py-2">
+                        <span class="text-muted">Lien enseignant</span>
+                        <span class="fw-semibold">{{ profil.enseignant }}</span>
+                    </li>
+                    {% endif %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-3 py-2">
+                        <span class="text-muted">Dernière connexion</span>
+                        <span class="fw-semibold text-muted">—</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formulaire de modification -->
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="bi bi-pencil-square me-2 text-primary"></i>Modifier mes informations</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {{ form.non_field_errors }}
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            {{ form.first_name.label_tag }}
+                            {{ form.first_name }}
+                            {% for error in form.first_name.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        <div class="col-md-6">
+                            {{ form.last_name.label_tag }}
+                            {{ form.last_name }}
+                            {% for error in form.last_name.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        <div class="col-md-6">
+                            {{ form.email.label_tag }}
+                            {{ form.email }}
+                            {% for error in form.email.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i>Enregistrer les modifications
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

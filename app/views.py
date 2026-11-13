@@ -69,6 +69,7 @@ from .forms import (PromotionForm, FiliereForm, MentionForm, EnseignantForm, Etu
                     InscriptionMoyenneForm,
                     ExcelImportForm,
                     EnseignantUserForm,
+                    ProfilForm,
                     CotationProjetTutoreForm)
 from django.contrib.auth.models import User
 from .models import (Etudiant, Cours, Session, Enseignant, Promotion, Filiere,
@@ -4293,6 +4294,39 @@ class UserRoleManageView(RoleRequiredMixin, View):
         return render(request, self.template_name, self._contexte())
 
     def post(self, request):
+        action = (request.POST.get('action') or 'changer_role').strip()
+
+        # -------------------- SUPPRESSION D'UN UTILISATEUR --------------------
+        if action == 'supprimer':
+            username = (request.POST.get('username') or '').strip()
+            if not username:
+                messages.error(
+                    request, "Aucun utilisateur sélectionné pour la suppression.")
+                return redirect('user_role_manage')
+
+            try:
+                target = User.objects.get(username=username)
+            except User.DoesNotExist:
+                messages.error(
+                    request, "Utilisateur « %s » introuvable." % username)
+                return redirect('user_role_manage')
+
+            # Garde-fou : l'administrateur ne peut pas se supprimer lui-même.
+            if target == request.user:
+                messages.error(
+                    request, "Vous ne pouvez pas supprimer votre propre compte.")
+                return redirect('user_role_manage')
+
+            # Suppression en cascade : le UserProfile (OneToOne CASCADE) est
+            # supprimé automatiquement avec l'utilisateur.
+            target.delete()
+
+            messages.success(
+                request,
+                "L'utilisateur « %s » a été supprimé." % username)
+            return redirect('user_role_manage')
+
+        # -------------------- CHANGEMENT DE RÔLE --------------------
         username = (request.POST.get('username') or '').strip()
         role = (request.POST.get('role') or '').strip()
 
@@ -4338,3 +4372,36 @@ class UserRoleManageView(RoleRequiredMixin, View):
                dict(UserRole.CHOICES)[ancien_role],
                dict(UserRole.CHOICES)[role]))
         return redirect('user_role_manage')
+
+
+class ProfilView(LoginRequiredMixin, SuccessMessageMixin, View):
+    """Page personnelle de l'utilisateur connecte.
+
+    Permet de consulter et modifier ses propres informations (nom, prenom,
+    email) et de visualiser son role. Le changement de role reste reserve
+    aux administrateurs depuis la page « Gestion des roles ».
+    """
+
+    template_name = 'app/profil.html'
+    form_class = ProfilForm
+    success_message = "Votre profil a été mis à jour."
+
+    def get(self, request):
+        form = self.form_class(instance=request.user)
+        return render(request, self.template_name, {
+            'form': form,
+            'profil': getattr(request.user, 'profile', None),
+        })
+
+    def post(self, request):
+        form = self.form_class(request.POST, instance=request.user)
+        if form.is_valid():
+            form.save()
+            if hasattr(request.user, '_role_cache'):
+                del request.user._role_cache
+            messages.success(request, self.success_message)
+            return redirect('profil')
+        return render(request, self.template_name, {
+            'form': form,
+            'profil': getattr(request.user, 'profile', None),
+        })

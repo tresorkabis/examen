@@ -344,6 +344,36 @@ class ExcelImportForm(forms.Form):
                 "Pour une grille de délibération, la promotion est obligatoire "
                 "(une grille couvre une seule promotion).")
 
+class ProfilForm(forms.ModelForm):
+    """Formulaire de modification du propre profil d'un utilisateur.
+
+    Seuls le nom, le prénom et l'email sont modifiables par l'utilisateur
+    lui-même. Le rôle reste gerable exclusivement par un administrateur
+    depuis la page « Gestion des rôles ».
+    """
+
+    class Meta:
+        model = User
+        fields = ('first_name', 'last_name', 'email')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            if isinstance(field.widget, forms.EmailInput):
+                css = 'form-control'
+            else:
+                css = 'form-control'
+            field.widget.attrs.setdefault('class', css)
+
+    def clean_email(self):
+        email = (self.cleaned_data.get('email') or '').strip()
+        if not email:
+            raise ValidationError("L'adresse email est obligatoire.")
+        if User.objects.filter(email=email).exclude(pk=self.instance.pk).exists():
+            raise ValidationError("Cette adresse email est deja utilisee par un autre compte.")
+        return email
+
+
 class EnseignantUserForm(UserCreationForm):
     email = forms.EmailField(required=True)
     default_password = "demo"

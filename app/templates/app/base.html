@@ -87,6 +87,9 @@
         <a href="{% url 'reglages' %}" class="sidebar-link {% if request.resolver_match.url_name == 'reglages' %}is-active{% endif %}">
             <i class="bi bi-sliders"></i><span>Réglages</span>
         </a>
+        <a href="{% url 'profil' %}" class="sidebar-link {% if request.resolver_match.url_name == 'profil' %}is-active{% endif %}">
+            <i class="bi bi-person"></i><span>Mon profil</span>
+        </a>
         {% if user_is_admin %}
         <a href="{% url 'user_role_manage' %}" class="sidebar-link {% if request.resolver_match.url_name == 'user_role_manage' %}is-active{% endif %}">
             <i class="bi bi-shield-lock-fill"></i><span>Rôles</span>

@@ -1164,12 +1164,18 @@ def get_user_role(user):
 
     - Si l'utilisateur n'est pas connecté, retourne None.
     - Le rôle est stocké dans son profil (``UserProfile.role``) ; il est lu
-      directement en base pour ne jamais renvoyer une valeur périmée (le cache
-      de la relation inversée ``user.profile`` peut être obsolète).
+      directement en base pour ne jamais renvoyer une valeur périmée.
+    - Un cache par requête (attribut ``_role_cache`` sur l'instance ``user``)
+      évite une requête base de données à chaque appel dans une même requête
+      HTTP (notamment depuis le context processor et les templates).
     - Par défaut, les utilisateurs sans rôle explicite sont des 'enseignants'.
     """
     if user is None or not getattr(user, 'is_authenticated', False):
         return None
+
+    cache_attr = getattr(user, '_role_cache', None)
+    if cache_attr is not None:
+        return cache_attr
 
     role = (UserProfile.objects
             .filter(user_id=user.pk)
@@ -1177,9 +1183,11 @@ def get_user_role(user):
             .first())
 
     if role in UserRole.ALL:
+        user._role_cache = role
         return role
 
     # Repli sûr : pas de profil (ou profil sans rôle valide) => enseignant.
+    user._role_cache = UserRole.ENSEIGNANT
     return UserRole.ENSEIGNANT
 
 
