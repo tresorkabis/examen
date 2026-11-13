@@ -3411,9 +3411,8 @@ class ExamenListView(SafePaginationMixin, ListView):
         if session == '0':
             self.filters['session'] = 'toutes'
         elif session == 'en-cours':
-            if self.session_active:
-                qs = qs.filter(session=self.session_active)
-                self.session_choisie = True
+            qs = qs.filter(session=self.session_active)
+            self.session_choisie = True
         elif session.isdigit():
             qs = qs.filter(session__pk=session)
             self.filters['session'] = int(session)
@@ -3508,6 +3507,7 @@ class ExamenCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     success_message = "L'examen a été créé."
 
     def dispatch(self, request, *args, **kwargs):
+        refuser_enseignant(request)
         return super().dispatch(request, *args, **kwargs)
 
     def get_form_kwargs(self):
