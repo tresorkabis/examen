@@ -1160,11 +1160,15 @@ class UserRole:
 
 
 def get_user_role(user):
-    """Retourne le rôle de l'utilisateur.
+    """Retourne le rôle effectif de l'utilisateur.
 
     - Si l'utilisateur n'est pas connecté, retourne None.
-    - Le rôle est stocké dans son profil (``UserProfile.role``) ; il est lu
-      directement en base pour ne jamais renvoyer une valeur périmée.
+    - Un ``is_superuser`` Django dispose de tous les droits : son rôle métier
+      effectif est ``admin``, indépendamment de l'enregistrement dans
+      ``UserProfile.role``. Cela évite l'ambiguïté d'un superuser qui serait
+      simultanément traité comme enseignant dans l'interface métier.
+    - Le rôle est sinon stocké dans son profil (``UserProfile.role``) ; il est
+      lu directement en base pour ne jamais renvoyer une valeur périmée.
     - Un cache par requête (attribut ``_role_cache`` sur l'instance ``user``)
       évite une requête base de données à chaque appel dans une même requête
       HTTP (notamment depuis le context processor et les templates).
@@ -1176,6 +1180,11 @@ def get_user_role(user):
     cache_attr = getattr(user, '_role_cache', None)
     if cache_attr is not None:
         return cache_attr
+
+    # Un superuser Django prime sur tout rôle métier enregistré.
+    if getattr(user, 'is_superuser', False):
+        user._role_cache = UserRole.ADMIN
+        return UserRole.ADMIN
 
     role = (UserProfile.objects
             .filter(user_id=user.pk)

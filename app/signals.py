@@ -13,7 +13,7 @@ from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 from .models import (Cours, Enseignant, Etudiant, Examen, Inscription, Session,
-                     UserProfile)
+                     UserProfile, UserRole)
 
 CLE_COMPTEURS = 'dashboard_compteurs'
 
@@ -36,9 +36,15 @@ def purger_compteurs_dashboard(sender, **kwargs):
 
 @receiver([post_save], sender=User, dispatch_uid='app.create_user_profile')
 def create_user_profile(sender, instance, created, **kwargs):
-    """S'assurer qu'un profil existe pour chaque utilisateur."""
+    """S'assurer qu'un profil existe pour chaque utilisateur.
+
+    Un superuser Django reçoit directement le rôle ``admin`` dans son profil,
+    afin que le stockage en base soit cohérent avec le rôle effectif renvoyé
+    par ``get_user_role()`` (le ``is_superuser`` prime sur le rôle métier).
+    """
     if created:
+        role = UserRole.ADMIN if instance.is_superuser else UserRole.ENSEIGNANT
         try:
             UserProfile.objects.get(user=instance)
         except UserProfile.DoesNotExist:
-            UserProfile.objects.create(user=instance)
+            UserProfile.objects.create(user=instance, role=role)
