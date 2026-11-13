@@ -11,16 +11,34 @@ class UserProfileInline(admin.StackedInline):
     can_delete = False
     verbose_name_plural = "Profil utilisateur"
     fields = ("role", "enseignant")
-    readonly_fields = ("role", "enseignant")
+    # Le rôle et le lien enseignant restent modifiables depuis l'admin Django.
+    # La suppression du profil se fait par suppression de l'utilisateur entier.
 
 try:
     admin.site.unregister(User)
 except admin.sites.NotRegistered:
     pass
 
+def profil_role(obj):
+    """Affiche le rôle de l'utilisateur dans la liste de l'admin."""
+    try:
+        return obj.profile.get_role_display()
+    except UserProfile.DoesNotExist:
+        return "—"
+
+
+profil_role.short_description = "Rôle"
+
+
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     inlines = (UserProfileInline,)
+    list_display = ("username", "email", "first_name", "last_name",
+                    profil_role, "is_active", "is_staff")
+    list_filter = ("is_active", "is_staff", "is_superuser",
+                   "profile__role")
+    search_fields = ("username", "email", "first_name", "last_name")
+    ordering = ("username",)
 
 @admin.register(Etudiant)
 class EtudiantAdmin(admin.ModelAdmin):

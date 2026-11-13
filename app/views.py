@@ -188,10 +188,25 @@ def dashboard(request):
     La session active (est_active) restreint les compteurs ; « Prochains
     examens » reste global (planification) et « Sessions récentes » montre
     les dernières sessions, la session en cours y étant signalée.
+
+    Règle enseignant : un enseignant ne voit la session en cours que s'il a
+    au moins un examen programmé dans cette session. Dans le cas contraire,
+    la session active est masquée pour lui (aucun badge, aucune session
+    listée).
     """
     session_active = Session.objects.filter(est_active=True).first()
     enseignant = enseignant_connecte(request)
     is_teacher = utilisateur_est_enseignant(request)
+
+    # Règle : un enseignant ne voit la session en cours que s'il y a un examen
+    enseignant_a_examen_session_active = False
+    if is_teacher and session_active:
+        enseignant_a_examen_session_active = Examen.objects.filter(
+            session=session_active, cours__enseignant=enseignant
+        ).exists()
+
+    if is_teacher and not enseignant_a_examen_session_active:
+        session_active = None  # Masqué pour cet enseignant
 
     if is_teacher:
         compteurs = {
@@ -204,7 +219,7 @@ def dashboard(request):
                 .distinct().count()
             ),
             'total_sessions': (
-                Session.objects.filter(examens__cours__enseignant=enseignant).distinct().count()
+                1 if enseignant_a_examen_session_active else 0
             ),
             'total_enseignants': 1,
             'total_promotions': (
@@ -229,10 +244,14 @@ def dashboard(request):
             .order_by('date_examen')[:5]
         )
 
-    sessions_qs = Session.objects.order_by('-date_debut')
     if is_teacher:
-        sessions_qs = sessions_qs.filter(examens__cours__enseignant=enseignant).distinct()
-    dernieres_sessions = sessions_qs[:3]
+        if enseignant_a_examen_session_active and session_active:
+            dernieres_sessions = [session_active]
+        else:
+            dernieres_sessions = []
+    else:
+        sessions_qs = Session.objects.order_by('-date_debut')
+        dernieres_sessions = sessions_qs[:3]
     context = {
         **compteurs,
         'prochains_examens': prochains,
