@@ -2060,6 +2060,11 @@ class SessionListView(SafePaginationMixin, ListView):
                     .distinct().order_by('-date_debut'))
         return super().get_queryset()
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['is_teacher'] = utilisateur_est_enseignant(self.request)
+        return context
+
 
 def _donnees_participants_session(session):
     """Données partagées par la vue détail et l'export PDF des participants.
@@ -3444,10 +3449,15 @@ class ExamenListView(SafePaginationMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # Logique d'accès à la page Examens (filtres, tri, etc.)
+        context['is_teacher'] = utilisateur_est_enseignant(self.request)
         # Statistiques d'en-tête : total, notés, en attente, à venir
         # (une seule requête d'agrégation, indépendante des filtres).
-        context['stats_examens'] = examen_accessible_par_enseignant(
-            Examen.objects.all(), self.request).aggregate(
+        qs_stats = examen_accessible_par_enseignant(
+            Examen.objects.all(), self.request)
+        if utilisateur_est_enseignant(self.request) and self.session_active:
+            qs_stats = qs_stats.filter(session=self.session_active)
+        context['stats_examens'] = qs_stats.aggregate(
             total=Count('id'),
             notes=Count('id', filter=Q(est_note=True)),
             en_attente=Count('id', filter=Q(est_note=False)),
@@ -3475,8 +3485,11 @@ class ExamenListView(SafePaginationMixin, ListView):
         params.pop('page', None)
         context['base_qs'] = params.urlencode()
         context['tri'] = self.tri
-        context['total_examens'] = examen_accessible_par_enseignant(
-            Examen.objects.all(), self.request).count()
+        qs_total = examen_accessible_par_enseignant(
+            Examen.objects.all(), self.request)
+        if utilisateur_est_enseignant(self.request) and self.session_active:
+            qs_total = qs_total.filter(session=self.session_active)
+        context['total_examens'] = qs_total.count()
         context['session_active'] = getattr(self, 'session_active', None)
         context['session_defaut'] = getattr(self, 'session_defaut', False)
         context['session_choisie'] = getattr(self, 'session_choisie', False)
@@ -3495,16 +3508,27 @@ class ExamenCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
     success_message = "L'examen a été créé."
 
     def dispatch(self, request, *args, **kwargs):
-        refuser_enseignant(request)
         return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        if utilisateur_est_enseignant(self.request):
+            enseignant = enseignant_connecte(self.request)
+            if enseignant is not None:
+                kwargs['enseignant'] = enseignant
+        return kwargs
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx['cours_data'] = list(Cours.objects
-                                 .select_related('promotion', 'enseignant')
-                                 .order_by('promotion__nom', 'nom')
-                                 .values_list('id', 'nom', 'promotion__nom',
-                                              'enseignant__noms'))
+        cours_qs = Cours.objects.select_related('promotion', 'enseignant').order_by(
+            'promotion__nom', 'nom'
+        )
+        if utilisateur_est_enseignant(self.request):
+            enseignant = enseignant_connecte(self.request)
+            if enseignant is not None:
+                cours_qs = cours_qs.filter(enseignant=enseignant)
+        ctx['cours_data'] = list(cours_qs.values_list('id', 'nom', 'promotion__nom',
+                                                      'enseignant__noms'))
         return ctx
 
 

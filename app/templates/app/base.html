@@ -65,9 +65,11 @@
         <a href="{% url 'examen_list' %}" class="sidebar-link {% if 'examen' in request.resolver_match.url_name %}is-active{% endif %}">
             <i class="bi bi-file-earmark-text-fill"></i><span>Examens</span>
         </a>
+        {% if not is_teacher %}
         <a href="{% url 'session_list' %}" class="sidebar-link {% if 'session' in request.resolver_match.url_name %}is-active{% endif %}">
             <i class="bi bi-calendar2-week-fill"></i><span>Sessions</span>
         </a>
+        {% endif %}
         {% if not is_teacher %}
         <a href="{% url 'defense_list' %}" class="sidebar-link {% if 'defense' in request.resolver_match.url_name %}is-active{% endif %}">
             <i class="bi bi-patch-check-fill"></i><span>Défenses</span>

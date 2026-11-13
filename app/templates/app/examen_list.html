@@ -65,14 +65,14 @@
         </div>
     </div>
 
-    {% if session_defaut %}
+    {% if session_defaut and not is_teacher %}
     <div class="alert alert-info py-2 small mb-3">
         <i class="bi bi-info-circle me-1"></i>
         Affichage par défaut des examens de la <strong>session en cours</strong>
         ({{ session_active.nom }}) —
         <a href="?session=0" class="alert-link">voir toutes les sessions</a>.
     </div>
-{% endif %}
+    {% endif %}
 
 <div class="card shadow-sm mb-3">
         <div class="card-body py-2">

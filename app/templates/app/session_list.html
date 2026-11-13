@@ -5,7 +5,9 @@
 {% block content %}
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>Liste des Sessions</h2>
+        {% if not is_teacher %}
         <a href="{% url 'session_create' %}" class="btn btn-primary">Ajouter une Session</a>
+        {% endif %}
     </div>
     <div class="card shadow-sm">
         <div class="card-body">
@@ -41,6 +43,7 @@
                             <td>{{ s.date_debut }}</td>
                             <td>{{ s.date_fin }}</td>
                             <td class="text-end">
+                                {% if not is_teacher %}
                                 <form method="post" action="{% url 'session_active' s.pk %}" class="d-inline">
                                     {% csrf_token %}
                                     {% if s.est_active %}
@@ -55,9 +58,10 @@
                                         </button>
                                     {% endif %}
                                 </form>
-                                <a href="{% url 'session_detail' s.pk %}" class="btn btn-sm btn-outline-primary">Détail</a>
                                 <a href="{% url 'session_update' s.pk %}" class="btn btn-sm btn-outline-secondary">Modifier</a>
                                 <a href="{% url 'session_delete' s.pk %}" class="btn btn-sm btn-outline-danger">Supprimer</a>
+                                {% endif %}
+                                <a href="{% url 'session_detail' s.pk %}" class="btn btn-sm btn-outline-primary">Détail</a>
                             </td>
                         </tr>
                         {% empty %}

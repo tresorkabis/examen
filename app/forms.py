@@ -134,12 +134,15 @@ class ExamenForm(BootstrapModelForm):
                 format='%Y-%m-%dT%H:%M'),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, enseignant=None, **kwargs):
         instance = kwargs.get('instance')
         super().__init__(*args, **kwargs)
-        self.fields['cours'].queryset = (Cours.objects
-                                         .select_related('promotion', 'enseignant')
-                                         .order_by('promotion__nom', 'nom'))
+        if enseignant is not None:
+            self.fields['cours'].queryset = Cours.objects.filter(enseignant=enseignant)
+        else:
+            self.fields['cours'].queryset = (Cours.objects
+                                             .select_related('promotion', 'enseignant')
+                                             .order_by('promotion__nom', 'nom'))
         # Libellé enrichi pour la recherche : cours, promotion, enseignant.
         def label_cours(c):
             parts = [f"{c.nom} ({c.promotion.nom})"]
