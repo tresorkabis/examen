@@ -509,6 +509,48 @@ def palmares_ligne(request, pk):
     })
 
 
+def palmares_ligne_creer_fiche(request, pk):
+    """Crée une fiche Etudiant à partir d'une ligne de palmarès archivée.
+
+    La ligne `GrilleEtudiant` (pk) n'a pas de fiche liée. Cette vue permet de
+    créer la fiche `Etudiant` (choix de la promotion cible, ex. « Bachelier »),
+    puis de rattacher la ligne à cette fiche. Une fois créée, la page de
+    palmarès redirige automatiquement vers la fiche étudiant.
+    """
+    ligne = get_object_or_404(
+        GrilleEtudiant.objects.select_related('grille__promotion'), pk=pk
+    )
+    if ligne.etudiant_id:
+        messages.warning(
+            request,
+            'Cette ligne est déjà rattachée à une fiche étudiant.'
+        )
+        return redirect('etudiant_detail', pk=ligne.etudiant_id)
+
+    if request.method == 'POST':
+        form = EtudiantForm(request.POST)
+        if form.is_valid():
+            etudiant = form.save()
+            ligne.etudiant = etudiant
+            ligne.save(update_fields=['etudiant'])
+            messages.success(
+                request,
+                f'Fiche créée pour {etudiant.noms} (n° {etudiant.numero_etudiant}) '
+                f'et rattachée à la ligne d\'archivage.'
+            )
+            return redirect('etudiant_detail', pk=etudiant.pk)
+    else:
+        form = EtudiantForm(initial={
+            'noms': ligne.noms,
+            'promotion': ligne.grille.promotion,
+        })
+
+    return render(request, 'app/palmares_ligne_creer_fiche.html', {
+        'form': form,
+        'ligne': ligne,
+    })
+
+
 # --- CRUD ETUDIANT ---
 class EtudiantListView(ListView):
     """Étudiants : cartes des promotions, puis liste d'une promotion au clic.

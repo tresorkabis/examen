@@ -259,6 +259,12 @@
            class="btn btn-outline-success">
             <i class="bi bi-file-earmark-pdf me-1"></i>Générer l’attestation
         </a>
+        {% if not ligne.etudiant_id %}
+        <a href="{% url 'palmares_ligne_creer_fiche' ligne.pk %}"
+           class="btn btn-outline-primary">
+            <i class="bi bi-person-plus me-1"></i>Créer la fiche étudiant
+        </a>
+        {% endif %}
         <button type="button" class="btn btn-primary" onclick="window.print()">
             <i class="bi bi-printer me-1"></i>Imprimer la fiche
         </button>
