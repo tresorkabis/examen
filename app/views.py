@@ -1,3 +1,4 @@
+from app.models import UserRole, get_user_role
 from collections import OrderedDict, defaultdict
 from decimal import Decimal
 from difflib import SequenceMatcher
@@ -1109,10 +1110,15 @@ def etudiant_releve_global(request, pk):
     etudiant = get_object_or_404(
         Etudiant.objects.select_related('promotion'), pk=pk)
 
+    # On exclude les promotions de type Bachelier du relevé global
+    # (seules les licences/masteres sont concernées par ce relevé)
+    exclusion_noms = ['Bachelier LCF', 'Bachelier LSI', 'Bachelier LTS']
+
     grille_lignes = list(
         GrilleEtudiant.objects
         .select_related('grille', 'grille__promotion')
         .filter(etudiant=etudiant)
+        .exclude(grille__promotion__nom__in=exclusion_noms)
         .order_by('-grille__annee_academique', '-grille__id'))
 
     # Une requête par collection (UE et notes), pas une par année : les
@@ -3107,6 +3113,48 @@ def promotion_grille_retirer(request, pk, grille_pk):
     messages.success(
         request, f'La grille {annee} de {promotion.nom} a été retirée.')
     return redirect('promotion_detail', pk=pk)
+
+
+def promotion_grille_synchroniser_notes(request, pk, grille_pk):
+    """Synchroniser les notes de la grille vers les inscriptions."""
+    from django.contrib.auth.decorators import login_required
+    from django.contrib.messages.views import SuccessMessageMixin
+    from django.shortcuts import get_object_or_404, redirect
+    from django.contrib import messages
+    
+    grille = get_object_or_404(Grille, pk=grille_pk)
+    promotion = grille.promotion
+    user_role = get_user_role(request.user)
+    
+    if user_role != UserRole.ADMIN:
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied
+    
+    # Récupérer toutes les inscriptions de la promotion
+    inscriptions = Inscription.objects.filter(etudiant__promotion=promotion)
+    compte = 0
+    
+    with transaction.atomic():
+        for inscription in inscriptions:
+            etudiant = inscription.etudiant
+            # Chercher la grille correspondante pour cet étudiant
+            grilles = inscription.examen.session.grilles.filter(promotion=etudiant.promotion)
+            if grilles.exists():
+                g = grilles.first()
+                # Vérifier si l'étudiant est dans la grille
+                grilleetudiant = g.lignes.filter(etudiant=etudiant).first()
+                if grilleetudiant:
+                    # Pour chaque UE de la grille, copier la note vers l'inscription
+                    ues = g.ues.all()
+                    for grilleue in ues:
+                        grillenote = g.notes.filter(ue=grilleue).first()
+                        if grillenote and grillenote.note is not None:
+                            inscription.note = grillenote.note
+                            inscription.save(update_fields=['note'])
+                            compte += 1
+    
+    messages.success(request, f'{compte} note(s) synchronisée(s) depuis la grille vers inscription.')
+    return redirect('promotion_grille_apercu', pk=pk, grille_pk=grille_pk)
 
 
 @login_required

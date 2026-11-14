@@ -196,6 +196,17 @@
                 <i class="bi bi-info-circle me-1"></i>
                 Impression : choisir <strong>paysage</strong> et « taille réelle »
                 pour afficher toutes les colonnes.
+            
+            {% if user_is_admin %}
+            <button type="button" class="btn btn-outline-secondary btn-sm ms-2" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-sync me-1"></i>Actions
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="{% url 'synchroniser_notes_grille' grille.promotion.pk grille.id %}"><i class="bi bi-arrow-repeat me-1"></i>Synchroniser notes</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" onclick="window.print()" href="#"><i class="bi bi-printer me-1"></i>Imprimer</a></li>
+            </ul>
+            {% endif %}
             </span>
         </div>
 
