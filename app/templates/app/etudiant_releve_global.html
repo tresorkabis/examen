@@ -501,7 +501,9 @@
             </div>
             <div class="info-item info-promotion">
                 <span class="info-label">Promotion actuelle</span>
+                {% if etudiant.promotion.nom != 'Bachelier LCF' and etudiant.promotion.nom != 'Bachelier LSI' and etudiant.promotion.nom != 'Bachelier LTS' %}
                 <span class="info-valeur">{{ etudiant.promotion.nom }}</span>
+                {% endif %}
             </div>
             <div class="info-item info-naissance">
                 <span class="info-label">Né(e) le</span>

@@ -1113,7 +1113,7 @@ def etudiant_releve_global(request, pk):
     # On exclude les promotions de type Bachelier du relevé global
     # (seules les licences/masteres sont concernées par ce relevé)
     exclusion_noms = ['Bachelier LCF', 'Bachelier LSI', 'Bachelier LTS']
-
+    
     grille_lignes = list(
         GrilleEtudiant.objects
         .select_related('grille', 'grille__promotion')
