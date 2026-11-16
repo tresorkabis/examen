@@ -243,7 +243,7 @@
     <div class="print-header-meta">
         Étudiant(e) : <strong>{{ etudiant.noms }}</strong> &nbsp;|&nbsp;
         Matricule : <strong>{{ etudiant.numero_etudiant }}</strong> &nbsp;|&nbsp;
-        Promotion : <strong>{{ etudiant.promotion.nom }}</strong>
+        <promotion : <strong>{{ etudiant.promotion.nom }}</strong>
         {% if etudiant.date_naissance %} &nbsp;|&nbsp; Né(e) le : <strong>{{ etudiant.date_naissance|date:"d/m/Y" }}</strong>{% endif %}
         {% if etudiant.lieu_naissance %} &nbsp;|&nbsp; Lieu de naissance : <strong>{{ etudiant.lieu_naissance }}</strong>{% endif %}
         {% if grille_ligne %} &nbsp;|&nbsp; Année académique : <strong>{{ grille_ligne.grille.annee_academique }}</strong>{% endif %}
@@ -716,7 +716,9 @@
     <div class="card shadow-sm card-parcours mb-4 no-print">
         <div class="card-header bg-white py-2">
             <h5 class="mb-0 fw-semibold">
-                <i class="bi bi-signpost-split me-2 text-secondary"></i>Parcours académique ({{ parcours|length }} année{{ parcours|length|pluralize }})
+                <i class="bi bi-signpost-split me-2 text-secondary"></i>Promotion : <strong>{% if etudiant.promotion.nom in ['Bachelier LCF', 'Bachelier LSI', 'Bachelier LTS'] %}L3{% else %}{{ etudiant.promotion.nom }}{% endif %}</strong>
+                    <br>
+                    Parcours académique ({{ parcours|length }} année{{ parcours|length|pluralize }})
             </h5>
         </div>
         <div class="card-body p-0">
