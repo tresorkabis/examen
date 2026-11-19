@@ -716,7 +716,7 @@
     <div class="card shadow-sm card-parcours mb-4 no-print">
         <div class="card-header bg-white py-2">
             <h5 class="mb-0 fw-semibold">
-                <i class="bi bi-signpost-split me-2 text-secondary"></i>Promotion : <strong>{% if etudiant.promotion.nom in ['Bachelier LCF', 'Bachelier LSI', 'Bachelier LTS'] %}L3{% else %}{{ etudiant.promotion.nom }}{% endif %}</strong>
+                <i class="bi bi-signpost-split me-2 text-secondary"></i>Promotion : <strong>{% if etudiant.promotion.nom == 'Bachelier LCF' or etudiant.promotion.nom == 'Bachelier LSI' or etudiant.promotion.nom == 'Bachelier LTS' %}L3{% else %}{{ etudiant.promotion.nom }}{% endif %}</strong>
                     <br>
                     Parcours académique ({{ parcours|length }} année{{ parcours|length|pluralize }})
             </h5>
