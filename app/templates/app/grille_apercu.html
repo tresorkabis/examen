@@ -229,7 +229,9 @@
                         <th class="text-center col-num">N°</th>
                         <th class="col-etudiant">Étudiant</th>
                         {% for ue in ues %}
-                        <th class="text-center th-ue" title="{{ ue.intitule }} ({{ ue.credits }} cr.)"><span>{{ ue.intitule }}</span></th>
+                        <th class="text-center th-ue" title="{{ ue.intitule }} ({{ ue.credits }} cr.)">
+                        <span>{{ ue.intitule }}{% if ue.cours %} (coef. {{ ue.cours.coefficient }}){% endif %}</span>
+                    </th>
                         {% endfor %}
                         <th class="text-center col-moy">Moy.</th>
                         <th class="text-center col-dec">Déc.</th>
