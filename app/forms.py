@@ -161,19 +161,73 @@ class ExamenForm(BootstrapModelForm):
 
 
 class InscriptionComposantesForm(BootstrapModelForm):
+    note_interro = forms.DecimalField(
+        label="Interro /5", max_digits=5, decimal_places=2,
+        min_value=0, max_value=5, required=False,
+        error_messages={
+            'max_value': "La note d'interrogation ne peut pas dépasser 5.",
+            'min_value': "La note d'interrogation ne peut pas être négative.",
+        },
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control composante-note text-center',
+            'min': '0', 'max': '5', 'step': '0.01',
+            'placeholder': '—',
+        }),
+    )
+    note_tp = forms.DecimalField(
+        label="TP /5", max_digits=5, decimal_places=2,
+        min_value=0, max_value=5, required=False,
+        error_messages={
+            'max_value': "La note de TP ne peut pas dépasser 5.",
+            'min_value': "La note de TP ne peut pas être négative.",
+        },
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control composante-note text-center',
+            'min': '0', 'max': '5', 'step': '0.01',
+            'placeholder': '—',
+        }),
+    )
+    note_examen = forms.DecimalField(
+        label="Examen /10", max_digits=5, decimal_places=2,
+        min_value=0, max_value=10, required=False,
+        error_messages={
+            'max_value': "La note d'examen ne peut pas dépasser 10.",
+            'min_value': "La note d'examen ne peut pas être négative.",
+        },
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control composante-note text-center',
+            'min': '0', 'max': '10', 'step': '0.01',
+            'placeholder': '—',
+        }),
+    )
+
     class Meta:
         model = Inscription
         fields = ['note_interro', 'note_tp', 'note_examen']
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        for field_name, maximum in (
-                ('note_interro', '5'), ('note_tp', '5'),
-                ('note_examen', '10')):
-            self.fields[field_name].widget.attrs.update({
-                'class': 'form-control composante-note', 'type': 'number',
-                'min': '0', 'max': maximum, 'step': '0.01',
-            })
+    def clean_note_interro(self):
+        val = self.cleaned_data.get('note_interro')
+        if val is not None and val > 5:
+            raise forms.ValidationError("La note d'interrogation ne peut pas dépasser 5.")
+        if val is not None and val < 0:
+            raise forms.ValidationError("La note d'interrogation ne peut pas être négative.")
+        return val
+
+    def clean_note_tp(self):
+        val = self.cleaned_data.get('note_tp')
+        if val is not None and val > 5:
+            raise forms.ValidationError("La note de TP ne peut pas dépasser 5.")
+        if val is not None and val < 0:
+            raise forms.ValidationError("La note de TP ne peut pas être négative.")
+        return val
+
+    def clean_note_examen(self):
+        val = self.cleaned_data.get('note_examen')
+        if val is not None and val > 10:
+            raise forms.ValidationError("La note d'examen ne peut pas dépasser 10.")
+        if val is not None and val < 0:
+            raise forms.ValidationError("La note d'examen ne peut pas être négative.")
+        return val
 
 
 class InscriptionMoyenneForm(BootstrapModelForm):

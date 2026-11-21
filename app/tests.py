@@ -373,6 +373,78 @@ class SaisieMoyennesExamenTests(BaseDataMixin, TestCase):
         self.assertEqual(inscription.note, Decimal('13'))
         self.assertIsNone(inscription.moyenne_saisie)
 
+    def test_composantes_interro_superieure_a_5_est_refusee(self):
+        self._connexion()
+        self._creer_etudiants(1)
+        self._inscriptions(1)
+        inscription = Inscription.objects.get(examen=self.examen)
+
+        response = self.client.post(
+            reverse('examen_saisie_moyennes', kwargs={'pk': self.examen.pk}),
+            {
+                'form-TOTAL_FORMS': '1',
+                'form-INITIAL_FORMS': '1',
+                'form-MIN_NUM_FORMS': '0',
+                'form-MAX_NUM_FORMS': '1000',
+                'mode': 'composantes',
+                'form-0-id': str(inscription.pk),
+                'form-0-note_interro': '5.01',
+                'form-0-note_tp': '3',
+                'form-0-note_examen': '7',
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "La note d&#x27;interrogation ne peut pas dépasser 5.")
+        inscription.refresh_from_db()
+        self.assertIsNone(inscription.note_interro)
+
+    def test_composantes_tp_superieure_a_5_est_refusee(self):
+        self._connexion()
+        self._creer_etudiants(1)
+        self._inscriptions(1)
+        inscription = Inscription.objects.get(examen=self.examen)
+
+        response = self.client.post(
+            reverse('examen_saisie_moyennes', kwargs={'pk': self.examen.pk}),
+            {
+                'form-TOTAL_FORMS': '1',
+                'form-INITIAL_FORMS': '1',
+                'form-MIN_NUM_FORMS': '0',
+                'form-MAX_NUM_FORMS': '1000',
+                'mode': 'composantes',
+                'form-0-id': str(inscription.pk),
+                'form-0-note_interro': '4',
+                'form-0-note_tp': '6',
+                'form-0-note_examen': '7',
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "La note de TP ne peut pas dépasser 5.")
+        inscription.refresh_from_db()
+        self.assertIsNone(inscription.note_tp)
+
+    def test_composantes_examen_superieure_a_10_est_refusee(self):
+        self._connexion()
+        self._creer_etudiants(1)
+        self._inscriptions(1)
+        inscription = Inscription.objects.get(examen=self.examen)
+
+        response = self.client.post(
+            reverse('examen_saisie_moyennes', kwargs={'pk': self.examen.pk}),
+            {
+                'form-TOTAL_FORMS': '1',
+                'form-INITIAL_FORMS': '1',
+                'form-MIN_NUM_FORMS': '0',
+                'form-MAX_NUM_FORMS': '1000',
+                'mode': 'composantes',
+                'form-0-id': str(inscription.pk),
+                'form-0-note_interro': '4',
+                'form-0-note_tp': '3',
+                'form-0-note_examen': '10.5',
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "La note d&#x27;examen ne peut pas dépasser 10.")
+        inscription.refresh_from_db()
+        self.assertIsNone(inscription.note_examen)
+
 
 class LogoutViewTests(TestCase):
     def setUp(self):
@@ -4781,7 +4853,7 @@ class PalmaresLigneDetailTests(TestCase):
         self.assertIn('entete-officiel', contenu)
         self.assertIn('École Supérieure de Formation des Cadres', contenu)
         self.assertIn('RELEVÉ DE NOTES', contenu)
-        self.assertIn('relevé établi d\'après la grille archivée', contenu)
+        self.assertNotIn('relevé établi d\'après la grille archivée', contenu)
         # Règles d'impression A4 + emplacement de signature officiel.
         self.assertIn('@media print', contenu)
         self.assertIn('print-only-footer', contenu)

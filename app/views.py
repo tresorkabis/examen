@@ -3680,17 +3680,23 @@ def examen_saisie_moyennes(request, pk):
                 and form.instance.note is not None):
                 form.initial['moyenne_saisie'] = form.instance.note
 
-    if request.method == 'POST' and formset.is_valid():
-        if mode == 'composantes':
-            for form in formset.forms:
-                if form.has_changed():
-                    inscription = form.save(commit=False)
-                    inscription.moyenne_saisie = None
-                    inscription.save()
+    if request.method == 'POST':
+        if formset.is_valid():
+            if mode == 'composantes':
+                for form in formset.forms:
+                    if form.has_changed():
+                        inscription = form.save(commit=False)
+                        inscription.moyenne_saisie = None
+                        inscription.save()
+            else:
+                formset.save()
+            messages.success(request, 'Les notes ont été enregistrées.')
+            return redirect('examen_saisie_moyennes', pk=examen.pk)
         else:
-            formset.save()
-        messages.success(request, 'Les notes ont été enregistrées.')
-        return redirect('examen_saisie_moyennes', pk=examen.pk)
+            messages.error(
+                request,
+                "Certaines notes sont invalides : l'interrogation et le TP ne peuvent pas dépasser 5, et l'examen ne peut pas dépasser 10."
+            )
 
     return render(request, 'app/examen_saisie_moyennes.html', {
         'examen': examen,

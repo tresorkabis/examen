@@ -39,12 +39,21 @@
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th scope="col" class="text-center">N°</th>
+                        <th scope="col" class="text-center" style="width: 50px;">N°</th>
                         <th scope="col">Étudiant</th>
-                        <th scope="col" class="text-center">Interro /5</th>
-                        <th scope="col" class="text-center">TP /5</th>
-                        <th scope="col" class="text-center">Examen /10</th>
-                        <th scope="col" class="text-center">Moyenne /20</th>
+                        <th scope="col" class="text-center" style="width: 140px;">
+                            Interro /5
+                            <div class="small text-muted fw-normal">Max 5</div>
+                        </th>
+                        <th scope="col" class="text-center" style="width: 140px;">
+                            TP /5
+                            <div class="small text-muted fw-normal">Max 5</div>
+                        </th>
+                        <th scope="col" class="text-center" style="width: 140px;">
+                            Examen /10
+                            <div class="small text-muted fw-normal">Max 10</div>
+                        </th>
+                        <th scope="col" class="text-center" style="width: 140px;">Moyenne /20</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -58,29 +67,29 @@
                         <td class="text-center">
                             {% if mode == 'composantes' %}
                             {{ form.note_interro }}
-                            {% if form.note_interro.errors %}<div class="text-danger small">{{ form.note_interro.errors }}</div>{% endif %}
+                            {% if form.note_interro.errors %}<div class="text-danger small mt-1 js-error-server">{{ form.note_interro.errors|striptags }}</div>{% endif %}
                             {% else %}{{ form.instance.note_interro|floatformat:2|default:"—" }}{% endif %}
                         </td>
                         <td class="text-center">
                             {% if mode == 'composantes' %}
                             {{ form.note_tp }}
-                            {% if form.note_tp.errors %}<div class="text-danger small">{{ form.note_tp.errors }}</div>{% endif %}
+                            {% if form.note_tp.errors %}<div class="text-danger small mt-1 js-error-server">{{ form.note_tp.errors|striptags }}</div>{% endif %}
                             {% else %}{{ form.instance.note_tp|floatformat:2|default:"—" }}{% endif %}
                         </td>
                         <td class="text-center">
                             {% if mode == 'composantes' %}
                             {{ form.note_examen }}
-                            {% if form.note_examen.errors %}<div class="text-danger small">{{ form.note_examen.errors }}</div>{% endif %}
+                            {% if form.note_examen.errors %}<div class="text-danger small mt-1 js-error-server">{{ form.note_examen.errors|striptags }}</div>{% endif %}
                             {% else %}{{ form.instance.note_examen|floatformat:2|default:"—" }}{% endif %}
                         </td>
-                        <td style="width: 220px;">
+                        <td style="width: 220px;" class="text-center">
                             {% if mode == 'moyenne' %}
                                 {{ form.moyenne_saisie }}
                                 {% if form.moyenne_saisie.errors %}
-                                <div class="text-danger small mt-1">{{ form.moyenne_saisie.errors }}</div>
+                                <div class="text-danger small mt-1">{{ form.moyenne_saisie.errors|striptags }}</div>
                                 {% endif %}
                             {% else %}
-                                <span class="moyenne-calculee">{{ form.instance.note|floatformat:0|default:"—" }}</span>
+                                <span class="moyenne-calculee fw-bold">{{ form.instance.note|floatformat:0|default:"—" }}</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -98,7 +107,7 @@
     {% if formset.forms %}
     <div class="d-flex justify-content-end mt-3">
         <button type="submit" class="btn btn-primary">
-            <i class="bi bi-check2 me-1"></i>Enregistrer les moyennes
+            <i class="bi bi-check2 me-1"></i>Enregistrer les notes
         </button>
     </div>
     {% endif %}
@@ -109,27 +118,141 @@
 {% if mode == 'composantes' %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    function validerChamp(champ) {
+        const raw = champ.value.trim().replace(',', '.');
+        const max = parseFloat(champ.getAttribute('max'));
+        const min = parseFloat(champ.getAttribute('min')) || 0;
+        let errDiv = champ.parentElement.querySelector('.js-note-error');
+
+        const serverErr = champ.parentElement.querySelector('.js-error-server');
+        if (serverErr && raw !== '') {
+            serverErr.style.display = 'none';
+        }
+
+        if (raw === '') {
+            champ.classList.remove('is-invalid');
+            champ.setCustomValidity('');
+            if (errDiv) errDiv.textContent = '';
+            return true;
+        }
+
+        const val = parseFloat(raw);
+        if (isNaN(val)) {
+            champ.classList.add('is-invalid');
+            champ.setCustomValidity('Nombre invalide');
+            if (!errDiv) {
+                errDiv = document.createElement('div');
+                errDiv.className = 'text-danger small mt-1 js-note-error';
+                champ.parentElement.appendChild(errDiv);
+            }
+            errDiv.textContent = 'Nombre invalide';
+            return false;
+        }
+
+        if (max !== undefined && !isNaN(max) && val > max) {
+            champ.classList.add('is-invalid');
+            champ.setCustomValidity('Ne peut pas dépasser ' + max);
+            if (!errDiv) {
+                errDiv = document.createElement('div');
+                errDiv.className = 'text-danger small mt-1 js-note-error';
+                champ.parentElement.appendChild(errDiv);
+            }
+            errDiv.textContent = 'Max : ' + max;
+            return false;
+        }
+
+        if (val < min) {
+            champ.classList.add('is-invalid');
+            champ.setCustomValidity('Ne peut pas être négatif');
+            if (!errDiv) {
+                errDiv = document.createElement('div');
+                errDiv.className = 'text-danger small mt-1 js-note-error';
+                champ.parentElement.appendChild(errDiv);
+            }
+            errDiv.textContent = 'Min : ' + min;
+            return false;
+        }
+
+        champ.classList.remove('is-invalid');
+        champ.setCustomValidity('');
+        if (errDiv) errDiv.textContent = '';
+        return true;
+    }
+
     function recalculer(row, viderSiVide) {
         const champs = Array.from(row.querySelectorAll('.composante-note'));
-        const renseignes = champs.filter(champ => champ.value.trim() !== '');
         const moyenne = row.querySelector('.moyenne-calculee');
-        if (renseignes.length === 0) {
+        if (!moyenne) return;
+
+        let hasError = false;
+        let nbRenseignes = 0;
+        let total = 0;
+
+        champs.forEach(champ => {
+            const raw = champ.value.trim().replace(',', '.');
+            if (raw !== '') {
+                nbRenseignes++;
+                const val = parseFloat(raw);
+                const max = parseFloat(champ.getAttribute('max'));
+                if (isNaN(val) || val < 0 || (max && val > max)) {
+                    hasError = true;
+                } else {
+                    total += val;
+                }
+            }
+        });
+
+        if (hasError) {
+            moyenne.innerHTML = '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">Note invalide</span>';
+            return;
+        }
+
+        if (nbRenseignes === 0) {
             if (viderSiVide) moyenne.textContent = '—';
             return;
         }
-        const total = renseignes.reduce((somme, champ) => {
-            return somme + Number(champ.value.replace(',', '.'));
-        }, 0);
+
         moyenne.textContent = String(Math.floor(total + 0.5));
     }
 
     document.querySelectorAll('.composante-note').forEach(champ => {
-        champ.classList.add('composante-note');
         champ.addEventListener('input', function () {
+            validerChamp(champ);
+            recalculer(champ.closest('tr'), true);
+        });
+
+        champ.addEventListener('change', function () {
+            validerChamp(champ);
             recalculer(champ.closest('tr'), true);
         });
     });
-    document.querySelectorAll('tbody tr').forEach(row => recalculer(row, false));
+
+    const form = document.querySelector('form');
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            let hasError = false;
+            let firstInvalid = null;
+            document.querySelectorAll('.composante-note').forEach(champ => {
+                if (!validerChamp(champ)) {
+                    hasError = true;
+                    if (!firstInvalid) firstInvalid = champ;
+                }
+            });
+            if (hasError) {
+                e.preventDefault();
+                if (firstInvalid) {
+                    firstInvalid.focus();
+                    firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    firstInvalid.reportValidity();
+                }
+            }
+        });
+    }
+
+    document.querySelectorAll('tbody tr').forEach(row => {
+        row.querySelectorAll('.composante-note').forEach(c => validerChamp(c));
+        recalculer(row, false);
+    });
 });
 </script>
 {% endif %}
