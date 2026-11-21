@@ -1,21 +1,29 @@
-# Frameworks
-Django==4.2.24
-asgiref==3.8.1
-sqlparse==0.5.1
-
-# Data / imports Excel (gestion des examens)
-pandas==2.2.3
-numpy==1.26.4
-openpyxl==3.1.5
+asgiref==3.12.1
+charset-normalizer==3.5.1
+Django==6.1.1
 et_xmlfile==2.0.0
-python-dateutil==2.9.0.post0
-six==1.17.0
-
-# Export PDF
-reportlab==4.2.5
-
-# Fichiers statiques / WhiteNoise
-whitenoise==6.7.0
-
-# Utilitaires (lecture de PDF de référence)
+flatbuffers==25.12.19
+iniconfig==2.3.1
+networkx==3.7
+numpy==2.5.3
+onnxruntime==1.31.1
+openpyxl==3.1.5
+packaging==26.3
+pandas==3.0.5
+pillow==12.3.0
+pluggy==1.7.0
+protobuf==7.36.2
+psutil==7.2.2
+Pygments==2.21.0
+pymupdf==2.0
+pymupdf4llm==2.0
+pymupdf_layout==2.0
 pypdf==6.18.0
+pytest==9.2.0
+python-dateutil==2.9.0.post0
+PyYAML==6.0.3
+reportlab==5.0.1
+six==1.17.0
+sqlparse==0.6.0
+tabulate==0.10.0
+whitenoise==6.12.0
