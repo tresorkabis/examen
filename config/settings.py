@@ -35,7 +35,7 @@ DEBUG = True
 # « testserver » est ajouté pour la suite de tests de Django.
 ALLOWED_HOSTS = [
     h.strip() for h in os.environ.get(
-        'ALLOWED_HOSTS', 'localhost,127.0.0.1,testserver'
+        'ALLOWED_HOSTS', 'localhost,127.0.0.1,testserver, ://pythonanywhere.com', 
     ).split(',') if h.strip()
 ]
 
